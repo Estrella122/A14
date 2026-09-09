@@ -130,6 +130,8 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
     result["standardized_data"].to_csv(output_path, index=False, encoding="utf-8-sig")
     pd.DataFrame(result["mapping"]["mappings"]).to_csv(mapping_path, index=False, encoding="utf-8-sig")
     report = {
+        "source_row_count": len(frame),
+        "source_column_count": len(frame.columns),
         "scenario": result["scenario"],
         "detection": result["detection"],
         "mapping": result["mapping"],
@@ -783,6 +785,26 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["artifacts"].update(standardization["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
             if finish_requested_stage("standardization"):
+                return snapshot
+            decision = standardization.get("data_decision", {})
+            if decision.get("status") == "reject":
+                reason = "；".join(decision.get("reasons", [])) or "字段标准化未通过"
+                for stage in snapshot["stages"]:
+                    if stage["status"] == "pending":
+                        stage.update(status="skipped", message="字段标准化未通过，未执行下游阶段")
+                snapshot.update(
+                    status="needs_review",
+                    current_stage="standardization",
+                    execution_scope={"stop_after": "standardization", "reason": "data_decision_reject"},
+                    updated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+                )
+                snapshot["error"] = None
+                snapshot["review_required"] = {
+                    "stage": "standardization",
+                    "message": reason,
+                    "reasons": decision.get("reasons", []),
+                }
+                _write_json(run_dir / "snapshot.json", snapshot)
                 return snapshot
 
             current_stage = "cleaning"

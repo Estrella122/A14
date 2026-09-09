@@ -573,7 +573,11 @@ class StandardizationAgent:
     def _coerce_type(series: pd.Series, data_type: str) -> tuple[pd.Series, int]:
         original_non_null = int(series.notna().sum())
         if data_type == "datetime":
-            converted = pd.to_datetime(series, errors="coerce")
+            converted = pd.to_datetime(series, errors="coerce", format="mixed")
+            if not pd.api.types.is_numeric_dtype(series):
+                day_first = pd.to_datetime(series, errors="coerce", format="mixed", dayfirst=True)
+                if int(day_first.notna().sum()) > int(converted.notna().sum()):
+                    converted = day_first
         elif data_type in {"float", "integer"}:
             converted = pd.to_numeric(series, errors="coerce")
             if data_type == "integer":

@@ -80,13 +80,21 @@ async function runPipelineFile(file, pending = createPendingFile(file)) {
     latestRun.value = await uploadPipelineFile(file, { instruction: `${props.project.scene} APC建模` })
     const standard = latestRun.value.results?.standardization
     const quality = latestRun.value.results?.cleaning?.overall_score
-    pending.rows = standard?.preview?.length ? latestRun.value.results.cleaning?.cleaned_row_count : 0
+    pending.rows = latestRun.value.results?.cleaning?.cleaned_row_count ?? standard?.source_row_count ?? 0
     pending.variables = standard?.mapping?.mappings?.filter((item) => item.status === 'matched').length ?? 0
     pending.period = standard?.scenario?.scenario_name ?? '已自动识别场景'
     pending.quality = quality
     pending.status = latestRun.value.results?.review?.passed ? '流水线通过' : '需要复核'
     announcePipelineUpdate(latestRun.value)
-    emit('notify', { tone: 'success', title: '真实流水线执行完成', message: `${file.name} 已完成字段统一、清洗优选、系统辨识和Agent评审。` })
+    if (latestRun.value.status === 'needs_review') {
+      emit('notify', {
+        tone: 'warning',
+        title: '数据未进入建模',
+        message: latestRun.value.review_required?.message || `${file.name} 的场景或字段映射需要人工确认。`,
+      })
+    } else {
+      emit('notify', { tone: 'success', title: '真实流水线执行完成', message: `${file.name} 已完成字段统一、清洗优选、系统辨识和Agent评审。` })
+    }
   } catch (error) {
     pending.status = '执行失败'
     emit('notify', { tone: 'warning', title: '流水线执行失败', message: error.message })
