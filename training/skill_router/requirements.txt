@@ -1,0 +1,2 @@
+# Training only. Runtime inference has no additional dependency.
+scikit-learn>=1.5,<2

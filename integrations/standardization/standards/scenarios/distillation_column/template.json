@@ -1,0 +1,13 @@
+{
+  "scenario_id": "distillation_column",
+  "scenario_name": "化工精馏塔",
+  "industry": "化工",
+  "process_unit": "连续精馏塔",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["化工", "精馏塔", "塔顶", "塔釜", "回流", "distillation", "column", "reflux"],
+  "sampling_seconds": 30,
+  "timestamp_field": "timestamp",
+  "primary_output": "top_product_purity",
+  "notes": "用于连续精馏塔时序数据的字段需求判定与统一，字段语义已纳入来源审计。"
+}

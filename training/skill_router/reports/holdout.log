@@ -1,0 +1,147 @@
+{
+  "test_source": "assistant_authored_synthetic_holdout",
+  "production_accuracy_claim": false,
+  "split_integrity": "passed: disjoint normalized text and seed groups; wrappers only within train",
+  "model_sha256": "ef97a74352b2b63953096e6632cb760ba210ea454de6da9397012912dd9cf4dd",
+  "test_sha256": "c3210ed4e9dcadc406203f121cb5dd4fabd3d26d6411499d4a371ad566f32b54",
+  "raw_model_top1_accuracy": 0.91,
+  "baseline_top1_definition": "Highest old keyword score; ties follow original catalog order because the original router exposes no unique top-1.",
+  "routing_metric_definition": "Direct business skill IDs only; dependency and orchestration steps excluded from both sides.",
+  "limitations": [
+    "Small authored test set; no independent human labeling or real traffic.",
+    "Hybrid router includes explicit-action guards and existing expert evidence contracts.",
+    "Do not tune on this test set; add a fresh held-out set after future changes."
+  ],
+  "baseline": {
+    "case_count": 100,
+    "exact_skill_set_accuracy": 0.36,
+    "top1_accuracy": 0.49,
+    "micro_precision": 0.38764044943820225,
+    "micro_recall": 0.71875,
+    "micro_f1": 0.5036496350364964,
+    "macro_f1": 0.5562135241301908,
+    "in_scope_coverage": 0.9791666666666666,
+    "accepted_exact_accuracy": 0.3723404255319149,
+    "out_of_scope_rejection": 0.25,
+    "mean_direct_skill_count": 1.78,
+    "mean_latency_ms": 0.029952511249575764
+  },
+  "trained_router": {
+    "case_count": 100,
+    "exact_skill_set_accuracy": 0.89,
+    "top1_accuracy": 0.92,
+    "micro_precision": 0.89,
+    "micro_recall": 0.9270833333333334,
+    "micro_f1": 0.9081632653061225,
+    "macro_f1": 0.9085978835978836,
+    "in_scope_coverage": 0.9895833333333334,
+    "accepted_exact_accuracy": 0.8947368421052632,
+    "out_of_scope_rejection": 1.0,
+    "mean_direct_skill_count": 1,
+    "mean_latency_ms": 0.19725000020116568
+  },
+  "errors": [
+    {
+      "text": "温度测点里有一串空白和突刺，修补一下",
+      "expected": [
+        "missing_anomaly_cleaner"
+      ],
+      "actual": []
+    },
+    {
+      "text": "输入阶跃之后输出晚了多久才变化，估计时滞",
+      "expected": [
+        "time_delay_estimator_compensator"
+      ],
+      "actual": [
+        "steady_transient_state_detector",
+        "time_delay_estimator_compensator"
+      ]
+    },
+    {
+      "text": "验证数据分区是否混入未来信息",
+      "expected": [
+        "modeling_dataset_assembler"
+      ],
+      "actual": [
+        "modeling_dataset_assembler",
+        "evidence_audit_reproducer"
+      ]
+    },
+    {
+      "text": "选择延迟项nk和候选结构",
+      "expected": [
+        "arx_structure_order_selector"
+      ],
+      "actual": [
+        "multi_model_benchmark"
+      ]
+    },
+    {
+      "text": "重新训练过程的ARX预测器",
+      "expected": [
+        "system_identification_trainer"
+      ],
+      "actual": [
+        "arx_structure_order_selector"
+      ]
+    },
+    {
+      "text": "验证模型极点是否落在单位圆以内",
+      "expected": [
+        "model_diagnostics_evaluator"
+      ],
+      "actual": [
+        "semantic_field_unit_standardizer",
+        "arx_structure_order_selector",
+        "model_diagnostics_evaluator"
+      ]
+    },
+    {
+      "text": "这套结果离投运还差哪些安全条件",
+      "expected": [
+        "engineering_result_interpreter"
+      ],
+      "actual": [
+        "engineering_result_interpreter",
+        "evidence_audit_reproducer"
+      ]
+    },
+    {
+      "text": "画预测残差的直方分布",
+      "expected": [
+        "engineering_visualization_builder"
+      ],
+      "actual": [
+        "model_diagnostics_evaluator"
+      ]
+    },
+    {
+      "text": "把闭环寻优每轮得分可视化",
+      "expected": [
+        "engineering_visualization_builder"
+      ],
+      "actual": [
+        "closed_loop_preprocessing_optimizer"
+      ]
+    },
+    {
+      "text": "把已经做好的报告下载给我",
+      "expected": [
+        "final_artifact_exporter"
+      ],
+      "actual": [
+        "expert_report_writer"
+      ]
+    },
+    {
+      "text": "比较不同批次实验的效果记录",
+      "expected": [
+        "experiment_tracker_comparator"
+      ],
+      "actual": [
+        "multi_model_benchmark"
+      ]
+    }
+  ]
+}

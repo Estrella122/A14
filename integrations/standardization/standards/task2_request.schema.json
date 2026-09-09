@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A14 Task 2 Standardization Request",
+  "type": "object",
+  "required": ["source", "scenario"],
+  "additionalProperties": false,
+  "properties": {
+    "source": {"type": "string", "enum": ["file", "demo"]},
+    "scenario": {"type": "string", "description": "auto 或已安装的 scenario_id"},
+    "instruction": {"type": "string", "default": ""},
+    "csv_base64": {"type": "string", "contentEncoding": "base64"},
+    "demo_scenario": {"type": "string"},
+    "convert_units": {"type": "boolean", "default": true},
+    "include_unmapped": {"type": "boolean", "default": false},
+    "overrides": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "人工确认的 原始字段 -> 标准字段 映射"
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"source": {"const": "file"}}}, "then": {"required": ["csv_base64"]}},
+    {"if": {"properties": {"source": {"const": "demo"}}}, "then": {"required": ["demo_scenario"]}}
+  ]
+}

@@ -1,0 +1,17 @@
+Creating test database for alias 'default'...
+........................................................F........
+======================================================================
+FAIL: test_member_delivery_packages_are_available_through_one_api (core.tests.IntegrationBridgeTests.test_member_delivery_packages_are_available_through_one_api) (module='agent')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 34, in test_member_delivery_packages_are_available_through_one_api
+    self.assertTrue(payload['data']['available'])
+AssertionError: False is not true
+
+----------------------------------------------------------------------
+Ran 65 tests in 18.635s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+Found 65 test(s).
+System check identified no issues (0 silenced).

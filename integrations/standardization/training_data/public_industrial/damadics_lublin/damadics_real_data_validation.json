@@ -1,0 +1,32 @@
+{
+  "dataset": "DAMADICS Lublin Sugar Factory",
+  "archive": ".runtime/external_data/damadics/Lublin_all_data_part1.zip",
+  "member": "Lublin_all_data/01112001.txt",
+  "rows_checked": 2000,
+  "raw_columns": 11,
+  "scenario_for_review": "thermal_power_boiler",
+  "matched_fields": {
+    "timestamp": "timestamp",
+    "F74_00": "feedwater_flow",
+    "F74_30": "main_steam_flow",
+    "P74_30": "main_steam_pressure",
+    "T74_30": "main_steam_temperature"
+  },
+  "review_fields": [],
+  "unmapped_fields": [],
+  "withheld_fields": {
+    "P74_00": "duplicate",
+    "P74_01": "duplicate",
+    "T74_00": "duplicate",
+    "LC74_20CV": "duplicate",
+    "LC74_20X": "duplicate",
+    "LC74_20PV": "duplicate"
+  },
+  "required_coverage": 0.5,
+  "file_status": "review",
+  "file_reasons": [
+    "缺少必需字段：coal_flow、flue_gas_o2、furnace_pressure、unit_load"
+  ],
+  "expected_policy": "The public sample covers only a boiler water/steam subsystem. It must not be marked ready for the full thermal-power-boiler template when combustion-side required fields are absent.",
+  "passed": true
+}

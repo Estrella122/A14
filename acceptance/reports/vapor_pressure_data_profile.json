@@ -1,0 +1,57 @@
+{
+  "source_file": "vapor-pressure.csv",
+  "rows": 18743,
+  "columns": 30,
+  "time_field": "hours_elapsed",
+  "time_min": 0,
+  "time_max": 18744,
+  "duplicate_time_count": 0,
+  "two_hour_gaps": 2,
+  "target_field": "vapour_pressure_kpa",
+  "target_observations": 232,
+  "target_missing_rate": 0.987622045563677,
+  "target_common_intervals_hours": {
+    "48": 121,
+    "72": 58,
+    "120": 15,
+    "24": 9
+  },
+  "data_quality_flags": {
+    "valve_out_01_negative_count": 662,
+    "valve_out_02_negative_count": 30,
+    "flow_01_zero_rate": 0.0353,
+    "flow_03_zero_rate": 0.0391,
+    "pres_01_zero_rate": 0.0033
+  },
+  "observed_target_estimator_comparison": {
+    "antoine_estimate": {
+      "mae": 7.452620689655173,
+      "rmse": 9.938464434658178,
+      "bias": -6.71125,
+      "squared_correlation": 0.6483764839316415
+    },
+    "current_estimator": {
+      "mae": 5.811056034482759,
+      "rmse": 9.742729650740278,
+      "bias": 0.6074008620689653,
+      "squared_correlation": 0.373598613579537
+    }
+  },
+  "limitations": [
+    "字段含义与单位尚未由工艺人员确认",
+    "目标观测稀疏且间隔不规则",
+    "相关性不构成因果证据",
+    "零值和负值可能是停车、量程下溢或仪表故障，需中控确认"
+  ],
+  "industry_context": "炼油厂（用户确认）",
+  "unit_context": "未确认；候选包括常减压、稳定塔、分馏塔或其他带再沸器/冷凝压力的装置",
+  "required_operator_metadata": [
+    "装置名称",
+    "匿名化位号对照",
+    "字段单位",
+    "采样周期定义",
+    "停车/开车时间",
+    "实测蒸气压化验或分析仪来源",
+    "阀门负值和流量/压力零值的含义"
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "version": "1.0.0",
+  "retrieved_at": "2026-07-22",
+  "policy": "仅使用论文、官方基准或作者公开数据集提取字段术语；网页内容不直接改写标准字典，须经等价性审核后进入训练。",
+  "sources": [
+    {
+      "source_id": "steel_furnace_monitoring_2025",
+      "scenario_id": "steel_reheating_furnace",
+      "title": "Multisource Heterogeneous Data Fusion-Based Process Monitoring of the Reheating Furnace in Steel Production",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11983217/",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "论文变量表覆盖炉温、各炉段煤气流量及炉膛/烟气压力等测点。"
+    },
+    {
+      "source_id": "steel_furnace_mpc_2023",
+      "scenario_id": "steel_reheating_furnace",
+      "title": "Multi-Mode Model Predictive Control Approach for Steel Billets Reheating Furnaces",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10141550/",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "论文描述各炉区空气/燃料流量、炉温设定和钢坯再热温度轨迹。"
+    },
+    {
+      "source_id": "distillation_hssed_2025",
+      "scenario_id": "distillation_column",
+      "title": "HSSED: An open-source high-simulation scenario electro-hydraulic distillation dataset",
+      "url": "https://www.sciencedirect.com/science/article/pii/S0957582025011516",
+      "source_type": "peer_reviewed_dataset_article",
+      "credibility": "high",
+      "evidence": "公开数据集含液位、流量、温度、压力和纯度等39个精馏测量变量。"
+    },
+    {
+      "source_id": "distillation_hssed_repo",
+      "scenario_id": "distillation_column",
+      "title": "HSSED author dataset repository",
+      "url": "https://github.com/wsbai321/HSSED",
+      "source_type": "author_public_dataset",
+      "credibility": "medium_high",
+      "evidence": "论文作者公开的处理后数据与使用脚本，用于核对字段族和数据形态。"
+    },
+    {
+      "source_id": "boiler_oxygen_ieee_2020",
+      "scenario_id": "thermal_power_boiler",
+      "title": "Deep Learning Model for Measuring Oxygen Content of Boiler Flue Gas",
+      "url": "https://research.engineering.uiowa.edu/kusiak/sites/research.engineering.uiowa.edu.kusiak/files/files/IEEE%20Access%202020-1.pdf",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "论文列出机组负荷、燃料量、一次/二次风、给水、主汽、炉膛负压及烟气含氧量等变量。"
+    },
+    {
+      "source_id": "boiler_hai_dataset",
+      "scenario_id": "thermal_power_boiler",
+      "title": "HAI HIL-based Augmented ICS Security Dataset",
+      "url": "https://github.com/icsdataset/hai",
+      "source_type": "research_institute_public_dataset",
+      "credibility": "high",
+      "evidence": "公开工业控制数据包含Emerson Ovation DCS锅炉过程及连续SCADA标签。"
+    },
+    {
+      "source_id": "boiler_drum_level_2022",
+      "scenario_id": "thermal_power_boiler",
+      "title": "Water Level Control in the Thermal Power Plant Steam Separator Based on New PID Tuning Method",
+      "url": "https://www.mdpi.com/1996-1073/15/17/6310",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "实际火电机组SCADA子系统明确使用steam drum water level、feedwater flow等测量量。"
+    },
+    {
+      "source_id": "boiler_airflow_2024",
+      "scenario_id": "thermal_power_boiler",
+      "title": "Numerical Optimization of Burner Deflection Angle at Half Load for a 660 MW Tangentially Fired Boiler",
+      "url": "https://www.mdpi.com/2227-9717/12/12/2823",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "锅炉热力数据表分别列出primary air flow、secondary air flow和main steam outlet pressure。"
+    },
+    {
+      "source_id": "cement_kiln_electronics_2024",
+      "scenario_id": "cement_rotary_kiln",
+      "title": "Challenge Validation: Cement Rotary Kiln Process Study",
+      "url": "https://www.mdpi.com/2079-9292/13/22/4413",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "实际水泥窑研究使用多位置温度、还原煤投加、NOx及煅烧温度等过程变量。"
+    },
+    {
+      "source_id": "cement_kiln_model_2022",
+      "scenario_id": "cement_rotary_kiln",
+      "title": "Data-driven modelling of the rotary kiln process at an industrial cement plant",
+      "url": "https://www.tandfonline.com/doi/full/10.1080/02726351.2022.2135470",
+      "source_type": "peer_reviewed_article",
+      "credibility": "high",
+      "evidence": "工业水泥厂预热器和回转窑小时数据及关键过程参数。"
+    },
+    {
+      "source_id": "cement_kiln_cooler_apc_2023",
+      "scenario_id": "cement_rotary_kiln",
+      "title": "Advanced Process Control for Clinker Rotary Kiln and Grate Cooler",
+      "url": "https://www.mdpi.com/1424-8220/23/5/2805",
+      "source_type": "peer_reviewed_open_article",
+      "credibility": "high",
+      "evidence": "工业水泥过程明确描述kiln exit clinker temperature和熟料篦冷机过程测量。"
+    },
+    {
+      "source_id": "wastewater_bsm1_report",
+      "scenario_id": "wastewater_aeration",
+      "title": "Benchmark Simulation Model No. 1 (BSM1) General Description",
+      "url": "https://iwa-mia.org/wp-content/uploads/2019/04/BSM_TG_Tech_Report_no_1_BSM1_General_Description.pdf",
+      "source_type": "official_benchmark_technical_report",
+      "credibility": "high",
+      "evidence": "IWA基准定义进出水流量、COD、氨氮、溶解氧、污泥回流及氧传递系数等变量。"
+    },
+    {
+      "source_id": "wastewater_iwa_benchmark",
+      "scenario_id": "wastewater_aeration",
+      "title": "IWA Modelling and Integrated Assessment Benchmarking",
+      "url": "https://iwa-mia.org/benchmarking/",
+      "source_type": "official_benchmark_site",
+      "credibility": "high",
+      "evidence": "官方基准说明以KLa控制溶解氧、以内回流控制硝酸盐的控制结构。"
+    },
+    {
+      "source_id": "damadics_lublin_2002",
+      "scenario_id": "thermal_power_boiler",
+      "title": "DAMADICS Lublin Sugar Factory data description",
+      "url": "https://iair.mchtr.pw.edu.pl/layout/set/print/Damadics",
+      "source_type": "official_real_factory_benchmark",
+      "credibility": "high",
+      "evidence": "项目方说明书给出糖厂锅炉给水、汽包水位、蒸汽流量、压力和温度等真实DCS标签、单位与范围。"
+    }
+  ]
+}

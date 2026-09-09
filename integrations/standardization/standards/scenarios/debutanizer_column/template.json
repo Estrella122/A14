@@ -1,0 +1,14 @@
+{
+  "scenario_id": "debutanizer_column",
+  "scenario_name": "炼油脱丁烷塔",
+  "industry": "石油炼制",
+  "process_unit": "脱丁烷塔软测量",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["炼油", "脱丁烷塔", "丁烷", "debutanizer", "butane", "c4"],
+  "sampling_seconds": null,
+  "time_axis_type": "ordered_samples",
+  "timestamp_field": "timestamp",
+  "primary_output": "bottom_butane_content",
+  "notes": "Fortuna公开工业脱丁烷塔软测量场景。公开数据只有有序样本且为归一化值；派生时间轴仅保存顺序，时滞单位为sample。"
+}

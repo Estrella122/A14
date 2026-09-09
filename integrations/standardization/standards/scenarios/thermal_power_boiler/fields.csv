@@ -1,0 +1,15 @@
+standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
+timestamp,时间戳,工业时序采样时间,time,datetime,datetime,true,时间|采集时间|记录时间|TIME|DATETIME|TS,,
+unit_load,机组负荷,发电机组当前有功负荷,disturbance,float,MW,true,负荷|有功功率|LOAD|UNIT_LOAD,0,1200
+coal_flow,给煤量,进入锅炉的总给煤质量流量,manipulated,float,t/h,true,总煤量|燃煤量|COAL_FLOW|FUEL_FLOW,0,600
+primary_air_flow,一次风量,输送煤粉的一次风流量,manipulated,float,Nm3/h,false,一次风流量|PRIMARY_AIR_FLOW|PA_FLOW,0,2000000
+secondary_air_flow,二次风量,参与燃烧的二次风流量,manipulated,float,Nm3/h,false,二次风流量|SECONDARY_AIR_FLOW|SA_FLOW,0,3000000
+feedwater_flow,给水流量,进入锅炉系统的给水质量流量,manipulated,float,t/h,true,锅炉给水|给水量|FEEDWATER_FLOW,0,4000
+main_steam_pressure,主蒸汽压力,主蒸汽管道压力,controlled,float,Pa,true,主汽压力|主汽压|MAIN_STEAM_PRESSURE|MS_PRESSURE,0,40000000
+main_steam_temperature,主蒸汽温度,主蒸汽出口温度,controlled,float,degC,true,主汽温度|主汽温|MAIN_STEAM_TEMP|MS_TEMP,0,700
+main_steam_flow,主蒸汽流量,锅炉主蒸汽质量流量,state,float,t/h,false,主汽流量|MAIN_STEAM_FLOW,0,5000
+furnace_pressure,炉膛压力,锅炉炉膛相对压力,state,float,Pa,true,炉膛负压|炉压|FURNACE_PRESSURE,-10000,5000
+flue_gas_o2,烟气含氧量,锅炉尾部烟气氧量,state,float,percent,true,氧量|空预器入口氧量|O2_PERCENT|FLUE_GAS_O2,0,21
+drum_level,汽包水位,汽包锅炉水位偏差,controlled,float,mm,false,汽包液位|DRUM_LEVEL,-1000,1000
+furnace_temperature,炉膛温度,炉膛代表性燃烧温度,state,float,degC,false,炉温|火焰温度|FURNACE_TEMP,0,2000
+sootblower_state,吹灰器状态,锅炉吹灰系统运行状态,state,boolean,boolean,false,吹灰状态|SOOTBLOWER_STATE,,

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A14 Industrial Scenario Template",
+  "type": "object",
+  "required": ["scenario_id", "scenario_name", "industry", "process_unit", "version", "dictionary", "keywords", "sampling_seconds", "timestamp_field", "primary_output", "notes"],
+  "additionalProperties": false,
+  "properties": {
+    "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+    "scenario_name": {"type": "string"},
+    "industry": {"type": "string"},
+    "process_unit": {"type": "string"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "dictionary": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+\\.csv$"},
+    "keywords": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "sampling_seconds": {"type": "integer", "minimum": 1},
+    "timestamp_field": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+    "primary_output": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+    "notes": {"type": "string"}
+  }
+}

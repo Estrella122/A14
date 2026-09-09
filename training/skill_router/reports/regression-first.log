@@ -1,0 +1,70 @@
+.F.....FFF...FF.....F...........
+======================================================================
+FAIL: test_ambiguous_follow_up_after_multi_topic_answer_asks_for_clarification (core.tests.AgentChatTests.test_ambiguous_follow_up_after_multi_topic_answer_asks_for_clarification)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 99, in test_ambiguous_follow_up_after_multi_topic_answer_asks_for_clarification
+    self.assertIn('具体是指哪一项', result['answer'])
+AssertionError: '具体是指哪一项' not found in '未能确定完整执行目标，请明确需要的技能；没有启动算法。可选方向：closed_loop_preprocessing_optimizer、missing_anomaly_cleaner、arx_structure_order_selector'
+
+======================================================================
+FAIL: test_every_expert_topic_example_has_a_matching_runtime_route (core.tests.AgentChatTests.test_every_expert_topic_example_has_a_matching_runtime_route) (topic='reproducibility')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 295, in test_every_expert_topic_example_has_a_matching_runtime_route
+    self.assertGreater(len(plan['steps']), 4)
+AssertionError: 4 not greater than 4
+
+======================================================================
+FAIL: test_every_expert_topic_example_has_a_matching_runtime_route (core.tests.AgentChatTests.test_every_expert_topic_example_has_a_matching_runtime_route) (topic='drift')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 295, in test_every_expert_topic_example_has_a_matching_runtime_route
+    self.assertGreater(len(plan['steps']), 4)
+AssertionError: 4 not greater than 4
+
+======================================================================
+FAIL: test_execution_phrase_triggers_real_rerun_hook (core.tests.AgentChatTests.test_execution_phrase_triggers_real_rerun_hook)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 393, in test_execution_phrase_triggers_real_rerun_hook
+    mocked.assert_called_once_with('run_test', resample_rule='5s', max_lag=60)
+  File "/Users/komi/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py", line 961, in assert_called_once_with
+    return self.assert_called_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/komi/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/unittest/mock.py", line 949, in assert_called_with
+    raise AssertionError(_error_message()) from cause
+AssertionError: expected call not found.
+Expected: rerun_pipeline('run_test', resample_rule='5s', max_lag=60)
+  Actual: rerun_pipeline('run_test', resample_rule='5s', max_lag=60, stop_after='cleaning')
+
+======================================================================
+FAIL: test_follow_up_without_domain_keyword_keeps_previous_context (core.tests.AgentChatTests.test_follow_up_without_domain_keyword_keeps_previous_context)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 92, in test_follow_up_without_domain_keyword_keeps_previous_context
+    self.assertIn('第 2 轮', result['answer'])
+AssertionError: '第 2 轮' not found in '未能确定完整执行目标，请明确需要的技能；没有启动算法。可选方向：closed_loop_preprocessing_optimizer、missing_anomaly_cleaner、arx_structure_order_selector'
+
+======================================================================
+FAIL: test_greeting_gets_conversational_answer (core.tests.AgentChatTests.test_greeting_gets_conversational_answer)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 106, in test_greeting_gets_conversational_answer
+    self.assertIn('你好，我在', result['answer'])
+AssertionError: '你好，我在' not found in '未能确定完整执行目标，请明确需要的技能；没有启动算法。可选方向：closed_loop_preprocessing_optimizer、semantic_field_unit_standardizer'
+
+======================================================================
+FAIL: test_missing_model_evidence_is_never_rendered_as_fake_zero_metrics (core.tests.AgentChatTests.test_missing_model_evidence_is_never_rendered_as_fake_zero_metrics)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/komi/Documents/马力比赛/ProcessPilot_SkillTraining_20260909/ProcessPilot_A14_Final/core/tests.py", line 325, in test_missing_model_evidence_is_never_rendered_as_fake_zero_metrics
+    self.assertIn('未保存可核验的输入—输出时滞结果', result['answer'])
+AssertionError: '未保存可核验的输入—输出时滞结果' not found in '未能确定完整执行目标，请明确需要的技能；没有启动算法。可选方向：arx_structure_order_selector、closed_loop_preprocessing_optimizer、modeling_dataset_assembler'
+
+----------------------------------------------------------------------
+Ran 31 tests in 0.110s
+
+FAILED (failures=7)
+Found 31 test(s).
+System check identified no issues (0 silenced).

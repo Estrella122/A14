@@ -1,0 +1,18 @@
+{
+  "dataset": "Fortuna debutanizer column benchmark",
+  "source_url": "https://raw.githubusercontent.com/Ujjwal-1267/industrial-debutanizer-soft-sensor/main/data/debutanizer_data.txt",
+  "reference_doi": "10.1016/j.conengprac.2004.04.013",
+  "rows": 2394,
+  "source_sha256": "e963abcd668e2bc3282815ffd21f73b4b4ccd89d34600feaecc6d5a42aad3438",
+  "prepared_sha256": "29f7772c13799bfa7792abfe3547db1a450bf934aa29eb841b02c686c79cf8ee",
+  "time_axis": "ordered_samples_with_derived_clock",
+  "physical_sampling_interval": null,
+  "delay_unit": "sample",
+  "normalization": "source values are normalized; inverse scaling parameters are not published with this copy",
+  "target_alignment": "source header states y was translated by 8 samples to compensate measurement delay",
+  "real_plant_data": true,
+  "derived_fields": [
+    "sample_timestamp",
+    "sample_index"
+  ]
+}

@@ -1,0 +1,360 @@
+{
+  "passed": true,
+  "seed_start": 20261001,
+  "seed_count": 12,
+  "scenario_count": 5,
+  "case_count": 372,
+  "elapsed_seconds": 55.609,
+  "field_semantic": {
+    "relevant_samples": 2448,
+    "irrelevant_samples": 720,
+    "top1_accuracy": 0.9988,
+    "top3_accuracy": 1.0,
+    "relevant_accept_recall": 0.9857,
+    "irrelevant_false_accept_rate": 0.0,
+    "errors": [
+      {
+        "text": "A线#TS#测点22",
+        "scenario_id": "distillation_column",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2838
+      },
+      {
+        "text": "DCS.27.TS.VALUE",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "装置9-煤气瞬时流量-CH30-VALUE",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "HMI_03_煤气瞬时流量_MEAS_95",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "主控#TS#测点64",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2223
+      },
+      {
+        "text": "装置3-有功功率-CH30-RAW",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "unit_load",
+        "relevance": "required",
+        "predicted": "unit_load",
+        "score": 0.2539
+      },
+      {
+        "text": "PLC.30.出水化学需氧量.PV",
+        "scenario_id": "wastewater_aeration",
+        "standard_name": "effluent_cod",
+        "relevance": "required",
+        "predicted": "effluent_cod",
+        "score": 0.2819
+      },
+      {
+        "text": "SIS_01_窑出口温度_VALUE_64",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "kiln_outlet_temperature",
+        "relevance": "required",
+        "predicted": "preheater_exit_temperature",
+        "score": 0.4478
+      },
+      {
+        "text": "HMI_05_TS_MEAS_87",
+        "scenario_id": "distillation_column",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2838
+      },
+      {
+        "text": "现场#TS#测点99",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "装置5-有功功率-CH42-VALUE",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "unit_load",
+        "relevance": "required",
+        "predicted": "unit_load",
+        "score": 0.2539
+      },
+      {
+        "text": "A线#出水化学需氧量#测点54",
+        "scenario_id": "wastewater_aeration",
+        "standard_name": "effluent_cod",
+        "relevance": "required",
+        "predicted": "effluent_cod",
+        "score": 0.2819
+      },
+      {
+        "text": "APC_01_TS_RAW_47",
+        "scenario_id": "distillation_column",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2838
+      },
+      {
+        "text": "RTU_06_TS_AI_74",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2223
+      },
+      {
+        "text": "HMI_03_出水化学需氧量_AI_93",
+        "scenario_id": "wastewater_aeration",
+        "standard_name": "effluent_cod",
+        "relevance": "required",
+        "predicted": "effluent_cod",
+        "score": 0.2819
+      },
+      {
+        "text": "APC_01_煤气瞬时流量_PV_13",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "SIS.75.TS.AI",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.1844
+      },
+      {
+        "text": "装置8-TS-CH52-RAW",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2223
+      },
+      {
+        "text": "装置2-TS-CH41-AI",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "PLC.18.TS.VALUE",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "HMI.19.TS.AI",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "装置7-TS-CH92-VALUE",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2223
+      },
+      {
+        "text": "1号机组#TS#测点85",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2223
+      },
+      {
+        "text": "A线#出水化学需氧量#测点4",
+        "scenario_id": "wastewater_aeration",
+        "standard_name": "effluent_cod",
+        "relevance": "required",
+        "predicted": "effluent_cod",
+        "score": 0.2819
+      },
+      {
+        "text": "SIS.53.TS.RAW",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.1844
+      },
+      {
+        "text": "APC_05_煤气瞬时流量_MEAS_55",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "HMI.66.煤气瞬时流量.VALUE",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "HMI.67.TS.RAW",
+        "scenario_id": "distillation_column",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2838
+      },
+      {
+        "text": "RTU.74.有功功率.MEAS",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "unit_load",
+        "relevance": "required",
+        "predicted": "unit_load",
+        "score": 0.2539
+      },
+      {
+        "text": "HMI.75.有功功率.PV",
+        "scenario_id": "thermal_power_boiler",
+        "standard_name": "unit_load",
+        "relevance": "required",
+        "predicted": "unit_load",
+        "score": 0.2539
+      },
+      {
+        "text": "装置6-TS-CH46-RAW",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.1844
+      },
+      {
+        "text": "二期#窑出口温度#测点97",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "kiln_outlet_temperature",
+        "relevance": "required",
+        "predicted": "preheater_exit_temperature",
+        "score": 0.4478
+      },
+      {
+        "text": "装置2-TS-CH80-VALUE",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2688
+      },
+      {
+        "text": "1号机组#煤气瞬时流量#测点35",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      },
+      {
+        "text": "1号机组#出水化学需氧量#测点95",
+        "scenario_id": "wastewater_aeration",
+        "standard_name": "effluent_cod",
+        "relevance": "required",
+        "predicted": "effluent_cod",
+        "score": 0.2819
+      },
+      {
+        "text": "装置1-窑出口温度-CH05-AI",
+        "scenario_id": "cement_rotary_kiln",
+        "standard_name": "kiln_outlet_temperature",
+        "relevance": "required",
+        "predicted": "preheater_exit_temperature",
+        "score": 0.4478
+      },
+      {
+        "text": "SIS_02_TS_AI_66",
+        "scenario_id": "distillation_column",
+        "standard_name": "timestamp",
+        "relevance": "required",
+        "predicted": "timestamp",
+        "score": 0.2838
+      },
+      {
+        "text": "SIS.13.煤气瞬时流量.MEAS",
+        "scenario_id": "steel_reheating_furnace",
+        "standard_name": "gas_flow",
+        "relevance": "required",
+        "predicted": "gas_flow",
+        "score": 0.2998
+      }
+    ]
+  },
+  "angle_summary": {
+    "forced_wrong_scenario": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "irrelevant_flood": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "irrelevant_only_file": {
+      "cases": 12,
+      "passed": 12,
+      "pass_rate": 1.0
+    },
+    "missing_required": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "type_corruption": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "unit_conflict": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "vendor_noise": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    }
+  },
+  "failed_cases": []
+}

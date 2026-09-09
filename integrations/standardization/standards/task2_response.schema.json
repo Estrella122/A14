@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://a14.local/schemas/task2_response.schema.json",
+  "title": "A14 Task 2 Standardization Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenario", "detection", "mapping", "conversions", "skipped_conversions",
+    "validation", "schema_validation", "issues", "data_decision", "dictionary",
+    "standardized_columns", "standardized_rows", "preview"
+  ],
+  "properties": {
+    "result_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    "scenario": {"$ref": "#/$defs/scenario"},
+    "detection": {"$ref": "#/$defs/detection"},
+    "mapping": {"$ref": "#/$defs/mapping"},
+    "conversions": {"type": "array", "items": {"$ref": "#/$defs/conversion"}},
+    "skipped_conversions": {"type": "array", "items": {"$ref": "#/$defs/conversion"}},
+    "validation": {"type": "array", "items": {"$ref": "#/$defs/field_validation"}},
+    "schema_validation": {"$ref": "#/$defs/schema_validation"},
+    "issues": {"type": "array", "items": {"$ref": "#/$defs/issue"}},
+    "data_decision": {"$ref": "#/$defs/data_decision"},
+    "dictionary": {"type": "array", "items": {"$ref": "#/$defs/dictionary_field"}},
+    "standardized_columns": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "standardized_rows": {"type": "integer", "minimum": 1},
+    "preview": {"type": "array", "items": {"type": "object"}}
+  },
+  "$defs": {
+    "scenario": {
+      "type": "object",
+      "required": ["scenario_id", "scenario_name", "industry", "process_unit", "version", "field_count", "required_count"],
+      "properties": {
+        "scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+        "scenario_name": {"type": "string", "minLength": 1},
+        "industry": {"type": "string", "minLength": 1},
+        "process_unit": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$"},
+        "field_count": {"type": "integer", "minimum": 1},
+        "required_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "candidate": {
+      "allOf": [{"$ref": "#/$defs/scenario"}],
+      "type": "object",
+      "required": ["confidence", "keyword_hits", "matched_fields", "review_fields", "required_coverage", "missing_required"],
+      "properties": {
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "keyword_hits": {"type": "integer", "minimum": 0},
+        "matched_fields": {"type": "integer", "minimum": 0},
+        "review_fields": {"type": "integer", "minimum": 0},
+        "required_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "missing_required": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "detection": {
+      "type": "object",
+      "required": ["selected", "auto_selected", "selection_source", "candidates", "confidence_margin", "auto_confidence_margin", "is_ambiguous", "ambiguity_reason", "mixed_scenario"],
+      "properties": {
+        "selected": {"$ref": "#/$defs/candidate"},
+        "auto_selected": {"$ref": "#/$defs/candidate"},
+        "selection_source": {"enum": ["auto", "manual"]},
+        "candidates": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/candidate"}},
+        "confidence_margin": {"type": "number"},
+        "auto_confidence_margin": {"type": "number"},
+        "is_ambiguous": {"type": "boolean"},
+        "ambiguity_reason": {"type": ["string", "null"]},
+        "mixed_scenario": {"$ref": "#/$defs/mixed_scenario"}
+      }
+    },
+    "mixed_scenario": {
+      "type": "object",
+      "required": ["suspected", "candidate_scenarios", "groups", "unassigned_columns"],
+      "properties": {
+        "suspected": {"type": "boolean"},
+        "candidate_scenarios": {"type": "array", "maxItems": 2, "items": {"type": "string"}},
+        "groups": {"type": "array", "items": {"type": "object"}},
+        "unassigned_columns": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "mapping": {
+      "type": "object",
+      "required": ["scenario_id", "scenario_name", "mappings", "missing_required", "required_coverage", "candidate_coverage", "auto_coverage", "review_count", "unmapped_count", "unit_risk_count", "unit_conversion_required_count"],
+      "properties": {
+        "scenario_id": {"type": "string"},
+        "scenario_name": {"type": "string"},
+        "mappings": {"type": "array", "items": {"$ref": "#/$defs/mapping_item"}},
+        "missing_required": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "required_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "candidate_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "auto_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "review_count": {"type": "integer", "minimum": 0},
+        "unmapped_count": {"type": "integer", "minimum": 0},
+        "unit_risk_count": {"type": "integer", "minimum": 0},
+        "unit_conversion_required_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "mapping_item": {
+      "type": "object",
+      "required": ["raw", "base_name", "standard", "display_name", "role", "data_type", "expected_unit", "detected_unit", "unit_status", "unit_action", "confidence", "method", "status", "need_level", "is_needed"],
+      "properties": {
+        "raw": {"type": "string"},
+        "base_name": {"type": "string"},
+        "standard": {"type": ["string", "null"]},
+        "display_name": {"type": ["string", "null"]},
+        "role": {"type": ["string", "null"], "enum": ["time", "manipulated", "controlled", "disturbance", "state", "quality", "identifier", null]},
+        "data_type": {"type": ["string", "null"]},
+        "expected_unit": {"type": ["string", "null"]},
+        "detected_unit": {"type": ["string", "null"]},
+        "unit_status": {"enum": ["not_declared", "consistent", "convertible", "conflict"]},
+        "unit_action": {"type": ["string", "null"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "method": {"enum": ["alias", "vendor_core_alias", "semantic", "trained_model", "trained_model_auto", "trained_reject", "manual"]},
+        "status": {"enum": ["matched", "review", "unmapped", "duplicate"]},
+        "need_level": {"enum": ["required", "useful", "uncertain", "irrelevant"]},
+        "is_needed": {"type": ["boolean", "null"]}
+      }
+    },
+    "conversion": {
+      "type": "object",
+      "required": ["field", "source_unit", "target_unit", "formula"],
+      "properties": {
+        "field": {"type": "string"}, "source_unit": {"type": "string"},
+        "target_unit": {"type": "string"}, "formula": {"type": "string"}
+      }
+    },
+    "field_validation": {
+      "type": "object",
+      "required": ["field", "data_type", "type_errors", "bounds_violations", "bounds_checked", "bounds_skip_reason", "lower_bound", "upper_bound"],
+      "properties": {
+        "field": {"type": "string"}, "data_type": {"type": "string"},
+        "type_errors": {"type": "integer", "minimum": 0},
+        "bounds_violations": {"type": "integer", "minimum": 0},
+        "bounds_checked": {"type": "boolean"},
+        "bounds_skip_reason": {"type": ["string", "null"]},
+        "lower_bound": {"type": ["number", "null"]}, "upper_bound": {"type": ["number", "null"]}
+      }
+    },
+    "schema_validation": {
+      "type": "object",
+      "required": ["engine", "schema", "passed", "checked_columns", "failure_count", "failures", "truncated"],
+      "properties": {
+        "engine": {"const": "pandera"}, "schema": {"type": "string"}, "passed": {"type": "boolean"},
+        "checked_columns": {"type": "integer", "minimum": 0}, "failure_count": {"type": "integer", "minimum": 0},
+        "failures": {"type": "array", "items": {"type": "object"}}, "truncated": {"type": "boolean"}
+      }
+    },
+    "issue": {
+      "type": "object",
+      "required": ["level", "code", "field", "message"],
+      "properties": {
+        "level": {"enum": ["info", "warning", "error"]}, "code": {"type": "string"},
+        "field": {"type": "string"}, "message": {"type": "string"}
+      }
+    },
+    "data_decision": {
+      "type": "object",
+      "required": ["status", "is_usable", "scenario_confidence", "required_coverage", "reasons"],
+      "properties": {
+        "status": {"enum": ["ready", "review", "reject"]}, "is_usable": {"type": "boolean"},
+        "scenario_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "required_coverage": {"type": "number", "minimum": 0, "maximum": 1},
+        "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "dictionary_field": {
+      "type": "object",
+      "required": ["standard_name", "display_name", "description", "role", "data_type", "unit", "required", "aliases", "lower_bound", "upper_bound"],
+      "properties": {
+        "standard_name": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+        "display_name": {"type": "string"}, "description": {"type": "string"}, "role": {"type": "string"},
+        "data_type": {"type": "string"}, "unit": {"type": "string"}, "required": {"type": "boolean"},
+        "aliases": {"type": "array", "items": {"type": "string"}},
+        "lower_bound": {"type": ["number", "null"]}, "upper_bound": {"type": ["number", "null"]}
+      }
+    }
+  }
+}

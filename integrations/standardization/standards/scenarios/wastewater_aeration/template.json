@@ -1,0 +1,13 @@
+{
+  "scenario_id": "wastewater_aeration",
+  "scenario_name": "污水生化曝气池",
+  "industry": "环保水处理",
+  "process_unit": "活性污泥曝气系统",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["污水", "水处理", "曝气池", "活性污泥", "溶解氧", "wastewater", "aeration", "DO"],
+  "sampling_seconds": 300,
+  "timestamp_field": "timestamp",
+  "primary_output": "effluent_ammonia",
+  "notes": "用于污水生化处理曝气系统的字段需求判定与统一。"
+}

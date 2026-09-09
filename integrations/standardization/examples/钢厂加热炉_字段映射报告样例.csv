@@ -1,0 +1,15 @@
+﻿raw,base_name,standard,display_name,role,data_type,expected_unit,detected_unit,unit_status,unit_action,confidence,method,status
+采集时间,采集时间,timestamp,时间戳,time,datetime,datetime,,not_declared,,1.0,alias,matched
+GAS_FLOW_NM3H,GAS_FLOW_NM3H,gas_flow,煤气流量,manipulated,float,Nm3/h,,not_declared,,1.0,alias,matched
+助燃风量[Nm3/h],助燃风量,air_flow,助燃空气流量,manipulated,float,Nm3/h,Nm3/h,consistent,,1.0,alias,matched
+ZONE1_TEMP_C,ZONE1_TEMP,furnace_zone1_temp,预热段炉温,controlled,float,degC,degC,consistent,,1.0,alias,matched
+二段炉温(℃),二段炉温,furnace_zone2_temp,加热段炉温,controlled,float,degC,degC,consistent,,1.0,alias,matched
+均热段温度(°F),均热段温度,furnace_zone3_temp,均热段炉温,controlled,float,degC,degF,convertible,(x-32)*5/9,1.0,alias,matched
+WALKING_BEAM_SPEED,WALKING_BEAM_SPEED,walking_beam_speed,步进梁速度,manipulated,float,m/min,,not_declared,,1.0,alias,matched
+入炉温度,入炉温度,slab_entry_temp,入炉钢坯温度,disturbance,float,degC,,not_declared,,1.0,alias,matched
+SLAB_OUT_TEMP_C,SLAB_OUT_TEMP,slab_discharge_temp,出炉钢坯温度,controlled,float,degC,degC,consistent,,1.0,alias,matched
+炉压(kPa),炉压,furnace_pressure,炉膛压力,state,float,Pa,kPa,convertible,x*1000,1.0,alias,matched
+O2_PERCENT,O2,flue_gas_o2,烟气含氧量,state,float,percent,percent,consistent,,1.0,alias,matched
+板坯厚度,板坯厚度,slab_thickness,钢坯厚度,disturbance,float,mm,,not_declared,,1.0,alias,matched
+THROUGHPUT,THROUGHPUT,production_rate,生产节奏,disturbance,float,t/h,,not_declared,,1.0,alias,matched
+厂商临时标签,厂商临时标签,,,,,,,not_declared,,0.145,semantic,unmapped

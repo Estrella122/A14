@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "scenarios": [
+    {
+      "scenario_id": "cement_rotary_kiln",
+      "scenario_name": "水泥回转窑",
+      "industry": "建材",
+      "process_unit": "新型干法水泥回转窑",
+      "version": "1.0.0",
+      "field_count": 13,
+      "required_count": 7,
+      "notes": "用于水泥熟料烧成系统的字段需求判定与统一。"
+    },
+    {
+      "scenario_id": "distillation_column",
+      "scenario_name": "化工精馏塔",
+      "industry": "化工",
+      "process_unit": "连续精馏塔",
+      "version": "0.1.0-example",
+      "field_count": 10,
+      "required_count": 7,
+      "notes": "多场景扩展示例，仅用于证明模板机制；正式使用前需由化工工艺人员复核。"
+    },
+    {
+      "scenario_id": "steel_reheating_furnace",
+      "scenario_name": "钢厂步进梁式加热炉",
+      "industry": "冶金",
+      "process_unit": "步进梁式加热炉",
+      "version": "1.0.0",
+      "field_count": 18,
+      "required_count": 8,
+      "notes": "2号任务重点场景模板。字段范围用于标准校验，不执行异常清洗。"
+    },
+    {
+      "scenario_id": "thermal_power_boiler",
+      "scenario_name": "火电燃煤锅炉",
+      "industry": "电力",
+      "process_unit": "亚临界/超临界燃煤锅炉",
+      "version": "1.0.0",
+      "field_count": 14,
+      "required_count": 8,
+      "notes": "用于锅炉运行时序数据的字段需求判定与统一。"
+    },
+    {
+      "scenario_id": "wastewater_aeration",
+      "scenario_name": "污水生化曝气池",
+      "industry": "环保水处理",
+      "process_unit": "活性污泥曝气系统",
+      "version": "1.0.0",
+      "field_count": 13,
+      "required_count": 8,
+      "notes": "用于污水生化处理曝气系统的字段需求判定与统一。"
+    }
+  ],
+  "field_samples": 4710,
+  "intent_samples": 180,
+  "splits": {
+    "train": 3130,
+    "validation": 668,
+    "test": 912
+  },
+  "label_policy": {
+    "required": "场景必需字段",
+    "useful": "可选但具有工艺价值",
+    "irrelevant": "不进入标准数据",
+    "uncertain": "由模型阈值产生，需人工确认"
+  }
+}

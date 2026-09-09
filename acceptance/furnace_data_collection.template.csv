@@ -1,0 +1,2 @@
+timestamp,operation_id,operating_mode,gas_setpoint,gas_valve_position,gas_flow,air_setpoint,air_valve_position,air_flow,furnace_zone1_temp,furnace_zone2_temp,furnace_zone3_temp,slab_discharge_temp,line_speed,manual_action,interlock_state,data_quality_note
+YYYY-MM-DD HH:MM:SS,匿名操作编号,自动/手动,工程值,%,工程值,工程值,%,工程值,℃,℃,℃,℃,工程值,脱敏操作说明,正常/触发,缺失或仪表异常说明

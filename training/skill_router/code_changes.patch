@@ -1,0 +1,837 @@
+--- a/core/skills/runtime.py
++++ b/core/skills/runtime.py
+@@ -11,6 +11,7 @@
+ from django.conf import settings
+ 
+ from .catalog import CATEGORIES, SKILLS, SKILL_MAP
++from .routing import select
+ 
+ 
+ RUNS_DIR = Path(settings.BASE_DIR) / "runtime" / "agent_skill_runs"
+@@ -60,7 +61,7 @@
+ 
+ def _parameters(message: str) -> dict[str, Any]:
+     output: dict[str, Any] = {}
+-    rules = (("resample_seconds", r"(\d+)\s*秒"), ("max_lag", r"(?:时滞|max[_ ]?lag)[^\d]{0,5}(\d+)"), ("model_order", r"(?:阶次|order)[^\d]{0,5}(\d+)"))
++    rules = (("resample_seconds", r"(?:采样(?:周期)?|按|改为|使用)\s*(\d+)\s*(?:秒|s\b)"), ("max_lag", r"(?:时滞|max[_ ]?lag)[^\d]{0,5}(\d+)"), ("model_order", r"(?:阶次|order)[^\d]{0,5}(\d+)"))
+     for key, pattern in rules:
+         match = re.search(pattern, message, re.I)
+         if match:
+@@ -131,15 +132,24 @@
+ 
+ def _with_dependencies(selected: set[str]) -> list[str]:
+     resolved: set[str] = set()
++    visiting: set[str] = set()
++    ordered: list[str] = []
+     def visit(skill_id: str):
+-        if skill_id in resolved or skill_id not in SKILL_MAP:
++        if skill_id in resolved:
+             return
++        if skill_id not in SKILL_MAP:
++            raise ValueError(f"未知依赖技能：{skill_id}")
++        if skill_id in visiting:
++            raise ValueError(f"技能依赖存在环：{skill_id}")
++        visiting.add(skill_id)
+         for dependency in SKILL_MAP[skill_id].depends_on:
+             visit(dependency)
++        visiting.remove(skill_id)
+         resolved.add(skill_id)
+-    for item in selected:
++        ordered.append(skill_id)
++    for item in sorted(selected):
+         visit(item)
+-    return [skill.id for skill in SKILLS if skill.id in resolved]
++    return ordered
+ 
+ 
+ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
+@@ -147,28 +157,54 @@
+     if not text:
+         raise ValueError("规划指令不能为空。")
+     analysis = _request_analysis(text)
+-    direct, relevance_scores, candidates = _direct_matches(text, analysis)
+-    execution_mode = analysis["mode"]
++    try:
++        route = select(text, analysis, EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
++    except (OSError, ValueError, KeyError, TypeError) as exc:
++        # Missing or damaged model must not silently return to broad keywords.
++        route = {"direct": set(), "scores": {}, "mode": "analyze", "decisions": [],
++                 "denied": set(), "needs_clarification": True, "unresolved_clauses": [text],
++                 "source": "model_unavailable", "full_pipeline_requested": False,
++                 "negative_clauses": [], "error": type(exc).__name__}
++    direct, relevance_scores = route["direct"], route["scores"]
++    candidates = [dict(candidate, reason="训练模型候选", selected=candidate["skill_id"] in direct)
++                  for decision in route["decisions"] for candidate in decision["candidates"]]
++    execution_mode = route["mode"]
++    analysis.update({"mode": execution_mode, "routing_source": route["source"],
++                     "needs_clarification": route["needs_clarification"],
++                     "unresolved_clauses": route["unresolved_clauses"],
++                     "routing_decisions": route["decisions"],
++                     "excluded_skills": sorted(route["denied"]),
++                     "full_pipeline_requested": route["full_pipeline_requested"]})
+     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
+     if execution_mode == "execute":
+         runtime_skills.add("execution_supervisor_replanner")
+-    if execution_mode == "execute":
+-        ordered = _with_dependencies(direct | runtime_skills)
++        pipeline_targets = {"dataset_scenario_profiler", "semantic_field_unit_standardizer", "time_axis_alignment_resampler", "missing_anomaly_cleaner", "high_snr_dynamic_segment_extractor", "system_identification_trainer", "closed_loop_preprocessing_optimizer"}
++        needs_pipeline = bool(direct & pipeline_targets)
++        ordered = _with_dependencies((direct & pipeline_targets) | runtime_skills) if needs_pipeline else [skill.id for skill in SKILLS if skill.id in runtime_skills]
++        ordered += [skill.id for skill in SKILLS if skill.id in direct and skill.id not in ordered]
++        # Never reintroduce an explicitly excluded prerequisite as executable.
++        conflicts = set(ordered) & route["denied"]
++        if conflicts:
++            analysis["needs_clarification"] = True
++            analysis["dependency_conflicts"] = sorted(conflicts)
++            execution_mode = analysis["mode"] = "analyze"
++            runtime_skills.discard("execution_supervisor_replanner")
++            ordered = [skill.id for skill in SKILLS if skill.id in direct | runtime_skills and skill.id not in route["denied"]]
+     else:
+-        selected = direct | runtime_skills
+-        ordered = [skill.id for skill in SKILLS if skill.id in selected]
++        ordered = [skill.id for skill in SKILLS if skill.id in direct | runtime_skills and skill.id not in route["denied"]]
+     entities = _entities(text)
+     parameters = _parameters(text)
+     steps = []
+     for index, skill_id in enumerate(ordered, 1):
+         skill = SKILL_MAP[skill_id]
+-        reason = "用户目标直接命中" if skill_id in direct else ("上游依赖自动补齐" if execution_mode == "execute" else "Agent 运行时治理")
+-        steps.append({"order": index, "skill_id": skill.id, "name": skill.name, "category": skill.category, "reason": reason, "relevance_score": relevance_scores.get(skill_id, 1.0 if skill_id in runtime_skills else 0.68), "status": "ready"})
++        reason = "用户目标直接命中" if skill_id in direct else "Agent 运行时治理" if skill_id in runtime_skills else "上游依赖自动补齐"
++        steps.append({"order": index, "skill_id": skill.id, "name": skill.name, "category": skill.category, "reason": reason, "selection_kind": "direct" if skill_id in direct else "governance" if skill_id in runtime_skills else "dependency", "relevance_score": relevance_scores.get(skill_id, 1.0 if skill_id in runtime_skills else 0.68), "status": "ready"})
+     return {
+         "plan_id": f"plan_{uuid4().hex[:12]}", "run_id": run_id, "objective": text,
+         "mode": execution_mode, "analysis": analysis, "entities": entities, "parameters": parameters,
+         "constraints": {"local_execution": True, "auditable": True},
+-        "selected_count": len(steps), "steps": steps, "candidates": candidates,
++        "selected_count": len(steps), "direct_skill_ids": [skill.id for skill in SKILLS if skill.id in direct],
++        "direct_count": len(direct), "steps": steps, "candidates": candidates,
+     }
+ 
+ 
+@@ -218,7 +254,7 @@
+             })
+             continue
+         if skill.handler == "intent":
+-            metrics = {"objective": plan["objective"], "mode": "execute" if any(word in plan["objective"] for word in ("执行", "运行", "生成")) else "analyze"}
++            metrics = {"objective": plan["objective"], "mode": plan.get("mode", "analyze")}
+             artifacts, evidence, warnings = [], ["user_instruction"], []
+         elif skill.handler == "entity":
+             metrics, artifacts, evidence, warnings = plan["entities"], [], ["user_instruction"], []
+@@ -233,7 +269,7 @@
+         else:
+             metrics, artifacts, evidence, warnings = _summary(snapshot, skill.handler)
+         executions.append({
+-            **step, "status": "success", "activity": "planned" if blocked_reason else "executed" if plan.get("mode") == "execute" else "read", "duration_ms": max(1, round((perf_counter() - tick) * 1000)),
++            **step, "status": "success", "activity": "planned" if skill.category == "orchestration" else "read", "duration_ms": max(1, round((perf_counter() - tick) * 1000)),
+             "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
+             "metrics": metrics, "artifacts": artifacts, "evidence": evidence, "warnings": warnings,
+             "suggested_next_skills": [item.id for item in SKILLS if skill.id in item.depends_on][:3],
+--- a/core/tests.py
++++ b/core/tests.py
+@@ -390,7 +390,7 @@
+         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=rerun) as mocked:
+             result = chat('按5秒重新执行数据清洗')
+ 
+-        mocked.assert_called_once_with('run_test', resample_rule='5s', max_lag=60)
++        mocked.assert_called_once_with('run_test', resample_rule='5s', max_lag=60, stop_after='cleaning')
+         self.assertTrue(result['executed'])
+         self.assertEqual(result['run_id'], 'run_rerun')
+ 
+--- a/core/services/agent_chat.py
++++ b/core/services/agent_chat.py
+@@ -40,7 +40,7 @@
+ 
+ def _detect_intent(message: str, previous_intent: str | None = None, previous_intents: list[str] | None = None) -> tuple[str, float, list[str], list[str]]:
+     normalized = message.lower()
+-    if any(word in normalized for word in ("你好", "您好", "在吗", "嗨", "hello", "hi")):
++    if re.fullmatch(r"(?:你好|您好|在吗|嗨|hello|hi|there|[，,。！？!?\s])+", normalized):
+         return "conversation", 0.99, [], ["conversation"]
+     if any(word in normalized for word in ("你是谁", "你能做什么", "怎么用", "有什么功能", "能干什么")):
+         return "capability", 0.98, [], ["capability"]
+@@ -347,6 +347,11 @@
+ 
+     intent, confidence, keywords, matched_intents = _detect_intent(message, previous_intent, previous_intents)
+     skill_plan = plan_skills(message, snapshot["run_id"])
++    if skill_plan["analysis"].get("needs_clarification") and previous_intent == intent and intent not in {"conversation", "capability", "clarification", "overview"} and not keywords:
++        skill_plan = plan_skills("解释" + INTENT_LABELS[intent] + "结果", snapshot["run_id"])
++        skill_plan["objective"] = message
++        skill_plan["mode"] = skill_plan["analysis"]["mode"] = "analyze"
++        skill_plan["analysis"]["context_intent"] = intent
+     requested_family = _scenario_family(skill_plan.get("entities", {}).get("scenario"))
+     current_scenario = snapshot.get("results", {}).get("standardization", {}).get("scenario", {}).get("scenario_name")
+     current_family = _scenario_family(current_scenario)
+@@ -355,10 +360,33 @@
+     if mismatch:
+         blocked_reason = f"问题指定{skill_plan['entities'].get('equipment_id') or requested_family}，当前 CSV 属于{current_scenario}，设备场景不一致。"
+     executed = False
+-    if skill_plan.get("mode") == "execute" and not mismatch:
++    direct = set(skill_plan.get("direct_skill_ids", []))
++    needs_clarification = skill_plan.get("analysis", {}).get("needs_clarification", False) and intent not in {"conversation", "capability", "clarification"}
++    action_note = ""
++    execution_scope = "evidence_only"
++    # Only actual pipeline-backed requests can rerun algorithms. Read/export
++    # and unimplemented standalone skills cannot trigger an unrelated full run.
++    stop_after = None
++    if skill_plan.get("analysis", {}).get("full_pipeline_requested") or "closed_loop_preprocessing_optimizer" in direct:
++        stop_after = "report"
++    elif "system_identification_trainer" in direct:
++        stop_after = "modeling"
++    elif "high_snr_dynamic_segment_extractor" in direct:
++        stop_after = "selection"
++    elif "missing_anomaly_cleaner" in direct or "time_axis_alignment_resampler" in direct:
++        stop_after = "cleaning"
++    elif "semantic_field_unit_standardizer" in direct or "dataset_scenario_profiler" in direct:
++        stop_after = "standardization"
++    if needs_clarification and not mismatch:
++        blocked_reason = "未能确定完整执行目标，请明确需要的技能；没有启动算法。"
++    if skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
+         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
+         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
+-        snapshot = rerun_pipeline(snapshot["run_id"], resample_rule=f"{max(1, min(resample_seconds, 300))}s", max_lag=max(1, min(max_lag, 600)))
++        rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
++        if stop_after != "report":
++            rerun_kwargs["stop_after"] = stop_after
++        snapshot = rerun_pipeline(snapshot["run_id"], **rerun_kwargs)
++        execution_scope = stop_after
+         executed = True
+         skill_plan = plan_skills(message, snapshot["run_id"])
+ 
+@@ -384,14 +412,25 @@
+     elif executed and is_compound:
+         degraded = int(snapshot.get("results", {}).get("cleaning", {}).get("selected_segment_count") or 0) == 0
+         answer, cards, suggestions = _compound_result(snapshot, degraded)
++    if needs_clarification and not mismatch:
++        candidates = [item["name"] for item in skill_plan.get("steps", []) if item.get("selection_kind") == "direct"]
++        answer = blocked_reason + ("可选方向：" + "、".join(candidates) if candidates else "请说明要处理的数据和目标。")
++        cards = [{"label": "路由状态", "value": "需要澄清"}]
++    elif skill_plan.get("mode") == "execute" and not executed and not mismatch:
++        if direct <= {"final_artifact_exporter", "evidence_audit_reproducer"}:
++            answer = "已整理当前任务已有产物与证据的下载入口。" + answer
++        else:
++            action_note = "已识别请求并读取现有证据；这些技能尚无独立算法执行接口，本次没有生成新结果。"
++            answer = action_note + answer
+     if executed:
+-        answer = f"已按指令完成真实重跑，新任务编号为 {snapshot['run_id']}。" + answer
++        scope_label = "全流程" if execution_scope == "report" else dict((key, label) for key, label in [("standardization", "字段标准化"), ("cleaning", "清洗"), ("selection", "动态段提取"), ("modeling", "系统辨识")])[execution_scope]
++        answer = f"已执行至{scope_label}，新任务编号为 {snapshot['run_id']}。" + answer
+     now = datetime.now().astimezone().isoformat(timespec="seconds")
+     logs = [
+         {"time": now, "level": "INFO", "text": f"识别意图 {intent}，置信度 {confidence:.0%}"},
+         *([{"time": now, "level": "EXPERT", "text": f"命中专家问题域：{expert_answer['topic_name']}"}] if expert_answer else []),
+         {"time": now, "level": "TOOL", "text": f"读取任务 {snapshot['run_id']} 的标准化、清洗、辨识和评审证据"},
+-        {"time": now, "level": "WARN" if mismatch else "BEST" if executed else "INFO", "text": blocked_reason if mismatch else "已执行完整流水线并刷新证据" if executed else "本次为只读分析，未修改运行产物"},
++        {"time": now, "level": "WARN" if mismatch else "BEST" if executed else "INFO", "text": blocked_reason if mismatch else f"已执行至 {execution_scope} 并刷新证据" if executed else "本次为只读分析，未修改运行产物"},
+     ]
+     skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason)
+     logs.extend({
+@@ -403,8 +442,11 @@
+         "answer": answer,
+         "run_id": snapshot["run_id"],
+         "executed": executed,
+-        "blocked": mismatch,
+-        "execution_mode": "blocked" if mismatch else ("executed" if executed else "analysis"),
++        "blocked": bool(blocked_reason),
++        "needs_clarification": needs_clarification,
++        "execution_scope": execution_scope,
++        "action_note": action_note,
++        "execution_mode": "blocked" if blocked_reason else ("executed" if executed else "analysis"),
+         "intent": {"key": intent, "label": INTENT_LABELS[intent], "confidence": confidence, "keywords": keywords, "matched": matched_intents},
+         "cards": cards,
+         "suggestions": suggestions,
+@@ -413,7 +455,7 @@
+         "skill_run_id": skill_run["skill_run_id"],
+         "skill_executions": skill_run["executions"],
+         "skill_summary": skill_run["summary"],
+-        "deliverables": _deliverables(snapshot) if executed and not mismatch else [],
++        "deliverables": _deliverables(snapshot) if (executed or "final_artifact_exporter" in direct) and not blocked_reason else [],
+         "expert_topic": expert_answer["topic"] if expert_answer else None,
+         "expert_topics": expert_answer.get("topics", []) if expert_answer else [],
+         "logs": logs,
+--- a/core/services/pipeline.py
++++ b/core/services/pipeline.py
+@@ -658,7 +658,9 @@
+     }
+ 
+ 
+-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60) -> dict[str, Any]:
++def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report") -> dict[str, Any]:
++    if stop_after not in dict(STAGES):
++        raise PipelineError("未知的流水线停止阶段。")
+     with _RUN_LOCK:
+         run_id = datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid4().hex[:8]
+         run_dir = RUNS_DIR / run_id
+@@ -683,6 +685,16 @@
+         _write_json(run_dir / "snapshot.json", snapshot)
+         _write_json(LATEST_PATH, {"run_id": run_id})
+ 
++        def finish_requested_stage(stage):
++            if stop_after != stage:
++                return False
++            for node in snapshot["stages"]:
++                if node["status"] == "pending":
++                    node.update(status="skipped", message="不在本次请求范围内")
++            snapshot.update(status="completed", current_stage="completed", execution_scope={"stop_after": stop_after}, updated_at=datetime.now().astimezone().isoformat(timespec="seconds"))
++            _write_json(run_dir / "snapshot.json", snapshot)
++            return True
++
+         current_stage = "standardization"
+         try:
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在识别场景、字段和单位")
+@@ -690,6 +702,8 @@
+             snapshot["results"]["standardization"] = standardization
+             snapshot["artifacts"].update(standardization["artifacts"])
+             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
++            if finish_requested_stage("standardization"):
++                return snapshot
+ 
+             current_stage = "cleaning"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在对齐时间戳并修复缺失、异常值")
+@@ -698,6 +712,8 @@
+             snapshot["results"]["cleaning"] = cleaning
+             snapshot["artifacts"].update(cleaning["artifacts"])
+             _set_stage(snapshot, run_dir, current_stage, "completed", f"质量评分 {cleaning['overall_score']}")
++            if finish_requested_stage("cleaning"):
++                return snapshot
+ 
+             current_stage = "selection"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在冻结优质动态数据段")
+@@ -707,6 +723,8 @@
+                 "segments": cleaning["segments_preview"],
+             }
+             _set_stage(snapshot, run_dir, current_stage, "completed", f"建模数据 {len(modeling_data)} 行")
++            if finish_requested_stage("selection"):
++                return snapshot
+ 
+             current_stage = "modeling"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在执行时滞、共线性和ARX辨识")
+@@ -714,6 +732,8 @@
+             snapshot["results"]["modeling"] = modeling
+             snapshot["artifacts"].update(modeling["artifacts"])
+             _set_stage(snapshot, run_dir, current_stage, "completed", "系统辨识完成")
++            if finish_requested_stage("modeling"):
++                return snapshot
+ 
+             current_stage = "optimization"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在基于真实数据比较多组候选策略")
+@@ -740,12 +760,18 @@
+                 f"第 {optimization['best_round']} 轮最优，综合得分 {optimization['best_score']}",
+             )
+ 
++            if finish_requested_stage("optimization"):
++                return snapshot
++
+             current_stage = "review"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在核对字段、质量与模型证据")
+             review = _review(standardization, cleaning, modeling, run_dir)
+             snapshot["results"]["review"] = review
+             snapshot["artifacts"]["review_json"] = "06_review/agent_review.json"
+             _set_stage(snapshot, run_dir, current_stage, "completed", review["conclusion"])
++
++            if finish_requested_stage("review"):
++                return snapshot
+ 
+             current_stage = "report"
+             _set_stage(snapshot, run_dir, current_stage, "running", "正在汇总子Agent证据并生成报告")
+@@ -805,7 +831,7 @@
+     return path, path.name
+ 
+ 
+-def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60) -> dict[str, Any]:
++def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report") -> dict[str, Any]:
+     previous = get_run(run_id)
+     if not previous:
+         raise PipelineError("运行任务不存在。")
+@@ -821,4 +847,5 @@
+         instruction=previous.get("instruction", ""),
+         resample_rule=resample_rule,
+         max_lag=max_lag,
++        stop_after=stop_after,
+     )
+--- /dev/null
++++ b/core/skills/router_model.py
+@@ -0,0 +1,62 @@
++"""Trained character TF-IDF / linear classifier. Inference needs only stdlib.
++
++The JSON artifact is data, never pickle. Probability and lexical coverage are
++reported separately: a closed-set score is not a guarantee of correctness.
++"""
++from __future__ import annotations
++import gzip
++import hashlib
++import json
++import math
++import re
++import unicodedata
++from collections import Counter
++from functools import lru_cache
++from pathlib import Path
++
++MODEL_PATH = Path(__file__).parent / 'models' / 'skill_router.json.gz'
++
++def normalize(text: str) -> str:
++    return re.sub(r'\s+', ' ', unicodedata.normalize('NFKC', text).lower()).strip()
++
++def char_features(text: str) -> Counter:
++    text = normalize(text)
++    return Counter(text[i:i+n] for n in (2,3,4) for i in range(max(0,len(text)-n+1)))
++
++@lru_cache(maxsize=4)
++def _load(path: str, modified: int) -> dict:
++    with gzip.open(path, 'rt', encoding='utf8') as f:
++        model=json.load(f)
++    if model.get('schema_version') != 1:
++        raise ValueError('Unsupported skill router model schema')
++    if len(model['weights']) != len(model['classes']):
++        raise ValueError('Invalid skill router class weights')
++    return model
++
++def load_model(path=MODEL_PATH):
++    path=Path(path)
++    return _load(str(path.resolve()),path.stat().st_mtime_ns)
++
++def predict(text: str, model: dict | None = None) -> dict:
++    model=load_model() if model is None else model
++    counts=char_features(text)
++    known={model['vocabulary'][term]: (1+math.log(count))*model['idf'][model['vocabulary'][term]]
++           for term,count in counts.items() if term in model['vocabulary']}
++    norm=math.sqrt(sum(x*x for x in known.values())) or 1
++    vector={i:x/norm for i,x in known.items()}
++    logits=[b+sum(w[i]*v for i,v in vector.items()) for w,b in zip(model['weights'],model['intercept'])]
++    maximum=max(logits)
++    exps=[math.exp(x-maximum) for x in logits]
++    denom=sum(exps)
++    ranked=sorted(zip(model['classes'],[x/denom for x in exps]),key=lambda x:(-x[1],x[0]))
++    label,score=ranked[0]
++    margin=score-ranked[1][1]
++    bigrams={term for term in counts if len(term)==2}
++    coverage=sum(term in model['vocabulary'] for term in bigrams)/max(1,len(bigrams))
++    gate=model['thresholds']
++    accepted=label!='__none__' and score>=gate['probability'] and margin>=gate['margin'] and coverage>=gate['coverage']
++    return {'skill_id':label if accepted else None,'top_label':label,'score':round(score,6),
++            'margin':round(margin,6),'coverage':round(coverage,6),'accepted':accepted,
++            'reason':'accepted' if accepted else 'out_of_scope' if label=='__none__' else 'low_confidence',
++            'candidates':[{'skill_id':k,'score':round(v,6)} for k,v in ranked[:3]],
++            'model_version':model['version'],'score_type':'softmax_probability_uncalibrated'}
+--- /dev/null
++++ b/core/skills/routing.py
+@@ -0,0 +1,98 @@
++"""Intent guards and multi-clause selection around the supervised router."""
++from __future__ import annotations
++import re
++from .catalog import SKILL_MAP
++from .router_model import normalize, predict
++
++NEGATIVE = re.compile(r'^(?:(?:请|我|麻烦|务必|千万|一定|现在|暂时|先|这次|本次)\s*)*(?:不要|别|不必|无需|禁止|不需要|不用|不能|不得|停止|取消|do not|don\x27t)\s*', re.I)
++ACTION = re.compile(r'^(?:(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想|现在|立即|先|再|然后|只|仅|把|将|对|进行|执行)\s*)*(?:重新执行|重新运行|重跑|运行一遍|提取|筛选|清洗|规整|生成|创建|合成|模拟|训练|建立|拟合|优化|寻优|导出|下载|打包|处理|补齐|修复|剔除|计算|估计|抽取|选择|选取|组装|拼接|冻结|标记|检测|绘制|画|撰写|编写|整理|起草|按\d+秒|resample|train|fit|generate|export|download|plot)')
++QUESTION = re.compile(r'为什么|为何|怎么|如何|是否|能否|可以.*吗|什么|哪个|哪些|多少|多大|怎么样|如果|假如|假设|假定|假若|假想|倘若|假使|假如|what\b|why\b|how\b', re.I)
++FULL_RUN = re.compile(r'^(?:(?:请|帮我|现在|立即|开始|重新)\s*)*(?:重新执行|重新运行|重跑|运行一遍|执行全流程|运行全流程|跑一遍完整流程)(?:当前任务|全流程|流水线|一遍|全部)?[。！!\s]*$')
++SUPPORT = {'industrial_intent_parser','skill_capability_matcher','workflow_dag_planner','execution_supervisor_replanner','equipment_entity_resolver','constraint_parameter_extractor'}
++
++
++def clauses(message):
++    text=normalize(message)
++    if re.search(r'按钮|字符串|这句话|原话|原文|引用|他说|她说|提示词|关键字',text):
++        text=re.sub(r'“[^”]*”|"[^"]*"|「[^」]*」|‘[^’]*’', '',text)
++    text=re.sub(r'(?:之后|以后|后)(?=进行|执行|再|开始)', '，',text)
++    parts=re.split(r'[，,；;。！？!?\n]+|(?:然后|并且|以及|同时|接着)|(?<=\S)再(?=训练|执行|导出|提取|优化)|(?<=\S)并(?=训练|执行|导出|提取|优化)',text)
++    return [p.strip() for p in parts if p.strip()]
++
++
++def select(message: str, analysis: dict, expert_rules, topic_keys):
++    parts=clauses(message)
++    negative=[];positive=[]
++    for part in parts:
++        if NEGATIVE.match(part):negative.append(NEGATIVE.sub('',part))
++        elif re.search(r'(?:不要|不必|无需|禁止|不需要|不用|不能|不得).{0,15}(?:执行|运行|重跑|训练|清洗|导出|生成|提取)',part):negative.append(part)
++        else:positive.append(part)
++    full_run=bool(FULL_RUN.fullmatch(normalize(message)))
++    # Questions and hypothetical/quoted instructions never authorize a pipeline.
++    explicit=any(ACTION.search(p) or re.search(r'^(?:(?:请|帮我|现在|立即|先|再)\s*)*(?:开始执行|立即执行|重新执行|重新运行|运行一遍|重跑)|^(?:请|帮我)?(?:把|将|对).{1,35}(?:重采样|补齐|清洗|提取|导出|训练|绘制)',p) for p in positive)
++    question=bool(QUESTION.search(message) or re.search(r'会不会|能不能|可不可以|要不要|[?？吗呢]\s*$',message))
++    expert_request=question or bool(re.search(r'^(?:请)?(?:分析|说明|解释)',normalize(message)))
++    mode='execute' if (explicit and not question) or full_run else 'analyze'
++    selected=set();scores={};decisions=[];unknown=[]
++    for part in positive:
++        result=predict(part)
++        # Grammar resolves the requested action/object before statistical
++        # ranking: drawing residuals is a chart task, not model retraining.
++        prefix=r'^(?:(?:请|帮我|给我|我需要|只|仅|现在|先|再)\s*)*'
++        forced=None
++        if re.search(prefix+r'(?:下载|导出|打包|获取.{0,20}下载|提供.{0,20}下载)',part):
++            forced='final_artifact_exporter'
++        elif re.search(prefix+r'(?:撰写|编写|起草|写).{0,40}(?:报告|文档|评审稿|评审材料)',part):
++            forced='expert_report_writer'
++        elif re.search(prefix+r'(?:画|绘制|展示|生成).{0,40}(?:图|曲线|可视化)',part):
++            forced='engineering_visualization_builder'
++        if forced:
++            result.update(skill_id=forced,accepted=True,reason='explicit_action_grammar',model_score=result['score'],score=1.0,score_type='explicit_action_rule')
++            if forced not in {candidate['skill_id'] for candidate in result['candidates']}:
++                result['candidates'].insert(0,{'skill_id':forced,'score':1.0})
++        decisions.append({'text':part,**result})
++        if result['skill_id'] and result['skill_id'] not in SKILL_MAP:
++            raise ValueError('Router model contains an unknown skill ID')
++        if result['skill_id']:
++            selected.add(result['skill_id']);scores[result['skill_id']]=result['score']
++        elif len(part)>=4:
++            unknown.append(part)
++    # Exact registered IDs are explicit routing requests, with token boundaries.
++    for part in positive:
++        for skill_id in SKILL_MAP:
++            if skill_id not in SUPPORT and re.search(r'(?<![a-z0-9_])'+re.escape(skill_id)+r'(?![a-z0-9_])',part):
++                selected.add(skill_id);scores[skill_id]=1.
++    expert_topics={'leakage','residual','stability','frequency','causality','generalization','order','optimization','reproducibility','deployment','transfer','drift','excitation','degraded_modeling'}
++    use_expert=mode=='analyze' and expert_request and bool(set(analysis['topics'])&expert_topics)
++    if use_expert:
++        # Retain the curated evidence requirements of expert reviews; do not
++        # promote a topic mentioned only inside a denied action.
++        selected=set();scores={}
++        active='，'.join(positive)
++        for topic,(terms,ids) in zip(topic_keys,expert_rules):
++            hits=[term for term in terms if term.lower() in active]
++            if hits:
++                selected.update(ids);scores.update({sid:0.86 for sid in ids})
++        unknown=[]
++    denied=set()
++    for part in negative:
++        result=predict(part)
++        # Rejection is conservative: a negative command may suppress a likely
++        # target even when below the acceptance threshold; it can never add one.
++        if result['top_label'] in SKILL_MAP:denied.add(result['top_label'])
++        for sid in SKILL_MAP:
++            if sid in part:denied.add(sid)
++    selected-=denied
++    if full_run:
++        selected={'closed_loop_preprocessing_optimizer','expert_report_writer'}
++        scores.update({s:1. for s in selected});unknown=[]
++    # A negative-only or unrecognized message is a clarification, never a
++    # report-writing fallback. Positive known clauses remain visible for review.
++    needs_clarification=not selected or (mode=='execute' and bool(unknown))
++    if needs_clarification:mode='analyze'
++    # Model score is evidence of ranking, not a fabricated confidence interval.
++    return {'direct':selected,'scores':scores,'mode':mode,'decisions':decisions,
++            'denied':denied,'needs_clarification':needs_clarification,'unresolved_clauses':unknown,
++            'source':'expert_evidence_contract' if use_expert else 'trained_linear_router',
++            'full_pipeline_requested':full_run,
++            'negative_clauses':negative}
+--- /dev/null
++++ b/core/test_skill_routing.py
+@@ -0,0 +1,112 @@
++"""Regression contracts for routing boundaries and real execution scope."""
++import json
++import tempfile
++from pathlib import Path
++from unittest.mock import patch
++import pandas as pd
++from django.test import SimpleTestCase
++from . import tests as original_tests
++from .skills.runtime import plan_skills, _with_dependencies, execute_skill_plan
++from .skills.catalog import SKILL_MAP
++from .services.agent_chat import chat
++from .services import pipeline
++
++
++class TrainedRoutingTests(SimpleTestCase):
++    def setUp(self):
++        self.temp=tempfile.TemporaryDirectory()
++        self.addCleanup(self.temp.cleanup)
++        self.logs=patch('core.skills.runtime.RUNS_DIR',Path(self.temp.name)/'skill-runs')
++        self.logs.start();self.addCleanup(self.logs.stop)
++
++    def snapshot(self):return original_tests.AgentChatTests().snapshot()
++
++    def test_download_does_not_select_report_writer_or_train(self):
++        p=plan_skills('不要训练模型，只导出已有报告')
++        self.assertEqual(p['direct_skill_ids'],['final_artifact_exporter'])
++        self.assertFalse(p['analysis']['needs_clarification'])
++        self.assertNotIn('system_identification_trainer',{s['skill_id'] for s in p['steps']})
++        snapshot=self.snapshot();snapshot['artifacts']={'analysis_report_md':'report.md'}
++        with patch('core.services.agent_chat.get_run',return_value=snapshot),patch('core.services.agent_chat.rerun_pipeline') as rerun:
++            result=chat('不要训练模型，只导出已有报告')
++        rerun.assert_not_called()
++        self.assertFalse(result['executed'])
++        self.assertEqual(result['deliverables'][0]['key'],'analysis_report_md')
++
++    def test_snr_does_not_request_dynamic_segment_extraction(self):
++        p=plan_skills('只检查信噪比，不要提取动态段')
++        self.assertEqual(p['direct_skill_ids'],['signal_noise_ratio_estimator'])
++        self.assertEqual(p['mode'],'analyze')
++
++    def test_compound_retains_distinct_requested_targets(self):
++        p=plan_skills('先清洗缺失值，再训练模型')
++        self.assertEqual(set(p['direct_skill_ids']),{'missing_anomaly_cleaner','system_identification_trainer'})
++        self.assertEqual(p['mode'],'execute')
++        positions={s['skill_id']:s['order'] for s in p['steps']}
++        for s in p['steps']:
++            for dependency in SKILL_MAP[s['skill_id']].depends_on:
++                self.assertLess(positions[dependency],s['order'])
++
++    def test_negation_and_hypothetical_never_authorize_rerun(self):
++        messages=['不要重新执行，只解释残差','如果重新运行会发生什么','假如重新执行全流程，结果会改变吗','按钮写着“重新执行”，这句话是什么意思','这次请先不要重新执行','模型不能重新运行','重新运行会不会变差','系统提示重新执行','请重新执行吗']
++        for message in messages:
++            with self.subTest(message=message),patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline') as rerun:
++                result=chat(message)
++                rerun.assert_not_called()
++                self.assertFalse(result['executed'])
++
++    def test_unknown_request_does_not_default_to_report(self):
++        for message in ['帮我订机票','随便弄一下','明天会下雨吗']:
++            p=plan_skills(message)
++            self.assertEqual(p['direct_skill_ids'],[])
++            self.assertTrue(p['analysis']['needs_clarification'])
++            self.assertEqual(p['mode'],'analyze')
++
++    def test_missing_model_fails_closed(self):
++        with patch('core.skills.routing.predict',side_effect=FileNotFoundError('model missing')):
++            p=plan_skills('训练系统辨识模型')
++        self.assertEqual(p['direct_skill_ids'],[])
++        self.assertEqual(p['mode'],'analyze')
++        self.assertEqual(p['analysis']['routing_source'],'model_unavailable')
++
++    def test_dependency_cycle_and_missing_target_rejected(self):
++        from dataclasses import replace
++        sid='industrial_intent_parser'
++        with patch.dict(SKILL_MAP,{sid:replace(SKILL_MAP[sid],depends_on=(sid,))}):
++            with self.assertRaisesRegex(ValueError,'环'):_with_dependencies({sid})
++        with self.assertRaisesRegex(ValueError,'未知'):_with_dependencies({'nonexistent'})
++
++    def test_conflicting_dependency_is_not_silently_executed(self):
++        p=plan_skills('不要清洗缺失值，训练系统辨识模型')
++        self.assertTrue(p['analysis']['needs_clarification'])
++        self.assertEqual(p['mode'],'analyze')
++        self.assertIn('missing_anomaly_cleaner',p['analysis']['dependency_conflicts'])
++
++    def test_evidence_read_is_never_labeled_algorithm_execution(self):
++        p=plan_skills('训练系统辨识模型')
++        result=execute_skill_plan(p,self.snapshot())
++        self.assertNotIn('executed',{e['activity'] for e in result['executions']})
++
++    def test_pure_lag_request_does_not_trigger_model_training(self):
++        with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline') as rerun:
++            result=chat('估计输入输出时滞')
++        rerun.assert_not_called()
++        self.assertIn('尚无独立算法执行接口',result['action_note'])
++
++    def test_cleaning_stops_before_model_and_optimizer(self):
++        folder=Path(self.temp.name);source=folder/'source.csv';source.write_text('x\n1\n')
++        standard={'dictionary':[],'artifacts':{'standardized_csv':'std.csv'}}
++        frame=pd.DataFrame({'x':[1,2,3]})
++        cleaned={'overall_score':90,'artifacts':{},'selected_segment_count':1,'segments_preview':[]}
++        with patch.object(pipeline,'RUNS_DIR',folder/'runs'),patch.object(pipeline,'LATEST_PATH',folder/'latest.json'),patch.object(pipeline,'_standardize',return_value=(frame,standard)),patch.object(pipeline,'_read_csv',return_value=frame),patch.object(pipeline,'_clean',return_value=(frame,frame,cleaned)),patch.object(pipeline,'_model') as model,patch.object(pipeline,'_optimize_real_data') as optimize:
++            result=pipeline.run_pipeline(source,'source.csv',stop_after='cleaning')
++        model.assert_not_called();optimize.assert_not_called()
++        self.assertEqual(result['status'],'completed')
++        self.assertEqual(result['results'].keys(),{'standardization','cleaning'})
++        self.assertEqual(next(s for s in result['stages'] if s['key']=='modeling')['status'],'skipped')
++
++    def test_model_training_does_not_trigger_optimizer(self):
++        with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline',return_value=self.snapshot()) as rerun:
++            result=chat('训练系统辨识模型')
++        self.assertEqual(rerun.call_args.kwargs['stop_after'],'modeling')
++        self.assertEqual(result['execution_scope'],'modeling')
+--- /dev/null
++++ b/training/skill_router/evaluate.py
+@@ -0,0 +1,85 @@
++"""Frozen holdout evaluation. Does not modify the model, gates, or datasets."""
++import hashlib
++import importlib.util
++import json
++import sys
++from pathlib import Path
++from time import perf_counter
++from statistics import mean
++ROOT=Path(__file__).resolve().parents[2]
++sys.path.insert(0,str(ROOT))
++from django.conf import settings
++if not settings.configured:settings.configure(BASE_DIR=ROOT)
++from core.skills.runtime import plan_skills
++from core.skills.catalog import SKILLS
++from core.skills.routing import SUPPORT
++from core.skills.router_model import predict,normalize,MODEL_PATH
++spec=importlib.util.spec_from_file_location('core.skills.baseline_runtime',Path(__file__).parent/'baseline_runtime.py')
++baseline=importlib.util.module_from_spec(spec);spec.loader.exec_module(baseline)
++DATA=Path(__file__).parent/'data'
++REPORTS=Path(__file__).parent/'reports'
++
++def read(name):return [json.loads(line) for line in (DATA/f'{name}.jsonl').read_text(encoding='utf8').splitlines() if line.strip()]
++def metrics(rows,key):
++    labels=[s.id for s in SKILLS if s.id not in SUPPORT]
++    per_skill=[];tp=fp=fn=0;exact=0;top1=0
++    for label in labels:
++        a=sum(label in r['expected'] and label in r[key]['selected'] for r in rows)
++        b=sum(label not in r['expected'] and label in r[key]['selected'] for r in rows)
++        c=sum(label in r['expected'] and label not in r[key]['selected'] for r in rows)
++        tp+=a;fp+=b;fn+=c
++        per_skill.append({'skill_id':label,'support':sum(label in r['expected'] for r in rows),'precision':a/(a+b) if a+b else 0.,'recall':a/(a+c) if a+c else 0.,'f1':2*a/(2*a+b+c) if 2*a+b+c else 0.,'false_positives':b,'false_negatives':c})
++    for r in rows:
++        exact+=set(r['expected'])==set(r[key]['selected'])
++        top1+=r[key]['top1'] in r['expected'] if r['expected'] else r[key]['top1'] is None
++    inscope=[r for r in rows if r['expected']]
++    accepted=[r for r in inscope if r[key]['selected']]
++    unknown=[r for r in rows if not r['expected']]
++    return {'case_count':len(rows),'exact_skill_set_accuracy':exact/len(rows),'top1_accuracy':top1/len(rows),
++            'micro_precision':tp/(tp+fp) if tp+fp else 0,'micro_recall':tp/(tp+fn) if tp+fn else 0,
++            'micro_f1':2*tp/(2*tp+fp+fn) if 2*tp+fp+fn else 0,'macro_f1':mean(s['f1'] for s in per_skill),
++            'in_scope_coverage':len(accepted)/len(inscope),
++            'accepted_exact_accuracy':sum(set(r['expected'])==set(r[key]['selected']) for r in accepted)/len(accepted) if accepted else 0,
++            'out_of_scope_rejection':sum(not r[key]['selected'] for r in unknown)/len(unknown),
++            'mean_direct_skill_count':mean(len(r[key]['selected']) for r in rows),
++            'mean_latency_ms':mean(r[key]['latency_ms'] for r in rows),
++            'per_skill':per_skill}
++
++def main():
++    train,val,test=read('train'),read('validation'),read('test')
++    for left,right in [(train,val),(train,test),(val,test)]:
++        assert not {r['group'] for r in left}&{r['group'] for r in right}
++        assert not {normalize(r['text']) for r in left}&{normalize(r['text']) for r in right}
++    model_before=hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()
++    predict('暖机');rows=[]
++    order={s.id:i for i,s in enumerate(SKILLS)}
++    for case in test:
++        t=perf_counter();analysis=baseline._request_analysis(case['text'])
++        direct,scores,_=baseline._direct_matches(case['text'],analysis)
++        direct=direct-SUPPORT
++        ranked=sorted(direct,key=lambda sid:(-scores.get(sid,0),order[sid]))
++        before={'selected':sorted(direct),'top1':ranked[0] if ranked else None,'mode':analysis['mode'],'latency_ms':(perf_counter()-t)*1000}
++        t=perf_counter();p=plan_skills(case['text']);selected=p['direct_skill_ids']
++        scores={s['skill_id']:s['relevance_score'] for s in p['steps'] if s['selection_kind']=='direct'}
++        ranked=sorted(selected,key=lambda sid:(-scores.get(sid,0),order[sid]))
++        after={'selected':selected,'top1':ranked[0] if ranked else None,'mode':p['mode'],'needs_clarification':p['analysis']['needs_clarification'],'source':p['analysis']['routing_source'],'latency_ms':(perf_counter()-t)*1000}
++        raw=predict(case['text'])
++        rows.append({'id':case['id'],'text':case['text'],'expected':case['labels'],'baseline':before,'trained_router':after,'raw_model_top1':raw['top_label']})
++    report={'test_source':'assistant_authored_synthetic_holdout','production_accuracy_claim':False,
++            'split_integrity':'passed: disjoint normalized text and seed groups; wrappers only within train',
++            'model_sha256':model_before,'test_sha256':hashlib.sha256((DATA/'test.jsonl').read_bytes()).hexdigest(),
++            'baseline':metrics(rows,'baseline'),'trained_router':metrics(rows,'trained_router'),
++            'raw_model_top1_accuracy':sum(r['raw_model_top1'] in r['expected'] if r['expected'] else r['raw_model_top1']=='__none__' for r in rows)/len(rows),
++            'baseline_top1_definition':'Highest old keyword score; ties follow original catalog order because the original router exposes no unique top-1.',
++            'routing_metric_definition':'Direct business skill IDs only; dependency and orchestration steps excluded from both sides.',
++            'limitations':['Small authored test set; no independent human labeling or real traffic.','Hybrid router includes explicit-action guards and existing expert evidence contracts.','Do not tune on this test set; add a fresh held-out set after future changes.'],
++            'errors':[r for r in rows if set(r['expected'])!=set(r['trained_router']['selected'])]}
++    assert model_before==hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()
++    REPORTS.mkdir(exist_ok=True)
++    (REPORTS/'acceptance.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8')
++    (REPORTS/'test_predictions.jsonl').write_text(''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in rows),encoding='utf8')
++    compact={k:v for k,v in report.items() if k not in ['baseline','trained_router','errors']}
++    compact.update({k:{a:b for a,b in report[k].items() if a!='per_skill'} for k in ['baseline','trained_router']})
++    compact['errors']=[{'text':r['text'],'expected':r['expected'],'actual':r['trained_router']['selected']} for r in report['errors']]
++    print(json.dumps(compact,ensure_ascii=False,indent=2))
++if __name__=='__main__':main()
+--- /dev/null
++++ b/training/skill_router/predict.py
+@@ -0,0 +1,12 @@
++"""Inspect a routing plan without executing any domain skill."""
++import json
++import sys
++from pathlib import Path
++ROOT=Path(__file__).resolve().parents[2]
++sys.path.insert(0,str(ROOT))
++from django.conf import settings
++if not settings.configured:settings.configure(BASE_DIR=ROOT)
++from core.skills.runtime import plan_skills
++if __name__=='__main__':
++    if len(sys.argv)!=2:raise SystemExit('Usage: python training/skill_router/predict.py "your request"')
++    print(json.dumps(plan_skills(sys.argv[1]),ensure_ascii=False,indent=2))
+--- /dev/null
++++ b/training/skill_router/train.py
+@@ -0,0 +1,100 @@
++"""Fit on train only; choose C and rejection thresholds on validation only."""
++import argparse
++import gzip
++import hashlib
++import importlib.util
++import json
++import os
++from pathlib import Path
++import sys
++import numpy as np
++from sklearn.feature_extraction.text import TfidfVectorizer
++from sklearn.linear_model import LogisticRegression
++from sklearn.metrics import accuracy_score, f1_score
++
++ROOT=Path(__file__).resolve().parents[2]
++spec=importlib.util.spec_from_file_location('router_model_standalone', ROOT/'core/skills/router_model.py')
++router=importlib.util.module_from_spec(spec);spec.loader.exec_module(router)
++catalog_spec=importlib.util.spec_from_file_location('router_training_catalog', ROOT/'core/skills/catalog.py')
++catalog=importlib.util.module_from_spec(catalog_spec)
++sys.modules[catalog_spec.name]=catalog
++catalog_spec.loader.exec_module(catalog)
++ALLOWED_LABELS={s.id for s in catalog.SKILLS if s.category!='orchestration'}
++
++
++def read(path):
++    return [json.loads(line) for line in path.read_text(encoding='utf8').splitlines() if line.strip()]
++def label(row):
++    labels=row.get('labels')
++    if not isinstance(labels,list) or len(labels)>1 or any(not isinstance(x,str) or not x for x in labels):
++        raise ValueError(f"Sample {row.get('id')}: labels must contain one atomic skill ID or be empty; split compound examples first")
++    if any(x not in ALLOWED_LABELS for x in labels):
++        raise ValueError(f"Sample {row.get('id')}: unknown or runtime-managed skill ID")
++    if not row.get('text') or not row.get('group'):
++        raise ValueError(f"Sample {row.get('id')}: text and group are required")
++    return labels[0] if labels else '__none__' 
++def main():
++    parser=argparse.ArgumentParser()
++    parser.add_argument('--data',type=Path,default=Path(__file__).parent/'data')
++    parser.add_argument('--output',type=Path,default=ROOT/'core/skills/models/skill_router.json.gz')
++    args=parser.parse_args()
++    train=read(args.data/'train.jsonl'); val=read(args.data/'validation.jsonl')
++    assert not {r['group'] for r in train}&{r['group'] for r in val}
++    assert not {router.normalize(r['text']) for r in train}&{router.normalize(r['text']) for r in val}
++    y=[label(r) for r in train]; vy=[label(r) for r in val]
++    vectorizer=TfidfVectorizer(analyzer='char',ngram_range=(2,4),preprocessor=router.normalize,lowercase=False,sublinear_tf=True)
++    x=vectorizer.fit_transform([r['text'] for r in train]); vx=vectorizer.transform([r['text'] for r in val])
++    trials=[];best=None
++    for c in (2.,5.,10.,20.):
++        clf=LogisticRegression(C=c,max_iter=500,random_state=42,solver='lbfgs').fit(x,y)
++        pred=clf.predict(vx)
++        score=f1_score(vy,pred,average='macro',zero_division=0)
++        # Select regularization and rejection jointly, using validation only.
++        probas=clf.predict_proba(vx)
++        sorted_probs=np.sort(probas,axis=1)
++        margins=sorted_probs[:,-1]-sorted_probs[:,-2]
++        coverages=[]
++        for row in val:
++            grams={t for t in router.char_features(row['text']) if len(t)==2}
++            coverages.append(sum(t in vectorizer.vocabulary_ for t in grams)/max(1,len(grams)))
++        local_best=None
++        for prob in (0.08,0.12,0.18,0.25,0.35):
++            for margin in (0.01,0.03,0.06,0.10):
++                for coverage in (0.20,0.30,0.40):
++                    output=[p if max(ps)>=prob and m>=margin and cov>=coverage else '__none__' for p,ps,m,cov in zip(pred,probas,margins,coverages)]
++                    f1=f1_score(vy,output,average='macro',zero_division=0)
++                    rank=(f1,prob,margin,coverage)
++                    if local_best is None or rank>local_best[0]:local_best=(rank,output)
++        trials.append({'C':c,'validation_top1_accuracy':accuracy_score(vy,pred),'validation_macro_f1':score,'gated_macro_f1':local_best[0][0]})
++        if best is None or local_best[0]>best[0]:best=(local_best[0],clf,c,local_best[1])
++    clf=best[1]
++    model={'schema_version':1,'version':'a14-router-1.0','algorithm':'char_tfidf_multinomial_logistic_regression',
++           'classes':clf.classes_.tolist(),'vocabulary':{k:int(v) for k,v in vectorizer.vocabulary_.items()},
++           'idf':vectorizer.idf_.tolist(),'weights':clf.coef_.tolist(),'intercept':clf.intercept_.tolist(),
++           'thresholds':{'probability':0.,'margin':0.,'coverage':0.},
++           'training':{'seed':42,'C':best[2],'train_count':len(train),'validation_count':len(val),
++           'train_sha256':hashlib.sha256((args.data/'train.jsonl').read_bytes()).hexdigest(),
++           'validation_sha256':hashlib.sha256((args.data/'validation.jsonl').read_bytes()).hexdigest(),
++           'data_source':'assistant_authored_synthetic','test_used_for_training':False}}
++    raw=[router.predict(r['text'],model) for r in val]
++    # Verify exported inference against sklearn before selecting gates.
++    proba=clf.predict_proba(vx)
++    for i,p in enumerate(raw):
++        assert abs(p['score']-max(proba[i]))<2e-6
++        assert p['top_label']==clf.classes_[np.argmax(proba[i])]
++    chosen=(best[0],best[3])
++    model['thresholds']=dict(zip(('probability','margin','coverage'),chosen[0][1:]))
++    args.output.parent.mkdir(parents=True,exist_ok=True)
++    payload=json.dumps(model,ensure_ascii=False,separators=(',',':')).encode()
++    temporary=args.output.with_name(args.output.name+".tmp")
++    temporary.write_bytes(gzip.compress(payload,mtime=0))
++    os.replace(temporary,args.output)
++    report={'algorithm':model['algorithm'],'training':model['training'],'hyperparameter_trials':trials,
++            'thresholds':model['thresholds'],'validation_accuracy_after_rejection':accuracy_score(vy,chosen[1]),
++            'validation_macro_f1_after_rejection':chosen[0][0],
++            'validation_errors':[{'text':r['text'],'expected':truth,'predicted':pred,'detail':p} for r,truth,pred,p in zip(val,vy,chosen[1],raw) if truth!=pred],
++            'inference_parity':'passed within 2e-6','model_sha256':hashlib.sha256(args.output.read_bytes()).hexdigest()}
++    dest=Path(__file__).parent/'reports/training.json';dest.parent.mkdir(exist_ok=True)
++    dest.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8')
++    print(json.dumps(report,ensure_ascii=False,indent=2))
++if __name__=='__main__':main()

@@ -1,0 +1,8 @@
+{
+  "integration_api_unchanged": true,
+  "original_agent_control_entries": [
+    "ProcessPilot_A14_Final/integrations/agent_control/"
+  ],
+  "available": false,
+  "cause": "Original archive lacks agent_control/runtime/artifacts/run_a1f3a6251227/candidate_002_evaluation.json. No historical evidence was fabricated."
+}

@@ -1,0 +1,60 @@
+{
+  "passed": true,
+  "seed_start": 20260910,
+  "seed_count": 12,
+  "scenario_count": 5,
+  "case_count": 384,
+  "elapsed_seconds": 128.612,
+  "field_semantic": {
+    "relevant_samples": 2448,
+    "irrelevant_samples": 720,
+    "top1_accuracy": 1.0,
+    "top3_accuracy": 1.0,
+    "relevant_accept_recall": 1.0,
+    "irrelevant_false_accept_rate": 0.0,
+    "errors": []
+  },
+  "angle_summary": {
+    "forced_wrong_scenario": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "irrelevant_flood": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "irrelevant_only_file": {
+      "cases": 12,
+      "passed": 12,
+      "pass_rate": 1.0
+    },
+    "missing_required": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "mixed_scenarios": {
+      "cases": 12,
+      "passed": 12,
+      "pass_rate": 1.0
+    },
+    "type_corruption": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "unit_conflict": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    },
+    "vendor_noise": {
+      "cases": 60,
+      "passed": 60,
+      "pass_rate": 1.0
+    }
+  },
+  "failed_cases": []
+}

@@ -1,0 +1,14 @@
+standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
+timestamp,时间戳,工业时序采样时间,time,datetime,datetime,true,时间|采集时间|记录时间|TIME|DATETIME|TS,,
+influent_flow,进水流量,进入生化处理单元的污水流量,disturbance,float,m3/h,true,进水量|污水流量|INFLUENT_FLOW|IN_FLOW,0,100000
+influent_cod,进水COD,进水化学需氧量,disturbance,float,mg/L,true,进水化学需氧量|INFLUENT_COD|IN_COD,0,5000
+influent_ammonia,进水氨氮,进水氨氮浓度,disturbance,float,mg/L,false,进水NH3-N|INFLUENT_NH3N|IN_AMMONIA,0,1000
+aeration_air_flow,曝气风量,进入曝气池的空气流量,manipulated,float,Nm3/h,true,鼓风量|曝气空气量|AERATION_AIR_FLOW|BLOWER_AIR_FLOW,0,1000000
+blower_frequency,鼓风机频率,曝气鼓风机变频器输出频率,manipulated,float,Hz,false,风机频率|BLOWER_FREQ,0,100
+dissolved_oxygen,溶解氧,曝气池混合液溶解氧浓度,controlled,float,mg/L,true,DO|曝气池DO|DISSOLVED_OXYGEN,0,20
+mlss,污泥浓度,曝气池混合液悬浮固体浓度,state,float,mg/L,true,混合液污泥浓度|MLSS,0,30000
+ph,酸碱度,曝气池混合液pH,state,float,pH,false,PH值|酸碱值|PH,0,14
+water_temperature,水温,曝气池水体温度,state,float,degC,false,池温|污水温度|WATER_TEMP,0,60
+effluent_cod,出水COD,处理出水化学需氧量,controlled,float,mg/L,true,出水化学需氧量|EFFLUENT_COD|OUT_COD,0,1000
+effluent_ammonia,出水氨氮,处理出水氨氮浓度,controlled,float,mg/L,true,出水NH3-N|EFFLUENT_NH3N|OUT_AMMONIA,0,500
+return_sludge_flow,回流污泥量,回流至生化池的污泥流量,manipulated,float,m3/h,false,污泥回流量|RAS_FLOW|RETURN_SLUDGE_FLOW,0,100000

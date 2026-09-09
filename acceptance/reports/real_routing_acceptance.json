@@ -1,0 +1,22 @@
+{
+  "source": "acceptance/real_routing_gold.template.jsonl",
+  "source_type": "human_approved_real_requests",
+  "production_accuracy_claim": false,
+  "approved_test_cases": 0,
+  "pending_or_non_test_cases": 1,
+  "metrics": {
+    "exact_skill_set_accuracy": null,
+    "stage_accuracy": null,
+    "critical_misexecution_count": 0,
+    "unknown_rejection": null
+  },
+  "gates": {
+    "minimum_approved_test_cases": false,
+    "exact_skill_set_accuracy_gte_095": false,
+    "stage_accuracy_gte_098": false,
+    "critical_misexecution_eq_0": true,
+    "unknown_rejection_gte_095": false
+  },
+  "status": "insufficient_evidence",
+  "errors": []
+}

@@ -1,0 +1,43 @@
+{
+  "schema_name": "A14 Unified Industrial Time-Series Standard",
+  "schema_version": "1.6.1",
+  "naming_rule": "lower_snake_case",
+  "time_standard": {
+    "canonical_field": "timestamp",
+    "data_type": "datetime64[ns]",
+    "timezone_policy": "scenario_local_time",
+    "recommended_format": "YYYY-MM-DD HH:mm:ss"
+  },
+  "variable_roles": {
+    "time": "采样时间轴",
+    "manipulated": "可由控制器或操作员直接调节的输入变量",
+    "controlled": "需要维持目标或用于评价控制效果的输出变量",
+    "disturbance": "不可直接操纵但影响过程的外部变量",
+    "state": "描述设备或工艺内部状态的辅助变量",
+    "quality": "数据质量、报警或有效性标记",
+    "identifier": "炉次、批次、设备或物料标识"
+  },
+  "supported_data_types": ["datetime", "float", "integer", "boolean", "string", "category"],
+  "allowed_units": ["datetime", "degC", "Pa", "Nm3/h", "m3/h", "t/h", "m/min", "mm", "percent", "ratio", "MW", "rpm", "A", "Hz", "mg/L", "pH", "boolean", "string"],
+  "field_status": {
+    "matched": "达到自动映射阈值",
+    "review": "候选可信但需要人工确认",
+    "unmapped": "未找到可靠标准字段",
+    "duplicate": "多个原始字段指向同一标准字段",
+    "missing_required": "场景必需字段缺失"
+  },
+  "canonical_units": {
+    "temperature": "degC",
+    "pressure": "Pa",
+    "gas_volume_flow": "Nm3/h",
+    "mass_flow": "t/h",
+    "linear_speed": "m/min",
+    "length": "mm",
+    "ratio": "ratio",
+    "percentage": "percent"
+  },
+  "module_boundary": {
+    "owns": ["scenario_detection", "field_mapping", "variable_role", "unit_normalization", "schema_validation", "dictionary_export"],
+    "excludes": ["missing_value_imputation", "outlier_removal", "dynamic_segment_selection", "time_lag_estimation", "system_identification", "closed_loop_optimization"]
+  }
+}

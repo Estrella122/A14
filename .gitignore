@@ -1,0 +1,23 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+.DS_Store
+.venv/
+frontend/node_modules/
+frontend/dist/
+runtime/pipeline_runs/
+runtime/agent_skill_runs/
+apc_agent.db
+*.sqlite3
+outputs/
+integrations/data_cleaning/output/
+integrations/identification/outputs/
+integrations/standardization/outputs/
+
+# The upstream debutanizer mirror has no explicit redistribution license.
+datasets/public/debutanizer/debutanizer_data.txt
+datasets/public/debutanizer/debutanizer_original.csv
+datasets/public/debutanizer/debutanizer_processpilot.csv

@@ -1,0 +1,11 @@
+standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
+timestamp,序列时间,由公开样本顺序派生的单调时间轴,time,datetime,datetime,true,sample_timestamp|sequence_time|timestamp|time,,
+top_temperature,塔顶温度,脱丁烷塔塔顶温度；公开文件为归一化数值,state,float,ratio,true,U1|u1|Top_Temperature|top temperature,0,1.5
+top_pressure,塔顶压力,脱丁烷塔塔顶压力；公开文件为归一化数值,state,float,ratio,true,U2|u2|Top_Pressure|top pressure,0,1.5
+reflux_flow,回流流量,塔顶回流流量；公开文件为归一化数值,manipulated,float,ratio,true,U3|u3|Reflux_Flow|reflux flow,0,1.5
+next_process_flow,后续流程流量,由脱丁烷塔流向下一流程的流量；公开文件为归一化数值,manipulated,float,ratio,true,U4|u4|Flow_To_Next_Process|flow to next process,0,1.5
+tray6_temperature,第六塔板温度,脱丁烷塔第六塔板温度；公开文件为归一化数值,state,float,ratio,true,U5|u5|Tray6_Temperature|sixth tray temperature,0,1.5
+bottom_temperature_a,塔底温度A,脱丁烷塔塔底第一温度测点；公开文件为归一化数值,state,float,ratio,true,U6|u6|Bottom_Temperature_A|bottom temperature a,0,1.5
+bottom_temperature_b,塔底温度B,脱丁烷塔塔底第二温度测点；公开文件为归一化数值,state,float,ratio,true,U7|u7|Bottom_Temperature_B|bottom temperature b,0,1.5
+bottom_butane_content,塔底丁烷含量,塔底物流中丁烷C4含量软测量目标；源数据已平移8个样本补偿测量时滞,controlled,float,ratio,true,U8|u8|y|Butane_Content|butane content,0,1.5
+sample_index,样本序号,公开数据的原始顺序编号,identifier,integer,string,false,sample|row_number|sample_index,0,

@@ -1,0 +1,13 @@
+{
+  "name": "processpilot-workspace",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 5176",
+    "build": "npm --prefix frontend run build",
+    "backend": "node scripts/python.mjs manage.py runserver 127.0.0.1:8000",
+    "test:backend": "node scripts/python.mjs manage.py test core",
+    "test:closed-loop": "node scripts/python.mjs manage.py test core.tests.OptimizationServiceTests core.tests.OptimizationApiTests"
+  }
+}
