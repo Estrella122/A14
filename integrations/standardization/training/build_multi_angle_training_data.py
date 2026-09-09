@@ -73,7 +73,7 @@ def main() -> None:
         "source", "group_id", "split", "training_angle",
     ]
     with OUTPUT.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

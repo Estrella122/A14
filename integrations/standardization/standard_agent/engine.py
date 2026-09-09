@@ -42,6 +42,17 @@ def _cosine(left: Counter[str], right: Counter[str]) -> float:
     return dot / max(left_norm * right_norm, 1e-12)
 
 
+def _is_opaque_instrument_tag(value: str) -> bool:
+    """Return True for plant tags that contain no safe semantic field name.
+
+    A code such as PT_8313A.AV_0 identifies a point inside one plant, but the
+    number does not identify its process meaning outside that plant.  Such
+    fields must be resolved by a tag dictionary or a human override.
+    """
+    normalized = normalize_name(value).rstrip("#")
+    return bool(re.fullmatch(r"[a-z]{1,8}_?\d+[a-z]?(?:_av_?\d+)?", normalized))
+
+
 class StandardizationAgent:
     def __init__(
         self,
@@ -183,6 +194,10 @@ class StandardizationAgent:
                     target = predictions[0]["standard_name"]
                     score = model_confidence
                     method = "trained_model_auto" if margin >= 0.10 else "trained_model"
+        if _is_opaque_instrument_tag(base_name) and method in {"semantic", "trained_model", "trained_model_auto"}:
+            target = None
+            score = 0.0
+            method = "opaque_tag_requires_dictionary"
         if score < self.review_threshold:
             target = None
         definition = template.by_name.get(target) if target else None
@@ -309,6 +324,8 @@ class StandardizationAgent:
             "confidence_margin": round(selected_margin, 3),
             "auto_confidence_margin": round(auto_margin, 3),
             "is_ambiguous": low_evidence or close_candidates or mixed_scenario_suspected or manual_disagreement,
+            "decision": "reject" if low_evidence else "review" if (close_candidates or mixed_scenario_suspected or manual_disagreement) else "accept",
+            "is_out_of_scope": low_evidence,
             "ambiguity_reason": ambiguity_reason,
             "mixed_scenario": {
                 "suspected": mixed_scenario_suspected,
@@ -381,6 +398,11 @@ class StandardizationAgent:
         for item in mapping["mappings"]:
             if item["raw"] in overrides:
                 target = overrides[item["raw"]]
+                if target == "__ignore__":
+                    item.update(standard=None, display_name=None, role=None, data_type=None,
+                                expected_unit=None, confidence=1.0, method="manual_ignore", status="unmapped",
+                                unit_status="not_declared", unit_action=None)
+                    continue
                 definition = template.by_name.get(target)
                 if definition is None:
                     raise ValueError(f"人工指定了不存在的标准字段：{target}")

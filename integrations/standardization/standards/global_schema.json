@@ -18,7 +18,7 @@
     "identifier": "炉次、批次、设备或物料标识"
   },
   "supported_data_types": ["datetime", "float", "integer", "boolean", "string", "category"],
-  "allowed_units": ["datetime", "degC", "Pa", "Nm3/h", "m3/h", "t/h", "m/min", "mm", "percent", "ratio", "MW", "rpm", "A", "Hz", "mg/L", "pH", "boolean", "string"],
+  "allowed_units": ["datetime", "degC", "Pa", "Nm3/h", "m3/h", "t/h", "m/min", "mm", "percent", "ratio", "MW", "kWh", "kVarh", "tCO2", "s", "rpm", "A", "Hz", "mg/L", "pH", "boolean", "string"],
   "field_status": {
     "matched": "达到自动映射阈值",
     "review": "候选可信但需要人工确认",

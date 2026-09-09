@@ -8,6 +8,37 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
     rng = np.random.default_rng(seed)
     time = pd.date_range("2026-01-01 08:00:00", periods=rows, freq="min")
     x = np.arange(rows)
+    if scenario_id == "steel_industry_energy":
+        usage = 24 + 10 * np.sin(x / 36) + rng.normal(0, 1.2, rows)
+        return pd.DataFrame(
+            {
+                "date": pd.date_range("2026-01-01", periods=rows, freq="15min").strftime("%d/%m/%Y %H:%M"),
+                "Usage_kWh": usage.clip(0),
+                "Lagging_Current_Reactive.Power_kVarh": (usage * 0.45 + rng.normal(0, .5, rows)).clip(0),
+                "Leading_Current_Reactive_Power_kVarh": (usage * 0.08 + rng.normal(0, .15, rows)).clip(0),
+                "CO2(tCO2)": (usage * 0.00045).clip(0),
+                "Lagging_Current_Power_Factor": (92 + rng.normal(0, 2, rows)).clip(0, 100),
+                "Leading_Current_Power_Factor": (98 + rng.normal(0, 1, rows)).clip(0, 100),
+                "NSM": (x * 900) % 86400,
+                "WeekStatus": ["Weekday"] * rows,
+                "Day_of_week": ["Monday"] * rows,
+                "Load_Type": ["Medium_Load"] * rows,
+            }
+        )
+    if scenario_id == "debutanizer_column":
+        return pd.DataFrame(
+            {
+                "timestamp": time,
+                "U1": .50 + rng.normal(0, .03, rows),
+                "U2": .45 + rng.normal(0, .03, rows),
+                "U3": .55 + rng.normal(0, .04, rows),
+                "U4": .48 + rng.normal(0, .03, rows),
+                "U5": .52 + rng.normal(0, .03, rows),
+                "U6": .51 + rng.normal(0, .03, rows),
+                "U7": .49 + rng.normal(0, .03, rows),
+                "U8": .20 + rng.normal(0, .02, rows),
+            }
+        )
     if scenario_id == "steel_reheating_furnace":
         gas = 24500 + 900 * np.sin(x / 34) + rng.normal(0, 120, rows)
         air = gas * 1.78 + rng.normal(0, 240, rows)

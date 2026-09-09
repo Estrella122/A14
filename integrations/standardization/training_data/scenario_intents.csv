@@ -35,6 +35,42 @@
 把kiln变量转换成标准格式,cement_rotary_kiln,水泥回转窑,train
 检查kiln文件缺少哪些必需字段,cement_rotary_kiln,水泥回转窑,train
 这是kiln运行数据,cement_rotary_kiln,水泥回转窑,test
+统一炼油历史数据字段,debutanizer_column,炼油脱丁烷塔,train
+识别这批炼油DCS测点,debutanizer_column,炼油脱丁烷塔,train
+判断炼油数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,train
+把炼油变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,train
+检查炼油文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是炼油运行数据,debutanizer_column,炼油脱丁烷塔,train
+统一脱丁烷塔历史数据字段,debutanizer_column,炼油脱丁烷塔,train
+识别这批脱丁烷塔DCS测点,debutanizer_column,炼油脱丁烷塔,train
+判断脱丁烷塔数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,train
+把脱丁烷塔变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,train
+检查脱丁烷塔文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是脱丁烷塔运行数据,debutanizer_column,炼油脱丁烷塔,train
+统一丁烷历史数据字段,debutanizer_column,炼油脱丁烷塔,test
+识别这批丁烷DCS测点,debutanizer_column,炼油脱丁烷塔,train
+判断丁烷数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,train
+把丁烷变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,test
+检查丁烷文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是丁烷运行数据,debutanizer_column,炼油脱丁烷塔,train
+统一debutanizer历史数据字段,debutanizer_column,炼油脱丁烷塔,train
+识别这批debutanizerDCS测点,debutanizer_column,炼油脱丁烷塔,train
+判断debutanizer数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,train
+把debutanizer变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,train
+检查debutanizer文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是debutanizer运行数据,debutanizer_column,炼油脱丁烷塔,train
+统一butane历史数据字段,debutanizer_column,炼油脱丁烷塔,validation
+识别这批butaneDCS测点,debutanizer_column,炼油脱丁烷塔,train
+判断butane数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,test
+把butane变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,train
+检查butane文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是butane运行数据,debutanizer_column,炼油脱丁烷塔,validation
+统一c4历史数据字段,debutanizer_column,炼油脱丁烷塔,train
+识别这批c4DCS测点,debutanizer_column,炼油脱丁烷塔,test
+判断c4数据是否满足建模字段要求,debutanizer_column,炼油脱丁烷塔,test
+把c4变量转换成标准格式,debutanizer_column,炼油脱丁烷塔,train
+检查c4文件缺少哪些必需字段,debutanizer_column,炼油脱丁烷塔,train
+这是c4运行数据,debutanizer_column,炼油脱丁烷塔,train
 统一化工历史数据字段,distillation_column,化工精馏塔,train
 识别这批化工DCS测点,distillation_column,化工精馏塔,train
 判断化工数据是否满足建模字段要求,distillation_column,化工精馏塔,test
@@ -71,6 +107,42 @@
 把distillation变量转换成标准格式,distillation_column,化工精馏塔,train
 检查distillation文件缺少哪些必需字段,distillation_column,化工精馏塔,train
 这是distillation运行数据,distillation_column,化工精馏塔,train
+统一钢铁用电历史数据字段,steel_industry_energy,钢铁工业能源监测,train
+识别这批钢铁用电DCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断钢铁用电数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把钢铁用电变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,train
+检查钢铁用电文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,train
+这是钢铁用电运行数据,steel_industry_energy,钢铁工业能源监测,train
+统一工业能耗历史数据字段,steel_industry_energy,钢铁工业能源监测,test
+识别这批工业能耗DCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断工业能耗数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把工业能耗变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,train
+检查工业能耗文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,train
+这是工业能耗运行数据,steel_industry_energy,钢铁工业能源监测,validation
+统一能源监测历史数据字段,steel_industry_energy,钢铁工业能源监测,train
+识别这批能源监测DCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断能源监测数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把能源监测变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,train
+检查能源监测文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,test
+这是能源监测运行数据,steel_industry_energy,钢铁工业能源监测,train
+统一energy consumption历史数据字段,steel_industry_energy,钢铁工业能源监测,validation
+识别这批energy consumptionDCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断energy consumption数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把energy consumption变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,test
+检查energy consumption文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,train
+这是energy consumption运行数据,steel_industry_energy,钢铁工业能源监测,validation
+统一Usage_kWh历史数据字段,steel_industry_energy,钢铁工业能源监测,train
+识别这批Usage_kWhDCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断Usage_kWh数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把Usage_kWh变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,test
+检查Usage_kWh文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,train
+这是Usage_kWh运行数据,steel_industry_energy,钢铁工业能源监测,validation
+统一Load_Type历史数据字段,steel_industry_energy,钢铁工业能源监测,validation
+识别这批Load_TypeDCS测点,steel_industry_energy,钢铁工业能源监测,train
+判断Load_Type数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train
+把Load_Type变量转换成标准格式,steel_industry_energy,钢铁工业能源监测,train
+检查Load_Type文件缺少哪些必需字段,steel_industry_energy,钢铁工业能源监测,test
+这是Load_Type运行数据,steel_industry_energy,钢铁工业能源监测,train
 统一钢厂历史数据字段,steel_reheating_furnace,钢厂步进梁式加热炉,validation
 识别这批钢厂DCS测点,steel_reheating_furnace,钢厂步进梁式加热炉,train
 判断钢厂数据是否满足建模字段要求,steel_reheating_furnace,钢厂步进梁式加热炉,validation

@@ -111,7 +111,7 @@ def _artifact(run_dir: Path, path: Path) -> str:
     return str(path.relative_to(run_dir))
 
 
-def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction: str) -> tuple[pd.DataFrame, dict[str, Any]]:
+def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction: str, overrides: dict[str, str] | None = None) -> tuple[pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "standardization"
     with _module_path(module_dir):
         from standard_agent import ScenarioRepository, StandardizationAgent
@@ -121,6 +121,7 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
             frame,
             scenario_id=scenario_id or "auto",
             instruction=instruction,
+            overrides=overrides,
         )
 
     output_path = run_dir / "02_standardization" / "standardized.csv"
@@ -738,7 +739,7 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
             'path': _artifact(run_dir, report_path), 'summary': review['conclusion']}
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report") -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -756,6 +757,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             "original_name": original_name,
             "scenario_request": scenario_id or "auto",
             "instruction": instruction,
+            "mapping_overrides": overrides or {},
             "created_at": now,
             "updated_at": now,
             "stages": [{"key": key, "label": label, "status": "pending", "message": ""} for key, label in STAGES],
@@ -780,14 +782,19 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
         current_stage = "standardization"
         try:
             _set_stage(snapshot, run_dir, current_stage, "running", "正在识别场景、字段和单位")
-            _, standardization = _standardize(stored_path, run_dir, scenario_id, instruction)
+            _, standardization = _standardize(stored_path, run_dir, scenario_id, instruction, overrides)
             snapshot["results"]["standardization"] = standardization
             snapshot["artifacts"].update(standardization["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
             if finish_requested_stage("standardization"):
                 return snapshot
             decision = standardization.get("data_decision", {})
-            if decision.get("status") == "reject":
+            requires_mapping_review = bool(
+                standardization.get("detection", {}).get("is_ambiguous")
+                or standardization.get("mapping", {}).get("review_count")
+                or standardization.get("mapping", {}).get("missing_required")
+            )
+            if decision.get("status") == "reject" or requires_mapping_review:
                 reason = "；".join(decision.get("reasons", [])) or "字段标准化未通过"
                 for stage in snapshot["stages"]:
                     if stage["status"] == "pending":
@@ -795,7 +802,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 snapshot.update(
                     status="needs_review",
                     current_stage="standardization",
-                    execution_scope={"stop_after": "standardization", "reason": "data_decision_reject"},
+                    execution_scope={"stop_after": "standardization", "reason": f"data_decision_{decision.get('status', 'unknown')}"},
                     updated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
                 )
                 snapshot["error"] = None
@@ -957,7 +964,7 @@ def resolve_artifact(run_id: str, artifact_key: str) -> tuple[Path, str]:
     return path, path.name
 
 
-def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report") -> dict[str, Any]:
+def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None) -> dict[str, Any]:
     previous = get_run(run_id)
     if not previous:
         raise PipelineError("运行任务不存在。")
@@ -969,9 +976,10 @@ def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, s
     return run_pipeline(
         temporary,
         original_name=previous.get("original_name", "source.csv"),
-        scenario_id=previous.get("scenario_request", "auto"),
+        scenario_id=scenario_id or previous.get("scenario_request", "auto"),
         instruction=previous.get("instruction", ""),
         resample_rule=resample_rule,
         max_lag=max_lag,
         stop_after=stop_after,
+        overrides=overrides if overrides is not None else previous.get("mapping_overrides", {}),
     )

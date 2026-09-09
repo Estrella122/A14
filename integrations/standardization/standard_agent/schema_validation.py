@@ -12,6 +12,7 @@ PANDERA_DTYPES: dict[str, Any] = {
     "float": pa.Float,
     "integer": pa.Int,
     "string": pa.String,
+    "category": pa.String,
     "boolean": pa.Bool,
     "datetime": pa.DateTime,
 }

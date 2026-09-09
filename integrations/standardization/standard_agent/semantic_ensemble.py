@@ -84,13 +84,14 @@ class HybridSemanticModel:
         self.embedding_weight = float(embedding_weight)
         self._encoder = encoder
         self._vector_cache: dict[str, np.ndarray] = {}
+        embedding_enabled = embedding_index is not None and encoder_path is not None
         self.metadata = dict(char_model.metadata)
         self.metadata.update(
             {
                 "model_type": self.model_type,
-                "char_weight": round(1.0 - self.embedding_weight, 3),
-                "embedding_weight": round(self.embedding_weight, 3),
-                "embedding_enabled": embedding_index is not None and encoder_path is not None,
+                "char_weight": round(1.0 - self.embedding_weight, 3) if embedding_enabled else 1.0,
+                "embedding_weight": round(self.embedding_weight, 3) if embedding_enabled else 0.0,
+                "embedding_enabled": embedding_enabled,
                 "embedding_prototypes": len(embedding_index.labels) if embedding_index is not None else 0,
             }
         )

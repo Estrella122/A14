@@ -12,6 +12,16 @@ cement_rotary_kiln,水泥回转窑,id_fan_speed,高温风机转速,窑尾高温�
 cement_rotary_kiln,水泥回转窑,kiln_current,窑主电机电流,回转窑主电机负载电流,state,float,A,False,窑电流|主传电流|KILN_CURRENT,0.0,2000.0
 cement_rotary_kiln,水泥回转窑,clinker_free_lime,熟料游离钙,熟料中游离氧化钙质量百分比,controlled,float,percent,True,游离钙|f-CaO|FREE_LIME|CLINKER_FCAO,0.0,10.0
 cement_rotary_kiln,水泥回转窑,clinker_temperature,熟料温度,篦冷机入口熟料温度,state,float,degC,False,出窑熟料温度|CLINKER_TEMP,0.0,1600.0
+debutanizer_column,炼油脱丁烷塔,timestamp,序列时间,由公开样本顺序派生的单调时间轴,time,datetime,datetime,True,sample_timestamp|sequence_time|timestamp|time,,
+debutanizer_column,炼油脱丁烷塔,top_temperature,塔顶温度,脱丁烷塔塔顶温度；公开文件为归一化数值,state,float,ratio,True,U1|u1|Top_Temperature|top temperature,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,top_pressure,塔顶压力,脱丁烷塔塔顶压力；公开文件为归一化数值,state,float,ratio,True,U2|u2|Top_Pressure|top pressure,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,reflux_flow,回流流量,塔顶回流流量；公开文件为归一化数值,manipulated,float,ratio,True,U3|u3|Reflux_Flow|reflux flow,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,next_process_flow,后续流程流量,由脱丁烷塔流向下一流程的流量；公开文件为归一化数值,manipulated,float,ratio,True,U4|u4|Flow_To_Next_Process|flow to next process,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,tray6_temperature,第六塔板温度,脱丁烷塔第六塔板温度；公开文件为归一化数值,state,float,ratio,True,U5|u5|Tray6_Temperature|sixth tray temperature,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,bottom_temperature_a,塔底温度A,脱丁烷塔塔底第一温度测点；公开文件为归一化数值,state,float,ratio,True,U6|u6|Bottom_Temperature_A|bottom temperature a,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,bottom_temperature_b,塔底温度B,脱丁烷塔塔底第二温度测点；公开文件为归一化数值,state,float,ratio,True,U7|u7|Bottom_Temperature_B|bottom temperature b,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,bottom_butane_content,塔底丁烷含量,塔底物流中丁烷C4含量软测量目标；源数据已平移8个样本补偿测量时滞,controlled,float,ratio,True,U8|u8|y|Butane_Content|butane content,0.0,1.5
+debutanizer_column,炼油脱丁烷塔,sample_index,样本序号,公开数据的原始顺序编号,identifier,integer,string,False,sample|row_number|sample_index,0.0,
 distillation_column,化工精馏塔,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
 distillation_column,化工精馏塔,reflux_flow,回流流量,塔顶回流液体质量流量,manipulated,float,t/h,True,回流量|回流液流量|REFLUX_FLOW,0.0,500.0
 distillation_column,化工精馏塔,steam_flow,再沸蒸汽流量,再沸器加热蒸汽质量流量,manipulated,float,t/h,True,蒸汽流量|再沸器蒸汽|STEAM_FLOW,0.0,500.0
@@ -22,6 +32,17 @@ distillation_column,化工精馏塔,bottom_temperature,塔釜温度,精馏塔底
 distillation_column,化工精馏塔,column_pressure,塔压,精馏塔代表压力,state,float,Pa,False,塔顶压力|塔内压力|COLUMN_PRESSURE,0.0,5000000.0
 distillation_column,化工精馏塔,top_product_purity,塔顶产品纯度,塔顶产品中目标组分含量,controlled,float,percent,True,塔顶纯度|产品纯度|TOP_PURITY,0.0,100.0
 distillation_column,化工精馏塔,bottom_level,塔釜液位,塔釜液位百分比,state,float,percent,False,釜液位|塔底液位|BOTTOM_LEVEL,0.0,100.0
+steel_industry_energy,钢铁工业能源监测,timestamp,时间戳,十五分钟能源采样时间,time,datetime,datetime,True,date|Date|datetime|记录时间|采集时间,,
+steel_industry_energy,钢铁工业能源监测,energy_usage,工业用电量,采样区间内的工业电能消耗,controlled,float,kWh,True,Usage_kWh|usage kwh|energy consumption|industry energy consumption|用电量|能耗,0.0,
+steel_industry_energy,钢铁工业能源监测,lagging_reactive_energy,滞后无功电量,滞后电流对应的无功电量,disturbance,float,kVarh,True,Lagging_Current_Reactive.Power_kVarh|lagging current reactive power|滞后无功电量,0.0,
+steel_industry_energy,钢铁工业能源监测,leading_reactive_energy,超前无功电量,超前电流对应的无功电量,disturbance,float,kVarh,True,Leading_Current_Reactive_Power_kVarh|leading current reactive power|超前无功电量,0.0,
+steel_industry_energy,钢铁工业能源监测,co2_emission,二氧化碳排放,数据源记录的二氧化碳指标,state,float,tCO2,False,CO2(tCO2)|CO2|carbon emission|二氧化碳排放,0.0,
+steel_industry_energy,钢铁工业能源监测,lagging_power_factor,滞后功率因数,滞后电流功率因数,state,float,percent,False,Lagging_Current_Power_Factor|lagging power factor|滞后功率因数,0.0,100.0
+steel_industry_energy,钢铁工业能源监测,leading_power_factor,超前功率因数,超前电流功率因数,state,float,percent,False,Leading_Current_Power_Factor|leading power factor|超前功率因数,0.0,100.0
+steel_industry_energy,钢铁工业能源监测,seconds_from_midnight,午夜起秒数,从当日午夜起算的秒数,state,integer,s,False,NSM|number of seconds from midnight|午夜起秒数,0.0,86399.0
+steel_industry_energy,钢铁工业能源监测,week_status,工作日状态,工作日或周末分类,identifier,category,string,False,WeekStatus|week status|weekday status|工作日状态,,
+steel_industry_energy,钢铁工业能源监测,day_of_week,星期,一周中的日期分类,identifier,category,string,False,Day_of_week|day of week|weekday|星期,,
+steel_industry_energy,钢铁工业能源监测,load_type,负荷等级,轻载中载或最大负荷分类,state,category,string,False,Load_Type|load type|load category|负荷类型,,
 steel_reheating_furnace,钢厂步进梁式加热炉,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
 steel_reheating_furnace,钢厂步进梁式加热炉,gas_flow,煤气流量,进入炉区的标准状态煤气体积流量,manipulated,float,Nm3/h,True,燃气流量|煤气瞬时流量|GAS_FLOW|GAS_FLOW_NM3H|COALGAS_FLOW,0.0,60000.0
 steel_reheating_furnace,钢厂步进梁式加热炉,air_flow,助燃空气流量,进入炉区的助燃空气体积流量,manipulated,float,Nm3/h,True,空气流量|助燃风量|风量|AIR_FLOW|AIR_FLOW_NM3H,0.0,120000.0

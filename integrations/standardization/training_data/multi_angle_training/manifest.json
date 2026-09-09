@@ -1,16 +1,16 @@
 {
   "version": "1.0.0",
   "policy": "Only base training groups are augmented; validation and test groups are isolated.",
-  "source_anchors": 257,
-  "training_samples": 1696,
+  "source_anchors": 329,
+  "training_samples": 2152,
   "angles": {
-    "plc_vendor_envelope": 257,
-    "dcs_vendor_envelope": 257,
-    "equipment_channel_context": 257,
-    "case_and_suffix_noise": 257,
-    "separator_noise": 257,
-    "unit_parenthesis": 215,
-    "unit_channel_mix": 215
+    "plc_vendor_envelope": 329,
+    "dcs_vendor_envelope": 329,
+    "equipment_channel_context": 329,
+    "case_and_suffix_noise": 329,
+    "separator_noise": 329,
+    "unit_parenthesis": 265,
+    "unit_channel_mix": 265
   },
   "output": "training_data/multi_angle_training/field_semantics_multi_angle.csv"
 }

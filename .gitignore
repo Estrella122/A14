@@ -16,6 +16,10 @@ outputs/
 integrations/data_cleaning/output/
 integrations/identification/outputs/
 integrations/standardization/outputs/
+integrations/standardization/models/versions/
+integrations/standardization/models/model_registry.json
+integrations/standardization/models/training_progress.json
+.skillos-method-research*.json
 
 # The upstream debutanizer mirror has no explicit redistribution license.
 datasets/public/debutanizer/debutanizer_data.txt

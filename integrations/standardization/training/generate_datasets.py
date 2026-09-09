@@ -50,7 +50,7 @@ def variants(text: str, unit: str, role: str) -> list[tuple[str, str]]:
 
 def write_csv(path: Path, rows: list[dict], columns: list[str]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns)
+        writer = csv.DictWriter(handle, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 

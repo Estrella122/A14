@@ -9,17 +9,49 @@
       "version": "1.0.0",
       "field_count": 13,
       "required_count": 7,
+      "primary_output": "clinker_free_lime",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 60,
       "notes": "用于水泥熟料烧成系统的字段需求判定与统一。"
+    },
+    {
+      "scenario_id": "debutanizer_column",
+      "scenario_name": "炼油脱丁烷塔",
+      "industry": "石油炼制",
+      "process_unit": "脱丁烷塔软测量",
+      "version": "1.0.0",
+      "field_count": 10,
+      "required_count": 9,
+      "primary_output": "bottom_butane_content",
+      "time_axis_type": "ordered_samples",
+      "sampling_seconds": null,
+      "notes": "Fortuna公开工业脱丁烷塔软测量场景。公开数据只有有序样本且为归一化值；派生时间轴仅保存顺序，时滞单位为sample。"
     },
     {
       "scenario_id": "distillation_column",
       "scenario_name": "化工精馏塔",
       "industry": "化工",
       "process_unit": "连续精馏塔",
-      "version": "0.1.0-example",
+      "version": "1.0.0",
       "field_count": 10,
       "required_count": 7,
-      "notes": "多场景扩展示例，仅用于证明模板机制；正式使用前需由化工工艺人员复核。"
+      "primary_output": "top_product_purity",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 30,
+      "notes": "用于连续精馏塔时序数据的字段需求判定与统一，字段语义已纳入来源审计。"
+    },
+    {
+      "scenario_id": "steel_industry_energy",
+      "scenario_name": "钢铁工业能源监测",
+      "industry": "冶金能源管理",
+      "process_unit": "钢铁企业用电负荷",
+      "version": "1.0.0",
+      "field_count": 11,
+      "required_count": 4,
+      "primary_output": "energy_usage",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 900,
+      "notes": "字段依据 UCI Steel Industry Energy Consumption 数据集 851 建立；用于能耗回归和数据质量分析，不代表生产控制变量或特定工厂上线验收。"
     },
     {
       "scenario_id": "steel_reheating_furnace",
@@ -29,6 +61,9 @@
       "version": "1.0.0",
       "field_count": 18,
       "required_count": 8,
+      "primary_output": "slab_discharge_temp",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 60,
       "notes": "2号任务重点场景模板。字段范围用于标准校验，不执行异常清洗。"
     },
     {
@@ -39,6 +74,9 @@
       "version": "1.0.0",
       "field_count": 14,
       "required_count": 8,
+      "primary_output": "main_steam_temperature",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 30,
       "notes": "用于锅炉运行时序数据的字段需求判定与统一。"
     },
     {
@@ -49,15 +87,18 @@
       "version": "1.0.0",
       "field_count": 13,
       "required_count": 8,
+      "primary_output": "effluent_ammonia",
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 300,
       "notes": "用于污水生化处理曝气系统的字段需求判定与统一。"
     }
   ],
-  "field_samples": 4710,
-  "intent_samples": 180,
+  "field_samples": 6128,
+  "intent_samples": 252,
   "splits": {
-    "train": 3130,
-    "validation": 668,
-    "test": 912
+    "train": 4192,
+    "validation": 849,
+    "test": 1087
   },
   "label_policy": {
     "required": "场景必需字段",

@@ -160,10 +160,15 @@ def publish_model(model: HybridSemanticModel, report: dict, run_id: str) -> None
     temporary_index = MODEL_INDEX.with_suffix(".tmp.npz")
     temporary_report = REPORT.with_suffix(".json.tmp")
     shutil.copy2(version_model, temporary_model)
-    shutil.copy2(version_model.with_suffix(".embedding.npz"), temporary_index)
+    version_index = version_model.with_suffix(".embedding.npz")
+    if version_index.exists():
+        shutil.copy2(version_index, temporary_index)
     shutil.copy2(version_report, temporary_report)
     temporary_model.replace(MODEL)
-    temporary_index.replace(MODEL_INDEX)
+    if temporary_index.exists():
+        temporary_index.replace(MODEL_INDEX)
+    elif MODEL_INDEX.exists():
+        MODEL_INDEX.unlink()
     temporary_report.replace(REPORT)
     registry["active_version"] = run_id
     registry["versions"].append({
@@ -234,13 +239,11 @@ def main() -> None:
         reporter.emit("load_data", 12, f"已加载 {len(rows)} 条基准样本、{len(web_rows)} 条网络审核样本、{len(multi_angle_rows)} 条多角度增强样本和 {len(feedback_rows)} 条人工反馈")
         audit_report = audit_training_data()
         reporter.emit("audit_data", 16, f"训练数据审计完成：直接语义冲突 {len(audit_report['direct_semantic_conflicts'])} 组，保序覆盖 {audit_report['conformal']['observed_coverage'] * 100:.2f}%")
-        if not EMBEDDING_ENCODER.exists():
-            raise FileNotFoundError(f"多语言语义编码器不存在：{EMBEDDING_ENCODER}")
-        encoder = load_embedding_encoder(EMBEDDING_ENCODER)
-        reporter.emit("load_encoder", 18, "已加载本地多语言语义编码器")
+        encoder = load_embedding_encoder(EMBEDDING_ENCODER) if EMBEDDING_ENCODER.exists() else None
+        reporter.emit("load_encoder", 18, "已加载本地多语言语义编码器" if encoder else "未配置本地语义编码器，使用可复现字符模型")
         cold_train = [row for row in rows if row["split"] == "train"] + web_rows + multi_angle_rows + feedback_rows
         cold_char_model = CharNGramCentroidModel().fit(cold_train)
-        cold_embedding_index = EmbeddingPrototypeIndex.build(cold_train, encoder)
+        cold_embedding_index = EmbeddingPrototypeIndex.build(cold_train, encoder) if encoder else None
         cold_model = HybridSemanticModel(cold_char_model, cold_embedding_index, EMBEDDING_ENCODER, encoder=encoder)
         cold_start_test = evaluate(cold_model, rows, "test")
         approved_anchors = [row for row in rows if row.get("source") == "template"]
@@ -248,7 +251,7 @@ def main() -> None:
         train = list(train_index.values())
         reporter.emit("prepare", 24, f"已准备 {len(train)} 条运行训练样本，其中网络增强 {len(web_rows)} 条；另完成严格别名冷启动评估")
         char_model = CharNGramCentroidModel().fit(train)
-        embedding_index = EmbeddingPrototypeIndex.build(train, encoder)
+        embedding_index = EmbeddingPrototypeIndex.build(train, encoder) if encoder else None
         model = HybridSemanticModel(char_model, embedding_index, EMBEDDING_ENCODER, encoder=encoder)
         reporter.emit("fit", 52, f"特征构建与模型拟合完成：{model.metadata['features']} 个特征，{model.metadata['labels']} 个标签")
         train_metrics = evaluate(model, rows, "train")
@@ -280,7 +283,7 @@ def main() -> None:
                 "data_file": str(LEARNED_ALIASES.relative_to(ROOT)),
             },
             "semantic_ensemble": {
-                "encoder": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                "encoder": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2" if encoder else None,
                 "char_weight": model.metadata["char_weight"],
                 "embedding_weight": model.metadata["embedding_weight"],
                 "embedding_prototypes": model.metadata["embedding_prototypes"],

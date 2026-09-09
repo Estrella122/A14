@@ -14,6 +14,15 @@ from .services.pipeline import PipelineError, get_run, list_runs, rerun_pipeline
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
 
 
+def _mapping_overrides(value) -> dict[str, str]:
+    if not value:
+        return {}
+    parsed = value if isinstance(value, dict) else json.loads(value)
+    if not isinstance(parsed, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in parsed.items()):
+        raise ValueError("字段映射 overrides 必须是字符串到字符串的 JSON 对象。")
+    return parsed
+
+
 def _response(payload, status=200):
     response = JsonResponse(payload, status=status, json_dumps_params={"ensure_ascii": False})
     response["Access-Control-Allow-Origin"] = "*"
@@ -53,6 +62,7 @@ def pipeline_collection(request):
             instruction=request.POST.get("instruction", ""),
             resample_rule=request.POST.get("resample_rule", "10s"),
             max_lag=int(request.POST.get("max_lag", "60")),
+            overrides=_mapping_overrides(request.POST.get("overrides")),
         )
         return _response({"ok": True, "data": snapshot}, status=201)
     except (PipelineError, ValueError) as exc:
@@ -86,6 +96,8 @@ def pipeline_rerun(request, run_id):
             run_id,
             resample_rule=payload.get("resample_rule", "10s"),
             max_lag=int(payload.get("max_lag", 60)),
+            scenario_id=payload.get("scenario_id"),
+            overrides=_mapping_overrides(payload["overrides"]) if "overrides" in payload else None,
         )
         return _response({"ok": True, "data": snapshot}, status=201)
     except (PipelineError, ValueError, json.JSONDecodeError) as exc:

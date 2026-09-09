@@ -5,7 +5,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import { formatNumber } from '../data/projectData'
-import { announcePipelineUpdate, artifactUrl, uploadPipelineFile } from '../api/pipeline'
+import { announcePipelineUpdate, artifactUrl, rerunPipeline, uploadPipelineFile } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildFurnaceSimulationCsv } from '../utils/simulationCsv'
 
@@ -21,6 +21,8 @@ const { latestRun } = useLatestPipelineRun()
 const simulation = ref({ steady: 45, step: 18, noise: 3, anomalies: 12 })
 const fileFilter = ref('all')
 const chartRange = ref('6h')
+const mappingDraft = ref({})
+const reviewScenario = ref('')
 
 function buildFiles(project) {
   return [
@@ -43,6 +45,14 @@ const visibleFiles = computed(() => {
   if (fileFilter.value === 'quality') return files.value.filter((file) => Number(file.quality ?? 0) >= 95)
   return files.value
 })
+const reviewMappings = computed(() => (liveStandard.value?.mapping?.mappings ?? []).filter((item) => item.status !== 'matched'))
+const scenarioCandidates = computed(() => liveStandard.value?.detection?.candidates ?? [])
+const dictionary = computed(() => liveStandard.value?.dictionary ?? [])
+
+watch(liveStandard, (standard) => {
+  reviewScenario.value = standard?.scenario?.scenario_id ?? ''
+  mappingDraft.value = Object.fromEntries((standard?.mapping?.mappings ?? []).filter((item) => item.status !== 'matched').map((item) => [item.raw, item.standard ?? '__ignore__']))
+}, { immediate: true })
 
 function setFileFilter(filter) {
   fileFilter.value = filter
@@ -98,6 +108,24 @@ async function runPipelineFile(file, pending = createPendingFile(file)) {
   } catch (error) {
     pending.status = '执行失败'
     emit('notify', { tone: 'warning', title: '流水线执行失败', message: error.message })
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function applyMappingReview() {
+  if (!latestRun.value?.run_id || uploading.value) return
+  uploading.value = true
+  try {
+    const scenarioChanged = reviewScenario.value !== liveStandard.value?.scenario?.scenario_id
+    latestRun.value = await rerunPipeline(latestRun.value.run_id, {
+      scenarioId: reviewScenario.value,
+      overrides: scenarioChanged ? {} : mappingDraft.value,
+    })
+    announcePipelineUpdate(latestRun.value)
+    emit('notify', { tone: latestRun.value.status === 'completed' ? 'success' : 'warning', title: scenarioChanged ? '场景字段已刷新' : '人工映射已应用', message: scenarioChanged ? '已按新场景刷新标准字段，请继续确认映射。' : latestRun.value.status === 'completed' ? '已使用审核后的映射重新执行流水线。' : '映射已保存到运行记录，仍有门禁项需要复核。' })
+  } catch (error) {
+    emit('notify', { tone: 'warning', title: '人工映射执行失败', message: error.message })
   } finally {
     uploading.value = false
   }
@@ -203,6 +231,16 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
         <a :href="artifactUrl(latestRun.run_id, 'segments_csv')">下载动态段</a>
         <a :href="artifactUrl(latestRun.run_id, 'metrics_json')">下载模型指标</a>
       </div>
+    </section>
+
+    <section v-if="latestRun?.status === 'needs_review' && liveStandard" class="panel mapping-review-panel">
+      <div class="section-heading compact"><div><span class="section-kicker">Human mapping review</span><h2>人工字段映射</h2></div><StatusPill tone="warning">{{ reviewMappings.length }} 项待处理</StatusPill></div>
+      <p class="panel-description">系统不会猜测不透明工厂位号。请选择已确认的场景和字段含义；选择“忽略该字段”会把它保留在审计记录中但不送入建模。</p>
+      <label class="mapping-review-scenario"><span>确认场景</span><select v-model="reviewScenario"><option v-for="candidate in scenarioCandidates" :key="candidate.scenario_id" :value="candidate.scenario_id">{{ candidate.scenario_name }} · {{ (candidate.confidence * 100).toFixed(1) }}%</option></select></label>
+      <div class="mapping-review-grid">
+        <label v-for="item in reviewMappings" :key="item.raw"><span>{{ item.raw }}</span><small>{{ item.method }} · {{ (item.confidence * 100).toFixed(1) }}%</small><select v-model="mappingDraft[item.raw]"><option value="__ignore__">忽略该字段</option><option v-for="field in dictionary" :key="field.standard_name" :value="field.standard_name">{{ field.display_name }}（{{ field.standard_name }}）</option></select></label>
+      </div>
+      <button class="btn btn-primary" type="button" :disabled="uploading || !reviewScenario" @click="applyMappingReview"><AppIcon :name="uploading ? 'loop' : 'check'" :class="{ spinning: uploading }" />保存映射并重新运行</button>
     </section>
 
     <section class="metric-grid four-col">

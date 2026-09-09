@@ -130,6 +130,76 @@ RAW_MEAL_FEED_SP,cement_rotary_kiln,raw_meal_feed,required,manipulated,t/h,contr
 RAW_MEAL_FEED_t/h,cement_rotary_kiln,raw_meal_feed,required,manipulated,t/h,unit_suffix,e60aa881d77d3344,test
 装置5-RAW_FEED-CH30-VALUE,cement_rotary_kiln,raw_meal_feed,required,manipulated,t/h,vendor_channel_tag,388a8b9ed7dc53a7,test
 装置5-RAW_MEAL_FEED-CH30-VALUE,cement_rotary_kiln,raw_meal_feed,required,manipulated,t/h,vendor_channel_tag,e60aa881d77d3344,test
+DCS_报表序号_25,debutanizer_column,__irrelevant__,irrelevant,none,,negative_vendor,385d9232027b08e4,test
+DCS_报表模板编号_25,debutanizer_column,__irrelevant__,irrelevant,none,,negative_vendor,9e95aba27109d965,test
+HMI.60.报表序号.RAW,debutanizer_column,__irrelevant__,irrelevant,none,,negative_vendor,385d9232027b08e4,test
+HMI.60.报表模板编号.RAW,debutanizer_column,__irrelevant__,irrelevant,none,,negative_vendor,9e95aba27109d965,test
+报表序号,debutanizer_column,__irrelevant__,irrelevant,none,,negative,385d9232027b08e4,test
+报表模板编号,debutanizer_column,__irrelevant__,irrelevant,none,,negative,9e95aba27109d965,test
+1号bottom_temperature_a,debutanizer_column,bottom_temperature_a,required,state,ratio,equipment_prefix,fc01c39a0125a8b2,test
+1号u6,debutanizer_column,bottom_temperature_a,required,state,ratio,equipment_prefix,c2482d8f9d67d928,test
+A线_bottom_temperature_a,debutanizer_column,bottom_temperature_a,required,state,ratio,line_prefix,fc01c39a0125a8b2,test
+A线_u6,debutanizer_column,bottom_temperature_a,required,state,ratio,line_prefix,c2482d8f9d67d928,test
+B线#bottom_temperature_a#测点42,debutanizer_column,bottom_temperature_a,required,state,ratio,line_point_tag,fc01c39a0125a8b2,test
+B线#u6#测点42,debutanizer_column,bottom_temperature_a,required,state,ratio,line_point_tag,c2482d8f9d67d928,test
+DCS_03_u6_PV_17,debutanizer_column,bottom_temperature_a,required,state,ratio,vendor_dcs_tag,c2482d8f9d67d928,test
+HMI.22.u6.AI,debutanizer_column,bottom_temperature_a,required,state,ratio,vendor_hmi_tag,c2482d8f9d67d928,test
+U6,debutanizer_column,bottom_temperature_a,required,state,ratio,uppercase,c2482d8f9d67d928,test
+bottom_temperature_a[ratio],debutanizer_column,bottom_temperature_a,required,state,ratio,unit_bracket,fc01c39a0125a8b2,test
+u6,debutanizer_column,bottom_temperature_a,required,state,ratio,template,c2482d8f9d67d928,test
+u6[ratio],debutanizer_column,bottom_temperature_a,required,state,ratio,unit_bracket,c2482d8f9d67d928,test
+u6_01,debutanizer_column,bottom_temperature_a,required,state,ratio,channel_suffix,c2482d8f9d67d928,test
+u6_PV,debutanizer_column,bottom_temperature_a,required,state,ratio,control_suffix,c2482d8f9d67d928,test
+u6_ratio,debutanizer_column,bottom_temperature_a,required,state,ratio,unit_suffix,c2482d8f9d67d928,test
+装置5-u6-CH30-VALUE,debutanizer_column,bottom_temperature_a,required,state,ratio,vendor_channel_tag,c2482d8f9d67d928,test
+1号Bottom_Temperature_B,debutanizer_column,bottom_temperature_b,required,state,ratio,equipment_prefix,7dc95c0c3c99b01c,test
+A线_Bottom_Temperature_B,debutanizer_column,bottom_temperature_b,required,state,ratio,line_prefix,7dc95c0c3c99b01c,test
+BottomTemperatureB,debutanizer_column,bottom_temperature_b,required,state,ratio,compact,7dc95c0c3c99b01c,test
+Bottom_Temperature_B,debutanizer_column,bottom_temperature_b,required,state,ratio,template,7dc95c0c3c99b01c,test
+Bottom_Temperature_B[ratio],debutanizer_column,bottom_temperature_b,required,state,ratio,unit_bracket,7dc95c0c3c99b01c,test
+Bottom_Temperature_B_01,debutanizer_column,bottom_temperature_b,required,state,ratio,channel_suffix,7dc95c0c3c99b01c,test
+Bottom_Temperature_B_PV,debutanizer_column,bottom_temperature_b,required,state,ratio,control_suffix,7dc95c0c3c99b01c,test
+Bottom_Temperature_B_ratio,debutanizer_column,bottom_temperature_b,required,state,ratio,unit_suffix,7dc95c0c3c99b01c,test
+B线#Bottom_Temperature_B#测点42,debutanizer_column,bottom_temperature_b,required,state,ratio,line_point_tag,7dc95c0c3c99b01c,test
+DCS_03_Bottom_Temperature_B_PV_17,debutanizer_column,bottom_temperature_b,required,state,ratio,vendor_dcs_tag,7dc95c0c3c99b01c,test
+HMI.22.Bottom_Temperature_B.AI,debutanizer_column,bottom_temperature_b,required,state,ratio,vendor_hmi_tag,7dc95c0c3c99b01c,test
+装置5-Bottom_Temperature_B-CH30-VALUE,debutanizer_column,bottom_temperature_b,required,state,ratio,vendor_channel_tag,7dc95c0c3c99b01c,test
+1号序列时间,debutanizer_column,timestamp,required,time,datetime,equipment_prefix,b8d5f45e161dd7fa,test
+A线_序列时间,debutanizer_column,timestamp,required,time,datetime,line_prefix,b8d5f45e161dd7fa,test
+B线#序列时间#测点42,debutanizer_column,timestamp,required,time,datetime,line_point_tag,b8d5f45e161dd7fa,test
+DCS_03_序列时间_PV_17,debutanizer_column,timestamp,required,time,datetime,vendor_dcs_tag,b8d5f45e161dd7fa,test
+HMI.22.序列时间.AI,debutanizer_column,timestamp,required,time,datetime,vendor_hmi_tag,b8d5f45e161dd7fa,test
+序列时间,debutanizer_column,timestamp,required,time,datetime,template,b8d5f45e161dd7fa,test
+序列时间_01,debutanizer_column,timestamp,required,time,datetime,channel_suffix,b8d5f45e161dd7fa,test
+序列时间_PV,debutanizer_column,timestamp,required,time,datetime,control_suffix,b8d5f45e161dd7fa,test
+装置5-序列时间-CH30-VALUE,debutanizer_column,timestamp,required,time,datetime,vendor_channel_tag,b8d5f45e161dd7fa,test
+1号Top_Pressure,debutanizer_column,top_pressure,required,state,ratio,equipment_prefix,2eee8fdc1a699831,test
+1号top_pressure,debutanizer_column,top_pressure,required,state,ratio,equipment_prefix,dc605a2adc0e89fc,test
+A线_Top_Pressure,debutanizer_column,top_pressure,required,state,ratio,line_prefix,2eee8fdc1a699831,test
+A线_top_pressure,debutanizer_column,top_pressure,required,state,ratio,line_prefix,dc605a2adc0e89fc,test
+B线#Top_Pressure#测点42,debutanizer_column,top_pressure,required,state,ratio,line_point_tag,2eee8fdc1a699831,test
+B线#top_pressure#测点42,debutanizer_column,top_pressure,required,state,ratio,line_point_tag,dc605a2adc0e89fc,test
+DCS_03_Top_Pressure_PV_17,debutanizer_column,top_pressure,required,state,ratio,vendor_dcs_tag,2eee8fdc1a699831,test
+HMI.22.Top_Pressure.AI,debutanizer_column,top_pressure,required,state,ratio,vendor_hmi_tag,2eee8fdc1a699831,test
+TopPressure,debutanizer_column,top_pressure,required,state,ratio,compact,2eee8fdc1a699831,test
+Top_Pressure,debutanizer_column,top_pressure,required,state,ratio,template,2eee8fdc1a699831,test
+Top_Pressure[ratio],debutanizer_column,top_pressure,required,state,ratio,unit_bracket,2eee8fdc1a699831,test
+Top_Pressure_01,debutanizer_column,top_pressure,required,state,ratio,channel_suffix,2eee8fdc1a699831,test
+Top_Pressure_PV,debutanizer_column,top_pressure,required,state,ratio,control_suffix,2eee8fdc1a699831,test
+Top_Pressure_ratio,debutanizer_column,top_pressure,required,state,ratio,unit_suffix,2eee8fdc1a699831,test
+top_pressure[ratio],debutanizer_column,top_pressure,required,state,ratio,unit_bracket,dc605a2adc0e89fc,test
+装置5-Top_Pressure-CH30-VALUE,debutanizer_column,top_pressure,required,state,ratio,vendor_channel_tag,2eee8fdc1a699831,test
+1号第六塔板温度,debutanizer_column,tray6_temperature,required,state,ratio,equipment_prefix,aefd2173f148bc19,test
+A线_第六塔板温度,debutanizer_column,tray6_temperature,required,state,ratio,line_prefix,aefd2173f148bc19,test
+B线#第六塔板温度#测点42,debutanizer_column,tray6_temperature,required,state,ratio,line_point_tag,aefd2173f148bc19,test
+DCS_03_第六塔板温度_PV_17,debutanizer_column,tray6_temperature,required,state,ratio,vendor_dcs_tag,aefd2173f148bc19,test
+HMI.22.第六塔板温度.AI,debutanizer_column,tray6_temperature,required,state,ratio,vendor_hmi_tag,aefd2173f148bc19,test
+第六塔板温度,debutanizer_column,tray6_temperature,required,state,ratio,template,aefd2173f148bc19,test
+第六塔板温度[ratio],debutanizer_column,tray6_temperature,required,state,ratio,unit_bracket,aefd2173f148bc19,test
+第六塔板温度_01,debutanizer_column,tray6_temperature,required,state,ratio,channel_suffix,aefd2173f148bc19,test
+第六塔板温度_PV,debutanizer_column,tray6_temperature,required,state,ratio,control_suffix,aefd2173f148bc19,test
+第六塔板温度_ratio,debutanizer_column,tray6_temperature,required,state,ratio,unit_suffix,aefd2173f148bc19,test
+装置5-第六塔板温度-CH30-VALUE,debutanizer_column,tray6_temperature,required,state,ratio,vendor_channel_tag,aefd2173f148bc19,test
 DCS_厂商备用测点_25,distillation_column,__irrelevant__,irrelevant,none,,negative_vendor,9b8a7688ea6f792c,test
 DCS_巡检照片地址_25,distillation_column,__irrelevant__,irrelevant,none,,negative_vendor,b73751a6c4766a88,test
 DCS_工单审批人_25,distillation_column,__irrelevant__,irrelevant,none,,negative_vendor,be9b42739a7e3529,test
@@ -306,6 +376,111 @@ toptemperature,distillation_column,top_temperature,required,controlled,degC,comp
 顶温_01,distillation_column,top_temperature,required,controlled,degC,channel_suffix,9c12a28a5814bedf,test
 顶温_PV,distillation_column,top_temperature,required,controlled,degC,control_suffix,9c12a28a5814bedf,test
 顶温_degC,distillation_column,top_temperature,required,controlled,degC,unit_suffix,9c12a28a5814bedf,test
+DCS_厂区门禁记录_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,c490fd2e9b5d3dda,test
+DCS_巡检照片地址_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,a2c2cb8458e2680b,test
+DCS_操作员姓名_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,1d531bc296c797fa,test
+DCS_文件上传时间_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,6ab043601b2424e5,test
+DCS_画面颜色_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,200eafa1fd214ade,test
+DCS_设备描述_25,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,cd85385d3a0be235,test
+HMI.60.厂区门禁记录.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,c490fd2e9b5d3dda,test
+HMI.60.巡检照片地址.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,a2c2cb8458e2680b,test
+HMI.60.操作员姓名.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,1d531bc296c797fa,test
+HMI.60.文件上传时间.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,6ab043601b2424e5,test
+HMI.60.画面颜色.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,200eafa1fd214ade,test
+HMI.60.设备描述.RAW,steel_industry_energy,__irrelevant__,irrelevant,none,,negative_vendor,cd85385d3a0be235,test
+厂区门禁记录,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,c490fd2e9b5d3dda,test
+巡检照片地址,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,a2c2cb8458e2680b,test
+操作员姓名,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,1d531bc296c797fa,test
+文件上传时间,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,6ab043601b2424e5,test
+画面颜色,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,200eafa1fd214ade,test
+设备描述,steel_industry_energy,__irrelevant__,irrelevant,none,,negative,cd85385d3a0be235,test
+1号day of week,steel_industry_energy,day_of_week,useful,identifier,string,equipment_prefix,389a18659e0b80cc,test
+1号星期,steel_industry_energy,day_of_week,useful,identifier,string,equipment_prefix,c9dbf6b9f97ca425,test
+A线_day of week,steel_industry_energy,day_of_week,useful,identifier,string,line_prefix,389a18659e0b80cc,test
+A线_星期,steel_industry_energy,day_of_week,useful,identifier,string,line_prefix,c9dbf6b9f97ca425,test
+B线#day of week#测点42,steel_industry_energy,day_of_week,useful,identifier,string,line_point_tag,389a18659e0b80cc,test
+B线#星期#测点42,steel_industry_energy,day_of_week,useful,identifier,string,line_point_tag,c9dbf6b9f97ca425,test
+DAY_OF_WEEK,steel_industry_energy,day_of_week,useful,identifier,string,uppercase,389a18659e0b80cc,test
+DCS_03_day_of_week_PV_17,steel_industry_energy,day_of_week,useful,identifier,string,vendor_dcs_tag,389a18659e0b80cc,test
+DCS_03_星期_PV_17,steel_industry_energy,day_of_week,useful,identifier,string,vendor_dcs_tag,c9dbf6b9f97ca425,test
+HMI.22.day_of_week.AI,steel_industry_energy,day_of_week,useful,identifier,string,vendor_hmi_tag,389a18659e0b80cc,test
+HMI.22.星期.AI,steel_industry_energy,day_of_week,useful,identifier,string,vendor_hmi_tag,c9dbf6b9f97ca425,test
+day of week,steel_industry_energy,day_of_week,useful,identifier,string,template,389a18659e0b80cc,test
+day_of_week,steel_industry_energy,day_of_week,useful,identifier,string,normalized,389a18659e0b80cc,test
+day_of_week_01,steel_industry_energy,day_of_week,useful,identifier,string,channel_suffix,389a18659e0b80cc,test
+day_of_week_PV,steel_industry_energy,day_of_week,useful,identifier,string,control_suffix,389a18659e0b80cc,test
+dayofweek,steel_industry_energy,day_of_week,useful,identifier,string,compact,389a18659e0b80cc,test
+星期,steel_industry_energy,day_of_week,useful,identifier,string,template,c9dbf6b9f97ca425,test
+星期_01,steel_industry_energy,day_of_week,useful,identifier,string,channel_suffix,c9dbf6b9f97ca425,test
+星期_PV,steel_industry_energy,day_of_week,useful,identifier,string,control_suffix,c9dbf6b9f97ca425,test
+装置5-day_of_week-CH30-VALUE,steel_industry_energy,day_of_week,useful,identifier,string,vendor_channel_tag,389a18659e0b80cc,test
+装置5-星期-CH30-VALUE,steel_industry_energy,day_of_week,useful,identifier,string,vendor_channel_tag,c9dbf6b9f97ca425,test
+1号energy consumption,steel_industry_energy,energy_usage,required,controlled,kWh,equipment_prefix,933cb059828b72da,test
+1号usage kwh,steel_industry_energy,energy_usage,required,controlled,kWh,equipment_prefix,b6623f0fe188ddb9,test
+A线_energy consumption,steel_industry_energy,energy_usage,required,controlled,kWh,line_prefix,933cb059828b72da,test
+A线_usage kwh,steel_industry_energy,energy_usage,required,controlled,kWh,line_prefix,b6623f0fe188ddb9,test
+B线#energy consumption#测点42,steel_industry_energy,energy_usage,required,controlled,kWh,line_point_tag,933cb059828b72da,test
+B线#usage kwh#测点42,steel_industry_energy,energy_usage,required,controlled,kWh,line_point_tag,b6623f0fe188ddb9,test
+DCS_03_energy_consumption_PV_17,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_dcs_tag,933cb059828b72da,test
+DCS_03_usage_kwh_PV_17,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_dcs_tag,b6623f0fe188ddb9,test
+ENERGY_CONSUMPTION,steel_industry_energy,energy_usage,required,controlled,kWh,uppercase,933cb059828b72da,test
+HMI.22.energy_consumption.AI,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_hmi_tag,933cb059828b72da,test
+HMI.22.usage_kwh.AI,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_hmi_tag,b6623f0fe188ddb9,test
+USAGE_KWH,steel_industry_energy,energy_usage,required,controlled,kWh,uppercase,b6623f0fe188ddb9,test
+energy consumption,steel_industry_energy,energy_usage,required,controlled,kWh,template,933cb059828b72da,test
+energy consumption[kWh],steel_industry_energy,energy_usage,required,controlled,kWh,unit_bracket,933cb059828b72da,test
+energy_consumption,steel_industry_energy,energy_usage,required,controlled,kWh,normalized,933cb059828b72da,test
+energy_consumption_01,steel_industry_energy,energy_usage,required,controlled,kWh,channel_suffix,933cb059828b72da,test
+energy_consumption_PV,steel_industry_energy,energy_usage,required,controlled,kWh,control_suffix,933cb059828b72da,test
+energy_consumption_kWh,steel_industry_energy,energy_usage,required,controlled,kWh,unit_suffix,933cb059828b72da,test
+energyconsumption,steel_industry_energy,energy_usage,required,controlled,kWh,compact,933cb059828b72da,test
+usage kwh,steel_industry_energy,energy_usage,required,controlled,kWh,template,b6623f0fe188ddb9,test
+usage kwh[kWh],steel_industry_energy,energy_usage,required,controlled,kWh,unit_bracket,b6623f0fe188ddb9,test
+usage_kwh,steel_industry_energy,energy_usage,required,controlled,kWh,normalized,b6623f0fe188ddb9,test
+usage_kwh_01,steel_industry_energy,energy_usage,required,controlled,kWh,channel_suffix,b6623f0fe188ddb9,test
+usage_kwh_PV,steel_industry_energy,energy_usage,required,controlled,kWh,control_suffix,b6623f0fe188ddb9,test
+usage_kwh_kWh,steel_industry_energy,energy_usage,required,controlled,kWh,unit_suffix,b6623f0fe188ddb9,test
+usagekwh,steel_industry_energy,energy_usage,required,controlled,kWh,compact,b6623f0fe188ddb9,test
+装置5-energy_consumption-CH30-VALUE,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_channel_tag,933cb059828b72da,test
+装置5-usage_kwh-CH30-VALUE,steel_industry_energy,energy_usage,required,controlled,kWh,vendor_channel_tag,b6623f0fe188ddb9,test
+1号lagging_power_factor,steel_industry_energy,lagging_power_factor,useful,state,percent,equipment_prefix,15baaccc3ec11670,test
+A线_lagging_power_factor,steel_industry_energy,lagging_power_factor,useful,state,percent,line_prefix,15baaccc3ec11670,test
+B线#lagging_power_factor#测点42,steel_industry_energy,lagging_power_factor,useful,state,percent,line_point_tag,15baaccc3ec11670,test
+lagging_power_factor[percent],steel_industry_energy,lagging_power_factor,useful,state,percent,unit_bracket,15baaccc3ec11670,test
+1号load type,steel_industry_energy,load_type,useful,state,string,equipment_prefix,50ca228eeeea24ea,test
+A线_load type,steel_industry_energy,load_type,useful,state,string,line_prefix,50ca228eeeea24ea,test
+B线#load type#测点42,steel_industry_energy,load_type,useful,state,string,line_point_tag,50ca228eeeea24ea,test
+DCS_03_load_type_PV_17,steel_industry_energy,load_type,useful,state,string,vendor_dcs_tag,50ca228eeeea24ea,test
+HMI.22.load_type.AI,steel_industry_energy,load_type,useful,state,string,vendor_hmi_tag,50ca228eeeea24ea,test
+LOAD_TYPE,steel_industry_energy,load_type,useful,state,string,uppercase,50ca228eeeea24ea,test
+load type,steel_industry_energy,load_type,useful,state,string,template,50ca228eeeea24ea,test
+load_type,steel_industry_energy,load_type,useful,state,string,normalized,50ca228eeeea24ea,test
+load_type_01,steel_industry_energy,load_type,useful,state,string,channel_suffix,50ca228eeeea24ea,test
+load_type_PV,steel_industry_energy,load_type,useful,state,string,control_suffix,50ca228eeeea24ea,test
+loadtype,steel_industry_energy,load_type,useful,state,string,compact,50ca228eeeea24ea,test
+装置5-load_type-CH30-VALUE,steel_industry_energy,load_type,useful,state,string,vendor_channel_tag,50ca228eeeea24ea,test
+1号Date,steel_industry_energy,timestamp,required,time,datetime,equipment_prefix,47569c5b94367ede,test
+A线_Date,steel_industry_energy,timestamp,required,time,datetime,line_prefix,47569c5b94367ede,test
+B线#Date#测点42,steel_industry_energy,timestamp,required,time,datetime,line_point_tag,47569c5b94367ede,test
+DATE,steel_industry_energy,timestamp,required,time,datetime,uppercase,47569c5b94367ede,test
+DCS_03_Date_PV_17,steel_industry_energy,timestamp,required,time,datetime,vendor_dcs_tag,47569c5b94367ede,test
+Date,steel_industry_energy,timestamp,required,time,datetime,template,47569c5b94367ede,test
+Date_01,steel_industry_energy,timestamp,required,time,datetime,channel_suffix,47569c5b94367ede,test
+Date_PV,steel_industry_energy,timestamp,required,time,datetime,control_suffix,47569c5b94367ede,test
+HMI.22.Date.AI,steel_industry_energy,timestamp,required,time,datetime,vendor_hmi_tag,47569c5b94367ede,test
+装置5-Date-CH30-VALUE,steel_industry_energy,timestamp,required,time,datetime,vendor_channel_tag,47569c5b94367ede,test
+1号week_status,steel_industry_energy,week_status,useful,identifier,string,equipment_prefix,343c9c35f430f0c0,test
+1号工作日状态,steel_industry_energy,week_status,useful,identifier,string,equipment_prefix,50d764dfb35bf4d6,test
+A线_week_status,steel_industry_energy,week_status,useful,identifier,string,line_prefix,343c9c35f430f0c0,test
+A线_工作日状态,steel_industry_energy,week_status,useful,identifier,string,line_prefix,50d764dfb35bf4d6,test
+B线#week_status#测点42,steel_industry_energy,week_status,useful,identifier,string,line_point_tag,343c9c35f430f0c0,test
+B线#工作日状态#测点42,steel_industry_energy,week_status,useful,identifier,string,line_point_tag,50d764dfb35bf4d6,test
+DCS_03_工作日状态_PV_17,steel_industry_energy,week_status,useful,identifier,string,vendor_dcs_tag,50d764dfb35bf4d6,test
+HMI.22.工作日状态.AI,steel_industry_energy,week_status,useful,identifier,string,vendor_hmi_tag,50d764dfb35bf4d6,test
+工作日状态,steel_industry_energy,week_status,useful,identifier,string,template,50d764dfb35bf4d6,test
+工作日状态_01,steel_industry_energy,week_status,useful,identifier,string,channel_suffix,50d764dfb35bf4d6,test
+工作日状态_PV,steel_industry_energy,week_status,useful,identifier,string,control_suffix,50d764dfb35bf4d6,test
+装置5-工作日状态-CH30-VALUE,steel_industry_energy,week_status,useful,identifier,string,vendor_channel_tag,50d764dfb35bf4d6,test
 DCS_日报打印次数_25,steel_reheating_furnace,__irrelevant__,irrelevant,none,,negative_vendor,ac75e88218d5793f,test
 DCS_账户登录次数_25,steel_reheating_furnace,__irrelevant__,irrelevant,none,,negative_vendor,db9cc6279c3e47a4,test
 DCS_软件版本说明_25,steel_reheating_furnace,__irrelevant__,irrelevant,none,,negative_vendor,ce90c5e0aab19adb,test

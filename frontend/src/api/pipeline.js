@@ -7,6 +7,7 @@ export async function uploadPipelineFile(file, options = {}) {
   form.append('instruction', options.instruction ?? '')
   form.append('resample_rule', options.resampleRule ?? '10s')
   form.append('max_lag', String(options.maxLag ?? 60))
+  form.append('overrides', JSON.stringify(options.overrides ?? {}))
   const response = await fetch(`${apiBaseUrl}/pipeline/runs/`, { method: 'POST', body: form })
   const payload = await response.json()
   if (!response.ok || payload?.ok === false) throw new Error(payload?.message || `运行失败（HTTP ${response.status}）`)
@@ -30,6 +31,8 @@ export async function rerunPipeline(runId, options = {}) {
     body: {
       resample_rule: options.resampleRule ?? '10s',
       max_lag: options.maxLag ?? 60,
+      scenario_id: options.scenarioId,
+      overrides: options.overrides,
     },
   })
   return payload.data

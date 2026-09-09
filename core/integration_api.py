@@ -42,10 +42,12 @@ def _response(payload, status=200):
 
 def standardization_payload():
     report = _read_json("standardization/outputs/A14_task2/task2_acceptance_report.json")
+    implementation = INTEGRATIONS_ROOT / "standardization/standard_agent/engine.py"
     return {
         "module": "统一标准与多场景模板（2号）",
         "source": "2号原始交付物 · task2_acceptance_report.json",
-        "available": bool(report),
+        "available": implementation.exists(),
+        "evidence_available": bool(report),
         "passed": report.get("passed", False),
         "passed_items": report.get("passed_items", 0),
         "total_items": report.get("total_items", 0),
@@ -57,10 +59,12 @@ def standardization_payload():
 
 def cleaning_payload():
     report = _read_json("data_cleaning/output/output（5）/quality_report.json")
+    implementation = INTEGRATIONS_ROOT / "data_cleaning/src/data_cleaning_agent.py"
     return {
         "module": "数据清洗与优质数据筛选（3号）",
         "source": "3号原始交付物 · quality_report.json",
-        "available": bool(report),
+        "available": implementation.exists(),
+        "evidence_available": bool(report),
         "overall_score": report.get("overall_score"),
         "dimension_scores": report.get("dimension_scores", {}),
         "missing_rate": report.get("missing_rate", {}),
@@ -74,10 +78,14 @@ def modeling_payload():
     summary = _read_json("identification/outputs/modeling_pipeline_demo/pipeline_summary.json")
     metrics = _read_json("identification/outputs/modeling_pipeline_demo/03_system_identification/model_metrics.json")
     recommendation = _read_json("identification/outputs/modeling_pipeline_demo/02_collinearity/variable_recommendation.json")
+    implementation = INTEGRATIONS_ROOT / "identification/system_identification.py"
+    if not implementation.exists():
+        implementation = next((path for path in (INTEGRATIONS_ROOT / "identification").glob("*.py")), implementation)
     return {
         "module": "时滞分析与系统辨识（4号）",
         "source": "4号原始交付物 · modeling_pipeline_demo",
-        "available": bool(summary),
+        "available": implementation.exists(),
+        "evidence_available": bool(summary),
         "input_columns": summary.get("input_cols", []),
         "selected_inputs": summary.get("selected_inputs_after_collinearity", []),
         "config": summary.get("config", {}),
