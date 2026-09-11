@@ -18,7 +18,7 @@ const props = defineProps({
   config: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['notify', 'strategy-accepted'])
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const pipelineOptimization = computed(() => latestRun.value?.results?.optimization ?? null)
 
 const defaultCandidate = {

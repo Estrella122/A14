@@ -33,16 +33,32 @@ export const defaultPipelineGraph = {
   edges: pipelineNodeTypes.slice(0, -1).map((_, index) => ({ id: `edge-${index + 1}`, from: `node-${index + 1}`, to: `node-${index + 2}` })),
 }
 
-const prediction = (phase = 0, bias = 0) => Array.from({ length: 36 }, (_, index) => Number((885 + index * 1.28 + Math.sin(index / 4 + phase) * 8 + bias).toFixed(2)))
+const prediction = (phase = 0, bias = 0, center = 885, slope = 1.28, amplitude = 8) => Array.from({ length: 36 }, (_, index) => Number((center + index * slope + Math.sin(index / 4 + phase) * amplitude + bias).toFixed(3)))
 const residuals = (spread = 5) => Array.from({ length: 40 }, (_, index) => Number((Math.sin(index * 1.7) * spread + Math.cos(index * .42) * spread * .45).toFixed(2)))
-export const mockExperiments = [
-  { id: 'RUN-0907-1421', time: '2026-09-07 14:21', dataset: '2#炉历史数据-v4', preprocessing: '5s / Hampel 3σ', algorithm: 'ARX', order: '2-2-1', r2: .928, aic: 182.4, duration: 42.8, status: 'completed', tag: '最佳结果', note: '增加高负荷阶跃片段', actual: prediction(0), predicted: prediction(.12, -.8), residuals: residuals(3.2) },
-  { id: 'RUN-0907-1350', time: '2026-09-07 13:50', dataset: '2#炉历史数据-v4', preprocessing: '5s / Hampel 3σ', algorithm: 'ARX', order: '3-2-1', r2: .913, aic: 191.7, duration: 46.1, status: 'completed', tag: '候选', note: '', actual: prediction(0), predicted: prediction(.25, -1.4), residuals: residuals(4.1) },
-  { id: 'RUN-0906-1728', time: '2026-09-06 17:28', dataset: '2#炉历史数据-v3', preprocessing: '10s / IQR', algorithm: 'OE', order: '2-3-1', r2: .887, aic: 209.3, duration: 38.7, status: 'completed', tag: '尝试2', note: '对比 OE 模型', actual: prediction(0), predicted: prediction(.48, -2.1), residuals: residuals(5.3) },
-  { id: 'RUN-0906-1605', time: '2026-09-06 16:05', dataset: '2#炉历史数据-v3', preprocessing: '10s / Hampel 2.5σ', algorithm: 'ARX', order: '2-2-2', r2: .901, aic: 198.6, duration: 40.4, status: 'completed', tag: '尝试1', note: '', actual: prediction(0), predicted: prediction(.34, -1.8), residuals: residuals(4.7) },
-  { id: 'RUN-0905-1043', time: '2026-09-05 10:43', dataset: '仿真阶跃集-v2', preprocessing: '5s / 物理边界', algorithm: '状态空间', order: '4阶', r2: .865, aic: 224.1, duration: 55.2, status: 'completed', tag: '基线', note: '仿真数据验证', actual: prediction(0), predicted: prediction(.58, -2.8), residuals: residuals(6.1) },
-  { id: 'RUN-0904-0912', time: '2026-09-04 09:12', dataset: '2#炉历史数据-v2', preprocessing: '30s / 线性插值', algorithm: 'ARX', order: '1-1-1', r2: .804, aic: 246.8, duration: 26.9, status: 'completed', tag: '原始基线', note: '未做动态优选', actual: prediction(0), predicted: prediction(.9, -4.5), residuals: residuals(7.8) },
-]
+const experimentProfiles = {
+  blast_furnace: { prefix: 'BF', datasets: ['高炉传感器与化验数据-v4', '高炉传感器与化验数据-v3', '高炉扰动验证集-v2'], center: .57, slope: .001, amplitude: .035, scale: .018, note: '增加高炉负荷变化片段' },
+  debutanizer_column: { prefix: 'DEB', datasets: ['脱丁烷塔历史数据-v4', '脱丁烷塔历史数据-v3', '回流阶跃验证集-v2'], center: 1.12, slope: -.002, amplitude: .06, scale: .035, note: '增加回流量阶跃片段' },
+  industrial_dryer: { prefix: 'DRY', datasets: ['工业干燥器多变量数据-v4', '工业干燥器多变量数据-v3', '热风阶跃验证集-v2'], center: 8.8, slope: -.015, amplitude: .28, scale: .16, note: '增加热风温度激励片段' },
+}
+
+function createMockExperiments(profile) {
+  const actual = prediction(0, 0, profile.center, profile.slope, profile.amplitude)
+  const build = (suffix, time, dataset, preprocessing, algorithm, order, r2, aic, duration, tag, note, phase, bias, spread) => ({
+    id: `${profile.prefix}-${suffix}`, time, dataset, preprocessing, algorithm, order, r2, aic, duration, status: 'completed', tag, note,
+    actual, predicted: prediction(phase, bias, profile.center, profile.slope, profile.amplitude), residuals: residuals(spread),
+  })
+  return [
+    build('0907-1421', '2026-09-07 14:21', profile.datasets[0], '5s / Hampel 3σ', 'ARX', '2-2-1', .928, 182.4, 42.8, '最佳结果', profile.note, .12, -profile.scale, profile.scale * 2.4),
+    build('0907-1350', '2026-09-07 13:50', profile.datasets[0], '5s / Hampel 3σ', 'ARX', '3-2-1', .913, 191.7, 46.1, '候选', '', .25, -profile.scale * 1.6, profile.scale * 3),
+    build('0906-1728', '2026-09-06 17:28', profile.datasets[1], '10s / IQR', 'OE', '2-3-1', .887, 209.3, 38.7, '尝试2', '对比 OE 模型', .48, -profile.scale * 2.2, profile.scale * 3.8),
+    build('0906-1605', '2026-09-06 16:05', profile.datasets[1], '10s / Hampel 2.5σ', 'ARX', '2-2-2', .901, 198.6, 40.4, '尝试1', '', .34, -profile.scale * 1.9, profile.scale * 3.4),
+    build('0905-1043', '2026-09-05 10:43', profile.datasets[2], '5s / 物理边界', '状态空间', '4阶', .865, 224.1, 55.2, '基线', '仿真数据验证', .58, -profile.scale * 2.8, profile.scale * 4.5),
+    build('0904-0912', '2026-09-04 09:12', profile.datasets[1], '30s / 线性插值', 'ARX', '1-1-1', .804, 246.8, 26.9, '原始基线', '未做动态优选', .9, -profile.scale * 4.5, profile.scale * 5.8),
+  ]
+}
+
+// TODO(mock): 后端无历史运行时按当前场景提供离线实验记录；真实接口数据会优先覆盖。
+export const mockExperimentsByScenario = Object.fromEntries(Object.entries(experimentProfiles).map(([key, profile]) => [key, createMockExperiments(profile)]))
 
 // TODO(mock): 三套场景测点目前用于数字孪生演示；后端提供实时 tag 快照后按 role 映射输入与质量输出。
 export const mockTwinByScenario = {

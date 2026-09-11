@@ -48,19 +48,25 @@ const activePath = ref(normalizePath(window.location.pathname))
 const currentProjectId = ref(getStoredProject())
 const currentProject = computed(() => projects.find((project) => project.id === currentProjectId.value) ?? projects[0])
 const { latestRun } = useLatestPipelineRun()
+const latestRunScenarioId = computed(() => latestRun.value?.results?.standardization?.scenario?.scenario_id ?? latestRun.value?.scenario_request ?? null)
+const activeLatestRun = computed(() => {
+  if (!latestRun.value) return null
+  if (!latestRunScenarioId.value || latestRunScenarioId.value === 'auto') return latestRun.value
+  return latestRunScenarioId.value === currentProject.value.scenarioId ? latestRun.value : null
+})
 const runtimeStandardization = computed(() => latestRun.value?.results?.standardization ?? {})
 const runtimeDictionary = computed(() => runtimeStandardization.value.dictionary ?? [])
 const runtimeInput = computed(() => runtimeDictionary.value.find((item) => item.role === 'manipulated') ?? runtimeDictionary.value.find((item) => item.role === 'disturbance'))
 const runtimeOutput = computed(() => runtimeDictionary.value.find((item) => item.role === 'controlled'))
 const effectiveProject = computed(() => {
-  if (!latestRun.value) return currentProject.value
+  if (!activeLatestRun.value) return currentProject.value
   const scenario = runtimeStandardization.value.scenario?.scenario_name ?? '待识别工业场景'
   return {
     ...currentProject.value,
     name: `${scenario}建模任务`,
     shortName: scenario,
     scene: scenario,
-    unit: latestRun.value.original_name,
+    unit: activeLatestRun.value.original_name,
     badge: '当前 CSV 真实运行',
     mv: runtimeInput.value?.display_name ?? runtimeInput.value?.standard_name ?? '主要输入变量',
     mvTag: runtimeInput.value?.standard_name ?? '—',
@@ -68,7 +74,7 @@ const effectiveProject = computed(() => {
     target: runtimeOutput.value?.display_name ?? runtimeOutput.value?.standard_name ?? '被控输出变量',
     targetTag: runtimeOutput.value?.standard_name ?? '—',
     targetUnit: runtimeOutput.value?.unit ?? '',
-    runId: latestRun.value.run_id,
+    runId: activeLatestRun.value.run_id,
   }
 })
 const activeItem = computed(() => navItems.find((item) => item.path === activePath.value) ?? navItems[0])
@@ -140,6 +146,10 @@ watch(currentProjectId, (value, previous) => {
   try { window.localStorage.setItem('processpilot-project', value) } catch { /* local storage is optional */ }
   if (previous) showToast({ tone: 'info', title: '项目上下文已切换', message: `${currentProject.value.name} 的数据、模型与运行记录已载入。` })
 })
+watch(latestRunScenarioId, (scenarioId) => {
+  const detectedProject = projects.find((project) => project.scenarioId === scenarioId)
+  if (detectedProject) currentProjectId.value = detectedProject.id
+})
 
 watch([activePath, effectiveProject], () => {
   document.title = `${activeItem.value.label} · ${effectiveProject.value.shortName} · ProcessPilot`
@@ -204,20 +214,17 @@ onBeforeUnmount(() => {
         <div class="mobile-brand"><span class="brand-symbol small"><i></i><b></b><em></em></span><strong>ProcessPilot</strong></div>
         <div class="topbar-context">
           <span class="topbar-breadcrumb">工作台 <AppIcon name="chevron" :size="14" /> {{ activeItem.label }}</span>
-          <label v-if="!latestRun" class="project-selector" aria-label="切换当前项目场景">
+          <label class="project-selector" aria-label="切换当前项目场景">
             <select v-model="currentProjectId">
               <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.shortName }} · {{ project.target }}</option>
             </select>
           </label>
-          <div v-else class="runtime-project-context" aria-label="2号标准化 Agent 识别的当前场景">
-            <strong>{{ effectiveProject.shortName }}</strong><small>{{ effectiveProject.mv }} → {{ effectiveProject.target }}</small>
-          </div>
-          <StatusPill :tone="latestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>{{ latestRun ? '当前CSV真实运行' : '等待CSV' }}</StatusPill>
+          <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>{{ activeLatestRun ? '当前CSV真实运行' : '等待CSV' }}</StatusPill>
         </div>
         <div class="topbar-actions">
           <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
           <div class="topbar-health"><span><i></i>后端模板服务</span><strong>ONLINE</strong></div>
-          <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: latestRun ? 'success' : 'info', title: '任务通知', message: latestRun ? `最近任务 ${latestRun.run_id} 状态：${latestRun.status}` : '尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
+          <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: activeLatestRun ? 'success' : 'info', title: '任务通知', message: activeLatestRun ? `当前场景任务 ${activeLatestRun.run_id} 状态：${activeLatestRun.status}` : '当前场景尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
           <button class="help-button" type="button" aria-label="打开 Agent 帮助" @click="navigate('/agent-review/'); showToast({ tone: 'info', title: 'Agent 帮助', message: '已打开 Agent 中枢，可上传 CSV 或直接输入问题。' })">?</button>
         </div>
       </header>

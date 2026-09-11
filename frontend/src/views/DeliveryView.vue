@@ -9,7 +9,7 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const results = computed(() => latestRun.value?.results ?? {})
 const cleaning = computed(() => results.value.cleaning ?? {})
 const modeling = computed(() => results.value.modeling ?? {})

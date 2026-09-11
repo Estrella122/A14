@@ -1044,16 +1044,25 @@ def get_run(run_id: str | None = None) -> dict[str, Any] | None:
     return _read_json(RUNS_DIR / run_id / "snapshot.json")
 
 
-def list_runs(limit: int = 100) -> list[dict[str, Any]]:
+def list_runs(limit: int = 100, scenario_id: str | None = None) -> list[dict[str, Any]]:
     """Return newest pipeline snapshots for experiment tracking."""
     if not RUNS_DIR.exists():
         return []
     snapshots = []
     paths = sorted(RUNS_DIR.glob("*/snapshot.json"), key=lambda path: path.stat().st_mtime, reverse=True)
-    for path in paths[:max(1, min(int(limit), 500))]:
+    for path in paths:
         snapshot = _read_json(path)
-        if snapshot:
-            snapshots.append(snapshot)
+        if not snapshot:
+            continue
+        actual_scenario = (
+            snapshot.get("results", {}).get("standardization", {}).get("scenario", {}).get("scenario_id")
+            or snapshot.get("scenario_request")
+        )
+        if scenario_id and actual_scenario != scenario_id:
+            continue
+        snapshots.append(snapshot)
+        if len(snapshots) >= max(1, min(int(limit), 500)):
+            break
     return snapshots
 
 

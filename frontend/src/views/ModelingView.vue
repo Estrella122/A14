@@ -5,7 +5,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import FrequencyAnalysisPanel from '../components/FrequencyAnalysisPanel.vue'
-import { announcePipelineUpdate, getLatestPipelineRun, rerunPipeline } from '../api/pipeline'
+import { announcePipelineUpdate, rerunPipeline } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
@@ -16,7 +16,7 @@ const training = ref(false)
 const comparisonOpen = ref(false)
 const correlationDetailOpen = ref(false)
 const activeAnalysisTab = ref('identification')
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const liveModel = computed(() => latestRun.value?.results?.modeling ?? null)
 const liveMetrics = computed(() => liveModel.value?.metrics?.test ?? null)
 const mimoOutputs = computed(() => liveModel.value?.mimo?.outputs ?? [])
@@ -83,8 +83,8 @@ async function trainModel() {
   if (training.value) return
   training.value = true
   try {
-    const latest = await getLatestPipelineRun()
-    if (!latest) throw new Error('请先在“数据资产”页面上传CSV。')
+    const latest = latestRun.value
+    if (!latest) throw new Error('当前场景尚无运行数据，请先在“数据资产”页面上传CSV。')
     const snapshot = await rerunPipeline(latest.run_id, { maxLag: 60 })
     latestRun.value = snapshot
     announcePipelineUpdate(snapshot)

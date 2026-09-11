@@ -1,24 +1,39 @@
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, toValue } from 'vue'
 import { getLatestPipelineRun } from '../api/pipeline'
 
-export function useLatestPipelineRun() {
-  const latestRun = ref(null)
+export function getRunScenarioId(run) {
+  return run?.results?.standardization?.scenario?.scenario_id ?? run?.scenario_request ?? null
+}
+
+export function useLatestPipelineRun(expectedScenarioId = null) {
+  const rawLatestRun = ref(null)
   const pipelineError = ref('')
   let refreshTimer
 
+  const latestRun = computed({
+    get() {
+      const run = rawLatestRun.value
+      const expected = toValue(expectedScenarioId)
+      if (!run || !expected) return run
+      const actual = getRunScenarioId(run)
+      return !actual || actual === 'auto' || actual === expected ? run : null
+    },
+    set(run) { rawLatestRun.value = run },
+  })
+
   async function refreshPipeline() {
     try {
-      latestRun.value = await getLatestPipelineRun()
+      rawLatestRun.value = await getLatestPipelineRun()
       pipelineError.value = ''
     } catch (error) {
       pipelineError.value = error.message
     }
   }
 
-  function handleUpdate(event) { latestRun.value = event.detail }
+  function handleUpdate(event) { rawLatestRun.value = event.detail }
   function handleStorage(event) {
     if (event.key !== 'processpilot-latest-run' || !event.newValue) return
-    try { latestRun.value = JSON.parse(event.newValue).snapshot } catch { refreshPipeline() }
+    try { rawLatestRun.value = JSON.parse(event.newValue).snapshot } catch { refreshPipeline() }
   }
 
   onMounted(() => {
@@ -33,5 +48,5 @@ export function useLatestPipelineRun() {
     window.clearInterval(refreshTimer)
   })
 
-  return { latestRun, pipelineError, refreshPipeline }
+  return { latestRun, rawLatestRun, pipelineError, refreshPipeline }
 }

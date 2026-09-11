@@ -1,18 +1,16 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import IndustrialTwinPanel from '../components/IndustrialTwinPanel.vue'
 import { formatNumber, requirementCoverage } from '../data/projectData'
-import { getLatestPipelineRun } from '../api/pipeline'
+import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate', 'notify'])
 
-const latestRun = ref(null)
-const loadError = ref('')
-let refreshTimer
+const { latestRun, pipelineError: loadError } = useLatestPipelineRun(() => props.project.scenarioId)
 const result = computed(() => latestRun.value?.results ?? {})
 const standard = computed(() => result.value.standardization ?? {})
 const cleaning = computed(() => result.value.cleaning ?? {})
@@ -40,37 +38,11 @@ const dashboardWorkflow = computed(() => (latestRun.value?.stages ?? []).map((st
   meta: stage.message,
 })))
 
-async function loadLatest() {
-  try {
-    latestRun.value = await getLatestPipelineRun()
-    loadError.value = ''
-  } catch (error) {
-    loadError.value = error.message
-  }
-}
-
-function handlePipelineUpdate(event) { latestRun.value = event.detail }
-function handleStorage(event) {
-  if (event.key !== 'processpilot-latest-run' || !event.newValue) return
-  try { latestRun.value = JSON.parse(event.newValue).snapshot } catch { loadLatest() }
-}
-
 function runFullLoop() {
   emit('notify', { tone: 'info', title: '请在 Agent 中枢选择数据', message: '上传CSV后会从字段标准化开始执行完整闭环。' })
   emit('navigate', '/agent-review/')
 }
 
-onMounted(() => {
-  loadLatest()
-  window.addEventListener('processpilot:pipeline-updated', handlePipelineUpdate)
-  window.addEventListener('storage', handleStorage)
-  refreshTimer = window.setInterval(loadLatest, 5000)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('processpilot:pipeline-updated', handlePipelineUpdate)
-  window.removeEventListener('storage', handleStorage)
-  window.clearInterval(refreshTimer)
-})
 </script>
 
 <template>

@@ -5,8 +5,9 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { listPipelineRuns } from '../api/pipeline'
 import { useEChart } from '../composables/useEChart'
-import { mockExperiments } from '../data/mockData'
+import { mockExperimentsByScenario } from '../data/mockData'
 
+const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify'])
 const experiments = ref([])
 const loading = ref(true)
@@ -21,6 +22,7 @@ const fitChart = ref(null)
 const predictionChart = ref(null)
 const residualChart = ref(null)
 let controller
+const scenarioMocks = computed(() => mockExperimentsByScenario[props.project.scenarioId] ?? mockExperimentsByScenario.blast_furnace)
 
 const annotations = (() => { try { return JSON.parse(window.localStorage.getItem('processpilot-experiment-annotations') || '{}') } catch { return {} } })()
 function withAnnotations(row) { return { ...row, tag: annotations[row.id]?.tag ?? row.tag ?? '', note: annotations[row.id]?.note ?? row.note ?? '' } }
@@ -76,7 +78,7 @@ useEChart(predictionChart, predictionOption)
 useEChart(residualChart, residualOption)
 
 function normalizeRun(run, index) {
-  const fallback = mockExperiments[index % mockExperiments.length]
+  const fallback = scenarioMocks.value[index % scenarioMocks.value.length]
   const result = run.results ?? {}
   const model = result.modeling ?? {}
   const metrics = model.metrics?.test ?? {}
@@ -101,7 +103,7 @@ async function loadRuns() {
   loading.value = true
   error.value = ''
   try {
-    const payload = await listPipelineRuns({ signal: controller.signal })
+    const payload = await listPipelineRuns({ signal: controller.signal, scenarioId: props.project.scenarioId })
     const rows = Array.isArray(payload) ? payload : payload?.results ?? payload?.runs ?? []
     if (!rows.length) throw new Error('后端尚无历史运行记录')
     experiments.value = rows.map(normalizeRun)
@@ -109,7 +111,7 @@ async function loadRuns() {
   } catch (requestError) {
     if (requestError.name === 'AbortError') return
     // TODO(mock): 历史列表接口失败或无记录时保留此分支，作为离线演示降级。
-    experiments.value = mockExperiments.map(withAnnotations)
+    experiments.value = scenarioMocks.value.map(withAnnotations)
     source.value = 'mock'
     error.value = `${requestError.message}，已切换为演示实验记录`
   } finally { loading.value = false }

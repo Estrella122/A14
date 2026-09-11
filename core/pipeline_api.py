@@ -39,7 +39,9 @@ def pipeline_collection(request):
             limit = int(request.GET.get("limit", "100"))
         except ValueError:
             limit = 100
-        return _response({"ok": True, "data": list_runs(limit)})
+        scenario_id = request.GET.get("scenario_id", "").strip()
+        runs = list_runs(limit, scenario_id=scenario_id) if scenario_id else list_runs(limit)
+        return _response({"ok": True, "data": runs})
     upload = request.FILES.get("file")
     if upload is None:
         return _response({"ok": False, "message": "请选择CSV文件。"}, status=400)

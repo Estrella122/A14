@@ -33,6 +33,36 @@ def _number(value):
     return float(value) if isinstance(value, Decimal) else value
 
 
+def _benchmark_profile(project_code):
+    code = str(project_code or '').upper()
+    if code.startswith('DEB'):
+        return {
+            'dataset_source': '内置脱丁烷塔回流阶跃仿真基准 v3（可复现）',
+            'variable_roles': {
+                'manipulated': ['reflux_flow', 'reboiler_duty'],
+                'disturbance': ['feed_flow', 'feed_temperature', 'top_pressure'],
+                'controlled': ['bottom_c4'],
+            },
+        }
+    if code.startswith('DRY'):
+        return {
+            'dataset_source': '内置工业干燥器热风阶跃仿真基准 v3（可复现）',
+            'variable_roles': {
+                'manipulated': ['hot_air_temperature', 'air_flow'],
+                'disturbance': ['wet_feed_rate', 'feed_moisture'],
+                'controlled': ['product_moisture'],
+            },
+        }
+    return {
+        'dataset_source': '内置钢铁高炉工况扰动仿真基准 v3（可复现）',
+        'variable_roles': {
+            'manipulated': ['blast_flow', 'pulverized_coal_rate'],
+            'disturbance': ['ore_coke_ratio', 'hot_blast_temperature', 'top_pressure'],
+            'controlled': ['hot_metal_silicon'],
+        },
+    }
+
+
 def iteration_to_dict(run):
     payload = run.candidate_parameters or {}
     params = payload.get('params', {})
@@ -81,6 +111,7 @@ def study_to_dict(study, include_iterations=True):
     project_prefix = ''.join(character for character in study.project_code.split('-')[0].upper() if character.isalnum())[:4] or 'APC'
     strategy_version = f'OPT-{project_prefix}-S{study.pk:03d}-R{study.best_run.round_number:02d}' if study.best_run_id else None
     dataset_snapshot = benchmark_snapshot_id(study.project_code, study.random_seed)
+    benchmark_profile = _benchmark_profile(study.project_code)
     completed = study.status in ('completed', 'accepted')
     return {
         'contract_version': 'clso.study.v2',
@@ -88,17 +119,13 @@ def study_to_dict(study, include_iterations=True):
         'project_code': study.project_code,
         'project_name': study.project_name,
         'dataset_mode': study.dataset_mode,
-        'dataset_source': '内置加热炉阶跃仿真测试集 v3（可复现）',
+        'dataset_source': benchmark_profile['dataset_source'],
         'input_artifact': {
             'artifact_type': study.dataset_mode,
             'snapshot_id': dataset_snapshot,
             'project_code': study.project_code,
             'sampling_period_seconds': 10,
-            'variable_roles': {
-                'manipulated': ['gas_flow', 'air_flow'],
-                'disturbance': ['slab_speed', 'inlet_temperature', 'furnace_pressure'],
-                'controlled': ['outlet_temperature'],
-            },
+            'variable_roles': benchmark_profile['variable_roles'],
             'evaluator': 'ARX(1,1) · 18-step-free-run-v2',
         },
         'evaluation_profile': {

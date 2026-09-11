@@ -8,6 +8,7 @@ import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import { getAgentSkills, sendAgentMessage } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getLatestPipelineRun, uploadPipelineFile } from '../api/pipeline'
+import { getRunScenarioId } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
@@ -22,7 +23,7 @@ function readSavedChat() {
   } catch { return null }
 }
 const savedChat = readSavedChat()
-const welcomeMessage = { id: 1, role: 'agent', text: `你好，我已经连接 ${props.project.name} 的最近一次运行。你可以像和工程师交流一样直接提问；我会结合当前CSV的真实结果回答，只有你明确要求重跑时才会执行算法。`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+const welcomeMessage = { id: 1, role: 'agent', text: `你好，我已进入 ${props.project.name}。你可以像和工程师交流一样直接提问；当前场景存在真实运行时我会引用任务证据，只有你明确要求重跑时才会执行算法。`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 
 const prompt = ref(savedChat?.prompt ?? '')
 const isRunning = ref(false)
@@ -219,7 +220,7 @@ async function handleCsv(event) {
 
 onMounted(async () => {
   await Promise.allSettled([
-    getLatestPipelineRun().then((result) => { latestRun.value = result }),
+    getLatestPipelineRun().then((result) => { latestRun.value = getRunScenarioId(result) === props.project.scenarioId ? result : null }),
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
   ])
   scrollToLatest()

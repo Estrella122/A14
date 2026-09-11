@@ -4,7 +4,7 @@ import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
-import { announcePipelineUpdate, getLatestPipelineRun, rerunPipeline } from '../api/pipeline'
+import { announcePipelineUpdate, rerunPipeline } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
@@ -14,7 +14,7 @@ const recommendedConfig = { sample: '5 s', missing: '局部线性插值', method
 const config = ref({ ...recommendedConfig })
 const running = ref(false)
 const auditFilter = ref('all')
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? null)
 const liveMissing = computed(() => {
   const values = Object.values(liveCleaning.value?.missing_rate ?? {})
@@ -59,8 +59,8 @@ async function executeCleaning() {
   if (running.value) return
   running.value = true
   try {
-    const latest = await getLatestPipelineRun()
-    if (!latest) throw new Error('请先在“数据资产”页面上传CSV。')
+    const latest = latestRun.value
+    if (!latest) throw new Error('当前场景尚无运行数据，请先在“数据资产”页面上传CSV。')
     const snapshot = await rerunPipeline(latest.run_id, { resampleRule: config.value.sample.replace(' ', '') })
     latestRun.value = snapshot
     announcePipelineUpdate(snapshot)

@@ -421,6 +421,13 @@ class LivePipelineApiTests(SimpleTestCase):
         self.assertEqual([item['run_id'] for item in response.json()['data']], ['run_new', 'run_old'])
         mocked_list.assert_called_once_with(20)
 
+    @patch('core.pipeline_api.list_runs', return_value=[{'run_id': 'run_deb'}])
+    def test_pipeline_collection_filters_history_by_scenario(self, mocked_list):
+        response = self.client.get('/api/pipeline/runs/?scenario_id=debutanizer_column')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['data'][0]['run_id'], 'run_deb')
+        mocked_list.assert_called_once_with(100, scenario_id='debutanizer_column')
+
     def test_pipeline_rejects_non_csv_upload(self):
         upload = SimpleUploadedFile('notes.txt', b'not a csv', content_type='text/plain')
         response = self.client.post('/api/pipeline/runs/', {'file': upload})
