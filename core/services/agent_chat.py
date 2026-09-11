@@ -8,6 +8,7 @@ from core.skills import execute_skill_plan, plan_skills
 
 from .expert_qa import answer_expert_question
 from .pipeline import PipelineError, get_run, rerun_pipeline
+from core.skills.catalog import resolve_scene_family
 
 
 INTENTS = [
@@ -70,14 +71,7 @@ def _requires_execution(message: str) -> bool:
 
 
 def _scenario_family(name: str | None) -> str | None:
-    value = str(name or "")
-    if any(term in value for term in ("钢铁高炉", "炼铁高炉", "铁水")):
-        return "钢铁高炉"
-    if any(term in value for term in ("脱丁烷", "精馏塔")):
-        return "炼油脱丁烷精馏塔"
-    if any(term in value for term in ("工业干燥器", "干燥机", "烘干机")):
-        return "工业干燥器"
-    return None
+    return resolve_scene_family(name)
 
 
 def _compound_result(snapshot: dict[str, Any], degraded: bool) -> tuple[str, list[dict[str, Any]], list[str]]:

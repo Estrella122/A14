@@ -1,0 +1,11 @@
+{
+  "scene": "steel_industry_energy",
+  "objective": "分析能耗趋势",
+  "dataset_ref": "caller://dataset/42",
+  "timestamp": "timestamp",
+  "sample_size": 720,
+  "mapping_confidence": 0.98,
+  "fields": [
+    {"original_field": "Usage_kWh", "standard_field": "energy_usage", "semantic_type": "energy", "unit": "kWh", "data_type": "float", "mapping_confidence": 0.98}
+  ]
+}

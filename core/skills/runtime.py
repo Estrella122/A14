@@ -10,7 +10,8 @@ from uuid import uuid4
 
 from django.conf import settings
 
-from .catalog import CATEGORIES, SKILLS, SKILL_MAP
+from .analysis_plan import build_analysis_plan
+from .catalog import CATEGORIES, SKILLS, SKILL_MAP, identify_scene_from_text
 from .routing import select
 
 
@@ -54,24 +55,19 @@ def list_skills() -> dict[str, Any]:
 
 
 def _entities(message: str) -> dict[str, Any]:
-    equipment = re.search(r"(\d+)\s*号\s*(钢铁高炉|炼铁高炉|高炉|脱丁烷塔|脱丁烷精馏塔|精馏塔|工业干燥器|干燥器|干燥机|烘干机|塔|炉)", message)
-    scene_rules = (
-        (("钢铁高炉", "炼铁高炉", "高炉", "铁水", "铁水硅"), "钢铁高炉铁水质量预测", "blast_furnace"),
-        (("工业干燥器", "干燥器", "干燥机", "烘干机", "热风干燥"), "工业干燥器", "industrial_dryer"),
-        (("脱丁烷塔", "脱丁烷精馏塔", "炼油精馏"), "炼油脱丁烷精馏塔", "debutanizer_column"),
-    )
-    scenario = scenario_id = None
-    for terms, label, identifier in scene_rules:
-        if any(term in message for term in terms):
-            scenario, scenario_id = label, identifier
-            break
-    if scenario is None and equipment:
-        generic = equipment.group(2)
-        if generic in {"塔", "精馏塔"}:
-            scenario, scenario_id = "炼油脱丁烷精馏塔", "debutanizer_column"
+    equipment = re.search(r"(\d+)\s*号\s*(钢铁高炉|炼铁高炉|脱丁烷塔|脱丁烷精馏塔|精馏塔|工业干燥器|干燥器|干燥机|烘干机|高炉|塔|炉)", message)
+    equipment_id = f"{equipment.group(1)}号{equipment.group(2)}" if equipment else None
+    scene_id, scene_name, _scene_family = identify_scene_from_text(message, equipment_id)
+    # 兼容规则只做意图解码，不替换现网三套执行场景以外的主流程约束。
+    selected_scene_id = scene_id if scene_id in {"blast_furnace", "debutanizer_column", "industrial_dryer"} else None
+    selected_scene = scene_name
+    if not selected_scene and equipment_id and equipment_id.endswith("塔"):
+        selected_scene = "炼油脱丁烷精馏塔"
+        selected_scene_id = "debutanizer_column"
     return {
-        "equipment_id": f"{equipment.group(1)}号{equipment.group(2)}" if equipment else None,
-        "scenario": scenario, "scenario_id": scenario_id,
+        "equipment_id": equipment_id,
+        "scenario": selected_scene,
+        "scenario_id": selected_scene_id,
     }
 
 
@@ -182,14 +178,17 @@ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
                  "negative_clauses": [], "error": type(exc).__name__}
     direct, relevance_scores = route["direct"], route["scores"]
     candidates = [dict(candidate, reason="训练模型候选", selected=candidate["skill_id"] in direct)
-                  for decision in route["decisions"] for candidate in decision["candidates"]]
+                 for decision in route["decisions"] for candidate in decision["candidates"]]
     execution_mode = route["mode"]
+    detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
+    analysis_plan = build_analysis_plan(text, list(direct), scene=detected_scene_id or "unknown_scene")
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": route["needs_clarification"],
                      "unresolved_clauses": route["unresolved_clauses"],
                      "routing_decisions": route["decisions"],
                      "excluded_skills": sorted(route["denied"]),
-                     "full_pipeline_requested": route["full_pipeline_requested"]})
+                     "full_pipeline_requested": route["full_pipeline_requested"],
+                     "analysis_plan": analysis_plan})
     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
     if execution_mode == "execute":
         runtime_skills.add("execution_supervisor_replanner")

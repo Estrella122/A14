@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Industrial Analysis Result",
+  "type": "object",
+  "required": ["analysis_plan", "facts", "findings", "hypotheses", "limitations"],
+  "properties": {
+    "analysis_plan": {"type": "object"},
+    "facts": {"type": "array", "items": {"$ref": "#/$defs/conclusion"}},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/conclusion"}},
+    "hypotheses": {"type": "array", "items": {"$ref": "#/$defs/conclusion"}},
+    "limitations": {"type": "array", "items": {"$ref": "#/$defs/conclusion"}}
+  },
+  "$defs": {"conclusion": {"type": "object", "required": ["statement", "confidence", "evidence"], "properties": {"statement": {"type": "string"}, "confidence": {"type": ["number", "string"]}, "evidence": {"type": "array"}}}}
+}

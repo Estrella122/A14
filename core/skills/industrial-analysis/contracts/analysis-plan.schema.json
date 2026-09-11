@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Industrial Analysis Plan",
+  "type": "object",
+  "required": ["scene", "selected_capabilities", "skipped_capabilities", "result_contract"],
+  "properties": {
+    "scene": {"type": "string"},
+    "data_quality": {},
+    "selected_capabilities": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "skipped_capabilities": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "result_contract": {"type": "object"}
+  },
+  "$defs": {"decision": {"type": "object", "required": ["capability", "requires", "reason"], "properties": {"capability": {"type": "string"}, "requires": {"type": "array", "items": {"type": "string"}}, "reason": {"type": "string"}, "confidence": {"enum": ["low", "medium", "high"]}}}}
+}
