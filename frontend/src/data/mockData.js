@@ -1,5 +1,5 @@
 // TODO(mock): 本文件集中管理后端暂未提供的数据。接口返回真实数据后，组件会优先使用真实结果。
-export const mockAgentTrace = {
+const baseMockAgentTrace = {
   source: 'mock',
   total_duration_ms: 4280,
   nodes: [
@@ -14,6 +14,22 @@ export const mockAgentTrace = {
   ],
   toolchain: ['数据清洗', '动态筛选', '时滞解耦', '系统辨识', '指标评估'],
 }
+
+const traceProfiles = {
+  blast_furnace: { scene: '钢铁高炉', intent: 'hot_metal_quality_prediction', instruction: '提取高炉高信噪比动态数据并闭环寻找最佳铁水硅模型' },
+  debutanizer_column: { scene: '炼油脱丁烷塔', intent: 'bottom_c4_soft_sensor', instruction: '提取脱丁烷塔高信噪比动态数据并闭环寻找最佳塔底 C4 模型' },
+  industrial_dryer: { scene: '工业回转干燥器', intent: 'product_moisture_identification', instruction: '提取干燥器高信噪比动态数据并闭环寻找最佳产品含水率模型' },
+}
+
+// TODO(mock): 无真实 run_id 时按当前场景生成同结构演示轨迹；接入 trace API 后优先展示真实节点输入输出。
+export const mockAgentTraceByScenario = Object.fromEntries(Object.entries(traceProfiles).map(([scenarioId, profile]) => [scenarioId, {
+  ...baseMockAgentTrace,
+  nodes: baseMockAgentTrace.nodes.map((node) => {
+    if (node.id === 'instruction') return { ...node, input: { message: profile.instruction } }
+    if (node.id === 'intent') return { ...node, input: { ...node.input, scene: profile.scene }, output: { ...node.output, intent: profile.intent } }
+    return { ...node }
+  }),
+}]))
 
 export const pipelineNodeTypes = [
   { type: 'source', label: '数据源', icon: 'database', description: 'CSV 上传 / 仿真生成', color: '#0ea5e9', defaults: { source: 'CSV上传', file: 'historian.csv' } },

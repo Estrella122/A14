@@ -43,11 +43,11 @@ const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
 let runTimer
 
-const promptTemplates = [
-  '提取 1 号塔高信噪比的动态数据',
-  '分析当前模型的 R²、RMSE 和残差是否可靠',
-  '以稳健性优先重新执行闭环寻优',
-]
+const promptTemplates = computed(() => ({
+  blast_furnace: ['提取高炉高信噪比动态数据并评估铁水硅模型', '判断矿焦比和鼓风流量是否存在共线性', '以稳健性优先重新执行闭环寻优'],
+  debutanizer_column: ['提取脱丁烷塔高信噪比动态数据', '评估回流量到塔底 C4 浓度的时滞是否可信', '比较精馏塔候选模型的残差白噪声检验'],
+  industrial_dryer: ['提取干燥器热风阶跃动态数据', '分析热风温度与产品含水率的动态响应', '检查多变量干燥模型的可辨识性与共线性'],
+}[props.project.scenarioId] ?? ['提取当前场景高信噪比动态数据', '分析当前模型的 R²、RMSE 和残差是否可靠', '以稳健性优先重新执行闭环寻优']))
 
 const iconMap = { intent: 'spark', standardization: 'network', cleaning: 'clean', selection: 'segments', modeling: 'model', optimization: 'loop', review: 'shield', report: 'report' }
 const skillCategoryIcon = { orchestration: 'spark', data: 'database', selection: 'segments', modeling: 'model', delivery: 'report' }
@@ -350,7 +350,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
       </div>
     </section>
 
-    <AgentTracePanel :run-id="contextRunId === '尚无任务' ? '' : contextRunId" :running="isRunning" />
+    <AgentTracePanel :run-id="contextRunId === '尚无任务' ? '' : contextRunId" :running="isRunning" :scenario-id="project.scenarioId" />
 
     <section class="panel console-panel">
       <div class="console-header"><div><i class="console-dot red"></i><i class="console-dot amber"></i><i class="console-dot green"></i></div><strong>AGENT TRACE · {{ contextRunId }}</strong><button type="button" @click="logsNewestFirst = !logsNewestFirst">{{ logsNewestFirst ? '最新优先' : '时间顺序' }}</button></div>

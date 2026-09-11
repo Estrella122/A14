@@ -192,7 +192,7 @@ onBeforeUnmount(() => {
           >
             <AppIcon :name="item.icon" />
             <span>{{ item.label }}</span>
-            <i v-if="item.path === '/closed-loop-optimization/'" class="nav-live-dot" aria-label="正在运行"></i>
+            <i v-if="item.path === '/closed-loop-optimization/' && activeLatestRun?.status === 'running'" class="nav-live-dot" aria-label="正在运行"></i>
           </a>
         </div>
       </nav>

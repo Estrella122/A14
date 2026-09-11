@@ -3,9 +3,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { getAgentTrace } from '../api/agent'
-import { mockAgentTrace } from '../data/mockData'
+import { mockAgentTraceByScenario } from '../data/mockData'
 
-const props = defineProps({ runId: { type: String, default: '' }, running: { type: Boolean, default: false } })
+const props = defineProps({ runId: { type: String, default: '' }, running: { type: Boolean, default: false }, scenarioId: { type: String, default: 'blast_furnace' } })
 const trace = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -32,7 +32,8 @@ async function loadTrace() {
   } catch (requestError) {
     if (requestError.name === 'AbortError') return
     // TODO(mock): trace API 请求失败或无运行记录时使用一次完整执行链，保证离线演示可用。
-    trace.value = { ...mockAgentTrace, nodes: mockAgentTrace.nodes.map((node) => ({ ...node })) }
+    const fallback = mockAgentTraceByScenario[props.scenarioId] ?? mockAgentTraceByScenario.blast_furnace
+    trace.value = { ...fallback, nodes: fallback.nodes.map((node) => ({ ...node })) }
     error.value = '推理轨迹接口待接入，当前展示同结构演示数据'
   } finally {
     loading.value = false
@@ -46,6 +47,7 @@ function stateOf(node, index) {
 }
 
 watch(() => props.runId, loadTrace, { immediate: true })
+watch(() => props.scenarioId, loadTrace)
 watch(() => props.running, (value) => {
   window.clearInterval(stepTimer)
   if (value) {
