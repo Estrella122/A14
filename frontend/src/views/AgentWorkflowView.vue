@@ -7,10 +7,12 @@ import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import { getAgentSkills, sendAgentMessage } from '../api/agent'
-import { announcePipelineUpdate, artifactUrl, getLatestPipelineRun, uploadPipelineFile } from '../api/pipeline'
+import { announcePipelineUpdate, artifactUrl, uploadPipelineFile } from '../api/pipeline'
+import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 
 const chatStorageKey = `processpilot-chat-${props.project.id}`
 function readSavedChat() {
@@ -28,7 +30,6 @@ const prompt = ref(savedChat?.prompt ?? '')
 const isRunning = ref(false)
 const runProgress = ref(0)
 const currentNode = ref(0)
-const latestRun = ref(null)
 const chatThread = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -43,9 +44,9 @@ const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [.
 let runTimer
 
 const promptTemplates = [
-  '提取 1 号塔高信噪比的动态数据',
-  '分析当前模型的 R²、RMSE 和残差是否可靠',
-  '以稳健性优先重新执行闭环寻优',
+  '提取高炉鼓风与富氧变化显著、铁水硅响应清晰的高信噪比动态数据',
+  '检查铁水Si化验值与过程变量的时间对齐是否使用了未来信息',
+  '分析热风压力、冷风压力和炉身温度的共线性，并解释变量保留依据',
 ]
 
 const iconMap = { intent: 'spark', standardization: 'network', cleaning: 'clean', selection: 'segments', modeling: 'model', optimization: 'loop', review: 'shield', report: 'report' }
@@ -90,9 +91,8 @@ function stepNumber(index) {
 }
 
 function skillActivityText(skill) {
-  if (skill.status === 'unavailable') return '未执行/缺证据'
   if (skill.status === 'blocked') return '阻断'
-  return skill.activity === 'executed' ? '旧版执行记录，未核验' : skill.activity === 'read' ? '取证' : skill.activity === 'planned' ? '规划' : '调用'
+  return skill.activity === 'executed' ? '执行' : skill.activity === 'read' ? '取证' : skill.activity === 'planned' ? '规划' : '调用'
 }
 
 async function scrollToLatest() {
@@ -137,7 +137,7 @@ async function runWorkflow() {
     }
     runProgress.value = 100
     currentNode.value = Math.max(planNodes.value.length - 1, 0)
-    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : result.executed ? 'Agent 已执行并刷新任务' : 'Agent 分析完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key} · 规则匹配分 ${(result.intent.confidence * 100).toFixed(0)}%` })
+    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : result.executed ? 'Agent 已执行并刷新任务' : 'Agent 分析完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key} · 置信度 ${(result.intent.confidence * 100).toFixed(0)}%` })
   } catch (error) {
     messages.value.push({ id: Date.now() + 1, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'Agent 请求失败', message: error.message })
@@ -177,7 +177,7 @@ async function handleCsv(event) {
   clearInterval(runTimer)
   runTimer = window.setInterval(() => { runProgress.value = Math.min(90, runProgress.value + 5) }, 300)
   try {
-    const snapshot = await uploadPipelineFile(file, { instruction: `${props.project.scene}，由Agent总控从头执行并生成分析报告` })
+    const snapshot = await uploadPipelineFile(file, { scenarioId: props.project.scenarioId ?? 'auto', instruction: `${props.project.scene}，由Agent总控从头执行并生成分析报告`, resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     // A successfully created CSV run starts a fresh evidence conversation.
     // Failed uploads keep the previous conversation so troubleshooting context is not lost.
     prompt.value = ''
@@ -219,7 +219,6 @@ async function handleCsv(event) {
 
 onMounted(async () => {
   await Promise.allSettled([
-    getLatestPipelineRun().then((result) => { latestRun.value = result }),
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
   ])
   scrollToLatest()
@@ -242,7 +241,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="agent" />
+    <IntegratedEvidencePanel module="agent" :run="latestRun" />
 
     <AgentSkillCenter
       :catalog="skillCatalog"
@@ -266,8 +265,8 @@ onBeforeUnmount(() => clearInterval(runTimer))
               <p>{{ message.text }}</p>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">
-                <div><AppIcon name="network" :size="13" /><strong v-if="message.skillSummary?.read != null">Skill 证据核验 · 取证 {{ message.skillSummary?.read ?? 0 }} · 规划 {{ message.skillSummary?.planned ?? 0 }} · 缺证据 {{ message.skillSummary?.unavailable ?? 0 }} · 阻断 {{ message.skillSummary?.blocked ?? 0 }}</strong><strong v-else>历史 Skill 记录（未经新版证据核验）</strong><code>{{ message.skillRunId }}</code></div>
-                <span v-for="skill in message.skills" :key="skill.id" :title="skill.id" :class="{ blocked: skill.status === 'blocked' || skill.status === 'unavailable' }"><AppIcon :name="skill.status === 'blocked' || skill.status === 'unavailable' ? 'alert' : 'check'" :size="11" />{{ skillActivityText(skill) }} · {{ skill.name }}</span>
+                <div><AppIcon name="network" :size="13" /><strong>本轮编排 {{ message.skills.length }} 个 Skill · 完成 {{ message.skillSummary?.success ?? message.skills.length }} · 阻断 {{ message.skillSummary?.blocked ?? 0 }}</strong><code>{{ message.skillRunId }}</code></div>
+                <span v-for="skill in message.skills" :key="skill.id" :title="skill.id" :class="{ blocked: skill.status === 'blocked' }"><AppIcon :name="skill.status === 'blocked' ? 'alert' : 'check'" :size="11" />{{ skillActivityText(skill) }} · {{ skill.name }}</span>
               </div>
               <div v-if="message.deliverables?.length" class="message-deliverables">
                 <strong><AppIcon name="download" :size="12" />结果产物</strong>
@@ -310,7 +309,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
 
       <aside class="agent-side-stack">
         <section class="panel intent-panel">
-          <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">规则匹配分 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
+          <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">置信度 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
           <dl class="intent-list">
             <div><dt>当前任务</dt><dd><code>{{ contextRunId }}</code></dd></div>
             <div><dt>识别意图</dt><dd>{{ intentLabels[intent.key] ?? intent.key }}</dd></div>

@@ -7,7 +7,7 @@ import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import { formatNumber } from '../data/projectData'
 import { announcePipelineUpdate, artifactUrl, rerunPipeline, uploadPipelineFile } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
-import { buildFurnaceSimulationCsv } from '../utils/simulationCsv'
+import { buildBlastFurnaceSimulationCsv } from '../utils/simulationCsv'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
@@ -17,14 +17,19 @@ const isGenerating = ref(false)
 const uploading = ref(false)
 const dragActive = ref(false)
 const generatedDataset = ref(null)
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const simulation = ref({ steady: 45, step: 18, noise: 3, anomalies: 12 })
 const fileFilter = ref('all')
-const chartRange = ref('6h')
+const chartRange = ref(props.project.scenarioId === 'blast_furnace' ? '7d' : '6h')
 const mappingDraft = ref({})
 const reviewScenario = ref('')
 
 function buildFiles(project) {
+  if (project.scenarioId === 'blast_furnace') return [
+    { id: 1, name: '1_blast_furnace_data_first_dataset.xlsx', source: 'Mendeley Data · 原始过程数据', rows: 29602, variables: 27, size: '公开数据', period: '2013-01-01 — 2016-05-18', quality: 100, status: '原始只读' },
+    { id: 2, name: 'Si laboratory measurements', source: '同源实验室化验', rows: 16589, variables: 1, size: '非等间隔', period: '中位间隔约 99 min', quality: 100, status: '因果对齐' },
+    { id: 3, name: 'blast_furnace_real_720h.csv', source: '真实数据演示切片', rows: 720, variables: 32, size: '约 160 KB', period: '2013-01-01 — 2013-01-30', quality: 97.6, status: '可直接运行', downloadUrl: project.source?.demoUrl },
+  ]
   return [
     { id: 1, name: `${project.code}_historian.csv`, source: 'DCS Historian', rows: project.rows, variables: project.variables, size: '18.6 MB', period: project.timeRange, quality: 96.4, status: '已解析' },
     { id: 2, name: `${project.code}_batch_context.csv`, source: 'MES', rows: 8640, variables: 8, size: '2.4 MB', period: project.timeRange, quality: 98.8, status: '已对齐' },
@@ -61,7 +66,7 @@ function setFileFilter(filter) {
 
 function setChartRange(range) {
   chartRange.value = range
-  emit('notify', { tone: 'info', title: '时序窗口已切换', message: `当前预览范围：${range === '6h' ? '6 小时' : range === '24h' ? '24 小时' : '全量数据'}。` })
+  emit('notify', { tone: 'info', title: '时序窗口已切换', message: `当前预览范围：${range === '7d' ? '7 天' : range === '30d' ? '30 天' : '全量数据'}。` })
 }
 
 function chooseFile() {
@@ -87,7 +92,7 @@ async function runPipelineFile(file, pending = createPendingFile(file)) {
   if (!files.value.some((item) => item.id === pending.id)) files.value.unshift(pending)
   uploading.value = true
   try {
-    latestRun.value = await uploadPipelineFile(file, { instruction: `${props.project.scene} APC建模` })
+    latestRun.value = await uploadPipelineFile(file, { scenarioId: props.project.scenarioId ?? 'auto', instruction: `${props.project.scene} APC建模`, resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     const standard = latestRun.value.results?.standardization
     const quality = latestRun.value.results?.cleaning?.overall_score
     pending.rows = latestRun.value.results?.cleaning?.cleaned_row_count ?? standard?.source_row_count ?? 0
@@ -168,7 +173,7 @@ async function generateSimulation(action = 'download') {
   isGenerating.value = true
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 80))
-    const result = buildFurnaceSimulationCsv(simulation.value)
+    const result = buildBlastFurnaceSimulationCsv(simulation.value)
     const file = new File([result.csv], result.name, { type: 'text/csv;charset=utf-8' })
     const pending = createPendingFile(file, {
       source: '仿真生成器',
@@ -217,7 +222,13 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="standardization" />
+    <section v-if="project.scenarioId === 'blast_furnace'" class="real-source-banner">
+      <span class="real-source-icon"><AppIcon name="shield" :size="20" /></span>
+      <div><strong>真实高炉数据已接入</strong><p>{{ project.source.name }} · {{ project.source.author }} · DOI {{ project.source.doi }} · {{ project.source.license }}</p></div>
+      <a :href="project.source.demoUrl" download><AppIcon name="download" :size="15" />下载 720 h 真实演示 CSV</a>
+    </section>
+
+    <IntegratedEvidencePanel module="standardization" :run="latestRun" />
 
     <section v-if="latestRun" class="panel pipeline-run-panel">
       <div class="section-heading compact"><div><span class="section-kicker">真实执行任务</span><h2>{{ latestRun.original_name }}</h2></div><StatusPill :tone="latestRun.status === 'completed' ? 'success' : 'warning'" dot>{{ latestRun.status === 'completed' ? '全部完成' : '运行异常' }}</StatusPill></div>
@@ -267,7 +278,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
                 <td class="period-cell">{{ file.period }}</td>
                 <td><span v-if="file.quality" class="quality-score"><i :style="{ '--score': `${file.quality}%` }"></i>{{ file.quality }}</span><span v-else>—</span></td>
                 <td><StatusPill :tone="file.status === '待解析' ? 'warning' : 'success'" dot>{{ file.status }}</StatusPill></td>
-                <td><button class="icon-button danger-on-hover" type="button" :aria-label="`删除 ${file.name}`" @click="removeFile(file)"><AppIcon name="trash" /></button></td>
+                <td><a v-if="file.downloadUrl" class="icon-button" :href="file.downloadUrl" download :aria-label="`下载 ${file.name}`"><AppIcon name="download" /></a><button v-else class="icon-button danger-on-hover" type="button" :aria-label="`删除 ${file.name}`" @click="removeFile(file)"><AppIcon name="trash" /></button></td>
               </tr>
             </tbody>
           </table>
@@ -282,7 +293,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
       <section class="panel simulation-panel">
         <div class="section-heading compact"><div><span class="section-kicker">赛题演示工具</span><h2>仿真测试集生成器</h2></div><StatusPill tone="brand">内置</StatusPill></div>
-        <p class="panel-description">生成包含长周期稳态、明确阶跃响应和异常干扰的合成工业数据。</p>
+        <p class="panel-description">生成高炉鼓风、富氧、矿焦比与铁水硅含量的合成压力测试数据。该数据不冒充真实生产数据。</p>
         <div class="control-stack">
           <label><span>稳态占比 <strong>{{ simulation.steady }}%</strong></span><input v-model="simulation.steady" type="range" min="20" max="75" /></label>
           <label><span>阶跃幅度 <strong>{{ simulation.step }}%</strong></span><input v-model="simulation.step" type="range" min="5" max="35" /></label>
@@ -307,7 +318,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
     <div class="content-grid content-grid-7-5">
       <section class="panel timeseries-panel">
-        <div class="section-heading compact"><div><span class="section-kicker">多变量时序预览</span><h2>{{ project.target }}与主要输入变量 · {{ chartRange === '6h' ? '6 h' : chartRange === '24h' ? '24 h' : '全量' }}</h2></div><div class="chart-actions"><button :class="{ 'is-active': chartRange === '6h' }" type="button" @click="setChartRange('6h')">6 h</button><button :class="{ 'is-active': chartRange === '24h' }" type="button" @click="setChartRange('24h')">24 h</button><button :class="{ 'is-active': chartRange === 'all' }" type="button" @click="setChartRange('all')">全量</button></div></div>
+        <div class="section-heading compact"><div><span class="section-kicker">多变量时序预览</span><h2>{{ project.target }}与主要输入变量 · {{ chartRange === '7d' ? '7 d' : chartRange === '30d' ? '30 d' : '全量' }}</h2></div><div class="chart-actions"><button :class="{ 'is-active': chartRange === '7d' }" type="button" @click="setChartRange('7d')">7 d</button><button :class="{ 'is-active': chartRange === '30d' }" type="button" @click="setChartRange('30d')">30 d</button><button :class="{ 'is-active': chartRange === 'all' }" type="button" @click="setChartRange('all')">全量</button></div></div>
         <div class="chart-legend"><span><i class="legend-dot target"></i>{{ project.target }}</span><span><i class="legend-dot mv"></i>{{ project.mv }}</span><span><i class="legend-dot dv"></i>{{ project.disturbance }}</span></div>
         <svg class="line-chart" viewBox="0 0 760 250" role="img" :aria-label="`${project.target}、${project.mv}和${project.disturbance}的时序趋势`">
           <defs><linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity=".24" /><stop offset="100%" stop-color="#3b82f6" stop-opacity="0" /></linearGradient></defs>
@@ -316,26 +327,30 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
           <path class="chart-line target-line" d="M50 168 C90 166,112 150,145 155 S205 174,240 144 S290 88,326 100 S380 125,416 92 S480 48,520 70 S585 138,625 118 S690 72,740 88" />
           <path class="chart-line mv-line" d="M50 188 L145 188 L150 150 L240 150 L246 106 L360 106 L366 72 L520 72 L526 130 L650 130 L656 96 L740 96" />
           <path class="chart-line dv-line" d="M50 138 C120 132 155 142 220 135 S330 128 400 138 S520 145 590 126 S675 134 740 122" />
-          <g class="chart-labels"><text x="50" y="234">07-01 00:00</text><text x="188" y="234">01:12</text><text x="326" y="234">02:24</text><text x="464" y="234">03:36</text><text x="602" y="234">04:48</text><text x="700" y="234">06:00</text></g>
+          <g class="chart-labels"><text x="50" y="234">01-01</text><text x="188" y="234">01-07</text><text x="326" y="234">01-13</text><text x="464" y="234">01-19</text><text x="602" y="234">01-25</text><text x="700" y="234">01-30</text></g>
         </svg>
       </section>
 
       <section class="panel schema-panel">
         <div class="section-heading compact"><div><span class="section-kicker">自动字段识别</span><h2>变量角色与数据质量</h2></div><button class="text-button" type="button" @click="emit('navigate', '/standard-check/')">进入规整 <AppIcon name="arrow" :size="15" /></button></div>
-        <div class="role-summary"><div><span class="role-dot cv"></span><strong>CV</strong><small>2 被控变量</small></div><div><span class="role-dot mv"></span><strong>MV</strong><small>7 操纵变量</small></div><div><span class="role-dot dv"></span><strong>DV</strong><small>9 扰动变量</small></div><div><span class="role-dot ff"></span><strong>FF</strong><small>18 特征变量</small></div></div>
+        <div class="role-summary"><div><span class="role-dot cv"></span><strong>CV</strong><small>1 铁水质量目标</small></div><div><span class="role-dot mv"></span><strong>MV</strong><small>4 操作与配料变量</small></div><div><span class="role-dot dv"></span><strong>PV</strong><small>22 过程状态变量</small></div><div><span class="role-dot ff"></span><strong>QA</strong><small>3 化验对齐证据</small></div></div>
         <div class="quality-list">
           <div><span>时间戳完整性</span><strong>100%</strong><i><b style="width:100%"></b></i></div>
-          <div><span>字段映射覆盖率</span><strong>97.2%</strong><i><b style="width:97.2%"></b></i></div>
-          <div><span>跨源时间对齐率</span><strong>98.6%</strong><i><b style="width:98.6%"></b></i></div>
+          <div><span>核心字段映射覆盖率</span><strong>100%</strong><i><b style="width:100%"></b></i></div>
+          <div><span>化验因果对齐率</span><strong>97.6%</strong><i><b style="width:97.6%"></b></i></div>
           <div class="is-warning"><span>异常规则命中</span><strong>{{ project.abnormal }}%</strong><i><b :style="{ width: `${project.abnormal * 12}%` }"></b></i></div>
         </div>
-        <div class="agent-tip"><span><AppIcon name="spark" /></span><p><strong>Agent 建议</strong>先隔离 2 个压力尖峰，再按 {{ project.sample }} 重采样进入动态优选，可避免异常点抬高斜率能量。</p></div>
+        <div class="agent-tip"><span><AppIcon name="spark" /></span><p><strong>Agent 建议</strong>化验值仅按时间向后匹配，保留数据龄期后再按 {{ project.sample }} 重采样；训练、验证和测试集必须按时间切分。</p></div>
       </section>
     </div>
   </div>
 </template>
 
 <style scoped>
+.real-source-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 13px 16px; border: 1px solid #a7e0ca; border-radius: 10px; background: linear-gradient(90deg, #effcf7, #f8fffc); }
+.real-source-icon { display: grid; place-items: center; width: 38px; height: 38px; color: #087b58; border-radius: 9px; background: #d9f7eb; }
+.real-source-banner strong, .real-source-banner p { display: block; }.real-source-banner strong { color: #0f513d; font-size: 12px; }.real-source-banner p { margin-top: 3px; color: #507267; font-size: 9px; }
+.real-source-banner a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; color: #087b58; font-size: 10px; font-weight: 700; text-decoration: none; border: 1px solid #8bd3bb; border-radius: 7px; background: #fff; }
 .pipeline-stage-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .pipeline-stage-grid article { min-height: 92px; padding: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
 .pipeline-stage-grid span, .pipeline-stage-grid small { display: block; }
@@ -356,6 +371,6 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 .simulation-result strong { color: #14532d; font-size: 11px; }
 .simulation-result small { margin-top: 3px; color: #64748b; font-size: 8px; }
 .simulation-result button { color: #047857; font-size: 9px; white-space: nowrap; }
-@media (max-width: 900px) { .pipeline-stage-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .pipeline-stage-grid { grid-template-columns: 1fr 1fr; }.real-source-banner { grid-template-columns: auto 1fr; }.real-source-banner a { grid-column: 1 / -1; justify-content: center; } }
 @media (max-width: 520px) { .pipeline-stage-grid { grid-template-columns: 1fr; } }
 </style>

@@ -8,6 +8,21 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
     rng = np.random.default_rng(seed)
     time = pd.date_range("2026-01-01 08:00:00", periods=rows, freq="min")
     x = np.arange(rows)
+    if scenario_id == "blast_furnace":
+        # TODO(mock): 仅用于接口联调和压力测试；正式演示请使用内置的 Mendeley 真实高炉数据。
+        time = pd.date_range("2026-01-01", periods=rows, freq="h")
+        blast = 4000 + 180 * np.sin(x / 31) + rng.normal(0, 35, rows)
+        oxygen = 9200 + 0.9 * (blast - 4000) + rng.normal(0, 110, rows)
+        hot_blast_temp = 1080 + 22 * np.sin((x - 4) / 45) + rng.normal(0, 4, rows)
+        ore_coke = 3.25 + 0.12 * np.sin(x / 70) + rng.normal(0, 0.025, rows)
+        silicon = 0.58 - 0.00008 * (hot_blast_temp - 1080) - 0.055 * (ore_coke - 3.25) + 0.018 * np.sin((x - 8) / 28) + rng.normal(0, 0.018, rows)
+        return pd.DataFrame({
+            "dt": time, "Fb": blast, "Ph": 3.35 + rng.normal(0, 0.05, rows),
+            "Pc": 3.58 + rng.normal(0, 0.05, rows), "Fo": oxygen,
+            "dP": 1.42 + rng.normal(0, 0.035, rows), "Pt": 1.85 + rng.normal(0, 0.025, rows),
+            "Th": hot_blast_temp, "CO2": 19.5 + rng.normal(0, 0.35, rows),
+            "H2": 3.1 + rng.normal(0, 0.12, rows), "R": ore_coke, "Si": silicon,
+        })
     if scenario_id == "industrial_dryer":
         # Coupled 3x3 dynamic benchmark. This is synthetic acceptance data and is
         # deliberately labelled as such wherever it is exported.

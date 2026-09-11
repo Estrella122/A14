@@ -18,14 +18,16 @@ const props = defineProps({
   config: { type: Object, default: () => ({}) },
 })
 const emit = defineEmits(['notify', 'strategy-accepted'])
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const pipelineOptimization = computed(() => latestRun.value?.results?.optimization ?? null)
+const isBlastFurnace = computed(() => props.project.scenarioId === 'blast_furnace')
+const pipelineParameterUnit = computed(() => study.value?.pipeline_run_id ? '采样点' : 's')
 
 const defaultCandidate = {
   dynamic_threshold: 0.24,
   outlier_sigma: 3.8,
   collinearity_threshold: 0.94,
-  lag_max_seconds: 60,
+  lag_max_seconds: Number(props.project.maxLag ?? 60),
   min_segment_minutes: 4,
 }
 
@@ -35,10 +37,10 @@ const configuredWeights = {
   cost: Number(props.config.objectiveWeights?.cost ?? 0.10),
 }
 const configuredConstraints = {
-  target_fit: Number(props.config.constraints?.target_fit ?? 0.75),
-  min_coverage: Number(props.config.constraints?.min_coverage ?? 0.70),
-  max_rmse: Number(props.config.constraints?.max_rmse ?? 6.0),
-  min_valid_segments: Number(props.config.constraints?.min_valid_segments ?? 5),
+  target_fit: Number(props.config.constraints?.target_fit ?? (isBlastFurnace.value ? 0.50 : 0.75)),
+  min_coverage: Number(props.config.constraints?.min_coverage ?? (isBlastFurnace.value ? 0.15 : 0.70)),
+  max_rmse: Number(props.config.constraints?.max_rmse ?? (isBlastFurnace.value ? 0.15 : 6.0)),
+  min_valid_segments: Number(props.config.constraints?.min_valid_segments ?? (isBlastFurnace.value ? 1 : 5)),
 }
 
 const params = ref({ ...defaultCandidate, ...(props.config.initialCandidate ?? {}) })
@@ -852,7 +854,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
         <div class="section-heading compact"><div><span class="section-kicker">标准化参数接口</span><h2>{{ study?.pipeline_run_id ? '总控真实搜索参数' : '搜索空间与首轮候选' }}</h2></div><StatusPill tone="brand">{{ study?.pipeline_run_id ? '2D REAL' : '5D Search' }}</StatusPill></div>
         <div v-if="study?.pipeline_run_id" class="optimization-controls">
           <label><span>动态段数量 <strong>Top {{ params.top_k }}</strong></span><input :value="params.top_k" disabled type="range" min="2" max="20" step="1" /><small><span>Top 2</span><span>Top 20</span></small></label>
-          <label><span>时滞搜索上限 <strong>{{ params.lag_max_seconds }} s</strong></span><input :value="params.lag_max_seconds" disabled type="range" min="10" max="600" step="5" /><small><span>10 s</span><span>600 s</span></small></label>
+          <label><span>时滞搜索上限 <strong>{{ params.lag_max_seconds }} {{ pipelineParameterUnit }}</strong></span><input :value="params.lag_max_seconds" disabled type="range" min="1" max="600" step="1" /><small><span>1 个采样点</span><span>600 个采样点</span></small></label>
         </div>
         <div v-else class="optimization-controls">
           <label><span>动态段阈值 <strong>{{ Number(params.dynamic_threshold).toFixed(2) }}</strong></span><input v-model.number="params.dynamic_threshold" :disabled="settingsLocked" type="range" min="0.2" max="0.7" step="0.01" /><small><span>0.20</span><span>0.70</span></small></label>
@@ -919,7 +921,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
           <caption class="visually-hidden">闭环寻优技术参数记录</caption>
           <thead><tr><th>轮次</th><th>动态阈值</th><th>异常阈值</th><th>共线阈值</th><th>时滞上限</th><th>最优时滞</th><th>最小段长</th><th>Fit</th><th>覆盖率</th><th>RMSE</th><th>综合分</th><th>决策</th></tr></thead>
           <tbody>
-            <tr v-for="row in visibleIterations" :key="row.id" :class="{ 'best-iteration': row.is_best }"><td><span class="round-badge">{{ String(row.round).padStart(2, '0') }}</span></td><td>{{ Number(row.params.dynamic_threshold).toFixed(2) }}</td><td>{{ Number(row.params.outlier_sigma).toFixed(1) }}σ</td><td>{{ Number(row.params.collinearity_threshold).toFixed(2) }}</td><td>{{ row.params.lag_max_seconds }} s</td><td>{{ row.diagnostics.optimal_lag_seconds }} s</td><td>{{ row.params.min_segment_minutes }} min</td><td><strong>{{ formatMetric(row.metrics.fit, 4) }}</strong></td><td>{{ (row.metrics.coverage * 100).toFixed(1) }}%</td><td>{{ formatMetric(row.metrics.rmse, 3) }}</td><td><strong>{{ formatMetric(row.metrics.overall_score, 2) }}</strong></td><td><StatusPill :tone="resultTone(row)">{{ row.decision }}</StatusPill></td></tr>
+            <tr v-for="row in visibleIterations" :key="row.id" :class="{ 'best-iteration': row.is_best }"><td><span class="round-badge">{{ String(row.round).padStart(2, '0') }}</span></td><td>{{ Number(row.params.dynamic_threshold).toFixed(2) }}</td><td>{{ Number(row.params.outlier_sigma).toFixed(1) }}σ</td><td>{{ Number(row.params.collinearity_threshold).toFixed(2) }}</td><td>{{ row.params.lag_max_seconds }} {{ pipelineParameterUnit }}</td><td>{{ row.diagnostics.optimal_lag_seconds }} {{ pipelineParameterUnit }}</td><td>{{ row.params.min_segment_minutes }} min</td><td><strong>{{ formatMetric(row.metrics.fit, 4) }}</strong></td><td>{{ (row.metrics.coverage * 100).toFixed(1) }}%</td><td>{{ formatMetric(row.metrics.rmse, 3) }}</td><td><strong>{{ formatMetric(row.metrics.overall_score, 2) }}</strong></td><td><StatusPill :tone="resultTone(row)">{{ row.decision }}</StatusPill></td></tr>
             <tr v-if="!visibleIterations.length"><td colspan="12" class="table-empty-state">尚无寻优轮次。</td></tr>
           </tbody>
         </table>
@@ -950,7 +952,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
         <article class="trust-item"><span>验证方式</span><strong>{{ study?.pipeline_run_id ? '真实候选复训' : '18 步自由运行' }}</strong><small>{{ evaluationProfile.validation_method }}</small></article>
         <article class="trust-item"><span>算法与复现</span><strong>{{ algorithmVersion }}</strong><small>{{ study?.pipeline_run_id ? `运行编号 ${study.pipeline_run_id}` : `Seed ${study?.random_seed ?? normalizedRandomSeed} · 相同输入得到相同结果` }}</small></article>
         <article class="trust-item"><span>最优轮泛化证据</span><strong>{{ bestIteration ? `${bestIteration.diagnostics.validation_samples} 个验证样本` : '等待评价' }}</strong><small>{{ bestIteration ? `训练/验证 Fit 差 ${formatSigned(bestIteration.diagnostics.generalization_gap, 4)}` : '启动后生成' }}</small></article>
-        <article class="trust-item"><span>时滞边界检查</span><strong>{{ bestIteration ? `${bestIteration.diagnostics.optimal_lag_seconds} / ${bestIteration.params.lag_max_seconds} s` : '等待评价' }}</strong><small>{{ bestIteration ? (bestIteration.diagnostics.lag_boundary_hit ? '命中搜索边界，不能据此提前收敛' : '未命中边界，时滞搜索空间充分') : '启动后生成' }}</small></article>
+        <article class="trust-item"><span>时滞边界检查</span><strong>{{ bestIteration ? `${bestIteration.diagnostics.optimal_lag_seconds} / ${bestIteration.params.lag_max_seconds} ${pipelineParameterUnit}` : '等待评价' }}</strong><small>{{ bestIteration ? (bestIteration.diagnostics.lag_boundary_hit ? '命中搜索边界，不能据此提前收敛' : '未命中边界，时滞搜索空间充分') : '启动后生成' }}</small></article>
         <article class="trust-item"><span>异常处理证据</span><strong>{{ bestIteration ? `${bestIteration.diagnostics.clipped_points} 个替换点` : '等待评价' }}</strong><small>{{ bestIteration ? (study?.pipeline_run_id ? '来自总控数据清洗 Agent 的真实处理统计' : `基准注入 ${bestIteration.diagnostics.injected_outliers} 个软硬异常，用于检验 Hampel 阈值`) : '启动后生成' }}</small></article>
       </div>
       <p class="trust-warning"><AppIcon name="alert" :size="15" />{{ evaluationProfile.production_gate }}</p>
@@ -958,7 +960,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
 
     <section v-if="bestIteration" class="best-strategy-card">
       <div class="best-strategy-header"><span class="trophy-mark">{{ String(bestIteration.round).padStart(2, '0') }}</span><div><span class="section-kicker">{{ study?.pipeline_run_id ? '当前最优真实数据策略' : '当前最优仿真策略' }}</span><h2>第 {{ String(bestIteration.round).padStart(2, '0') }} 轮 · {{ strategyVersion }}</h2><p>只在完成真实评价的候选中按综合分选择；不会直接下发现场。</p></div><StatusPill :tone="isAccepted ? 'brand' : bestIteration.constraint_failures?.length ? 'warning' : 'success'"><AppIcon name="check" :size="14" />{{ study?.pipeline_run_id ? '总控推荐' : isAccepted ? '已固化' : bestIteration.constraint_failures?.length ? '不可采纳' : 'Agent 推荐' }}</StatusPill></div>
-      <div class="strategy-params"><div><span>动态阈值</span><strong>{{ Number(bestIteration.params.dynamic_threshold).toFixed(2) }}</strong></div><div><span>异常阈值</span><strong>{{ Number(bestIteration.params.outlier_sigma).toFixed(1) }}σ</strong></div><div><span>共线阈值</span><strong>{{ Number(bestIteration.params.collinearity_threshold).toFixed(2) }}</strong></div><div><span>最优时滞</span><strong>{{ bestIteration.diagnostics.optimal_lag_seconds }} s</strong></div><div><span>最小段长</span><strong>{{ bestIteration.params.min_segment_minutes }} min</strong></div></div>
+      <div class="strategy-params"><div><span>动态阈值</span><strong>{{ Number(bestIteration.params.dynamic_threshold).toFixed(2) }}</strong></div><div><span>异常阈值</span><strong>{{ Number(bestIteration.params.outlier_sigma).toFixed(1) }}σ</strong></div><div><span>共线阈值</span><strong>{{ Number(bestIteration.params.collinearity_threshold).toFixed(2) }}</strong></div><div><span>最优时滞</span><strong>{{ bestIteration.diagnostics.optimal_lag_seconds }} {{ pipelineParameterUnit }}</strong></div><div><span>最小段长</span><strong>{{ bestIteration.params.min_segment_minutes }} min</strong></div></div>
       <div class="strategy-evidence"><span>Fit <strong>{{ formatMetric(bestIteration.metrics.fit, 4) }}</strong></span><span>验证 R² <strong>{{ formatMetric(bestIteration.metrics.r2, 4) }}</strong></span><span>RMSE <strong>{{ formatMetric(bestIteration.metrics.rmse, 3) }}</strong></span><span>有效片段 <strong>{{ bestIteration.diagnostics.valid_segments }}</strong></span><span>特征数 <strong>{{ bestIteration.diagnostics.feature_count }}</strong></span><span>有效签名 <strong>{{ bestIteration.diagnostics.effective_signature }}</strong></span></div>
       <div class="strategy-actions"><button class="btn btn-secondary" type="button" :disabled="operationBusy" @click="continueExploration">{{ study?.pipeline_run_id ? '由总控基于此结果重新寻优' : '以它为起点继续探索' }}</button><button v-if="!study?.pipeline_run_id" class="btn btn-primary" type="button" :disabled="!canAccept || operationBusy" @click="acceptStrategy">{{ isAccepted ? '演示策略已固化' : isLegacy ? '请先运行 CLSO-2.0' : bestIteration.constraint_failures?.length ? '硬约束未通过' : accepting ? '正在固化…' : '接受为演示策略' }} <AppIcon name="arrow" /></button></div>
     </section>

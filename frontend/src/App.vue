@@ -47,7 +47,7 @@ function getStoredProject() {
 const activePath = ref(normalizePath(window.location.pathname))
 const currentProjectId = ref(getStoredProject())
 const currentProject = computed(() => projects.find((project) => project.id === currentProjectId.value) ?? projects[0])
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => currentProject.value.scenarioId)
 const runtimeStandardization = computed(() => latestRun.value?.results?.standardization ?? {})
 const runtimeDictionary = computed(() => runtimeStandardization.value.dictionary ?? [])
 const runtimeInput = computed(() => runtimeDictionary.value.find((item) => item.role === 'manipulated') ?? runtimeDictionary.value.find((item) => item.role === 'disturbance'))
@@ -107,7 +107,7 @@ function handleStrategyAccepted(strategy) {
   showToast({
     tone: 'success',
     title: '闭环策略已交接给总工程',
-    message: `${strategy?.strategy_version ?? '当前策略'} 已写入统一交接事件，评审与报告模块可读取该策略包。`,
+    message: `${strategy?.strategy_version ?? '当前策略'} 已写入统一交接事件，评审与报告模块可读取该高炉铁水质量预测策略包。`,
   })
 }
 

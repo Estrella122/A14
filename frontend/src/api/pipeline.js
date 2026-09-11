@@ -5,8 +5,8 @@ export async function uploadPipelineFile(file, options = {}) {
   form.append('file', file)
   form.append('scenario_id', options.scenarioId ?? 'auto')
   form.append('instruction', options.instruction ?? '')
-  form.append('resample_rule', options.resampleRule ?? '10s')
-  form.append('max_lag', String(options.maxLag ?? 60))
+  form.append('resample_rule', options.resampleRule ?? 'auto')
+  if (options.maxLag != null) form.append('max_lag', String(options.maxLag))
   form.append('overrides', JSON.stringify(options.overrides ?? {}))
   const response = await fetch(`${apiBaseUrl}/pipeline/runs/`, { method: 'POST', body: form })
   const payload = await response.json()
@@ -29,10 +29,10 @@ export async function rerunPipeline(runId, options = {}) {
   const payload = await apiRequest(`/pipeline/runs/${runId}/rerun/`, {
     method: 'POST',
     body: {
-      resample_rule: options.resampleRule ?? '10s',
-      max_lag: options.maxLag ?? 60,
-      scenario_id: options.scenarioId,
-      overrides: options.overrides,
+      ...(options.resampleRule ? { resample_rule: options.resampleRule } : {}),
+      ...(options.maxLag != null ? { max_lag: options.maxLag } : {}),
+      ...(options.scenarioId ? { scenario_id: options.scenarioId } : {}),
+      ...(options.overrides ? { overrides: options.overrides } : {}),
     },
   })
   return payload.data

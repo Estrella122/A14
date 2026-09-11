@@ -1,0 +1,23 @@
+{
+  "scenario_id": "blast_furnace",
+  "scenario_name": "钢铁高炉铁水质量预测",
+  "industry": "钢铁冶金",
+  "process_unit": "炼铁高炉",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["钢铁高炉", "炼铁高炉", "高炉", "铁水", "铁水硅含量", "blast furnace", "hot metal", "silicon content"],
+  "sampling_seconds": 3600,
+  "timestamp_field": "timestamp",
+  "primary_output": "hot_metal_si",
+  "recommended_max_lag": 24,
+  "alignment_policy": "causal_asof_backward",
+  "lab_tolerance_hours": 3,
+  "source": {
+    "dataset": "Process data collected by blast-furnace sensors",
+    "author": "Vladimir Trofimov",
+    "version": "1",
+    "doi": "10.17632/6d7jbc7tb5.1",
+    "license": "CC BY 4.0"
+  },
+  "notes": "真实高炉过程量为1小时采样，铁水Si为非等间隔化验值。派生CSV只允许向后as-of对齐，并保留化验时间与数据龄期，禁止使用未来化验值。"
+}

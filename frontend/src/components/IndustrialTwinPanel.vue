@@ -6,16 +6,16 @@ import { mockTwin } from '../data/mockData'
 import { useEChart } from '../composables/useEChart'
 
 const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null } })
-const selectedId = ref('temp')
+const selectedId = ref('si')
 const sparkline = ref(null)
-const isFurnace = computed(() => /炉|furnace/i.test(`${props.project.scene} ${props.project.shortName}`))
+const isBlastFurnace = computed(() => /高炉|blast.furnace/i.test(`${props.project.scene} ${props.project.shortName} ${props.project.scenarioId}`))
 const preview = computed(() => props.latestRun?.results?.cleaning?.timeseries_preview?.points ?? [])
 const metrics = computed(() => {
   // TODO(mock): 后端增加实时测点快照后，以 tag/value/status/trend 直接替换当前任务末点与演示趋势的合成逻辑。
   const last = preview.value.at(-1)
   return mockTwin.metrics.map((item) => {
-    if (item.id === 'gas' && Number.isFinite(Number(last?.input))) return { ...item, label: props.project.mv, value: Number(last.input).toFixed(1), unit: props.project.mvUnit, trend: preview.value.slice(-24).map((point) => Number(point.input)) }
-    if ((item.id === 'slabOut' || item.id === 'temp') && Number.isFinite(Number(last?.output))) return { ...item, label: item.id === 'slabOut' ? props.project.target : item.label, value: Number(last.output).toFixed(1), unit: props.project.targetUnit, trend: preview.value.slice(-24).map((point) => Number(point.output)) }
+    if (item.id === 'blast' && Number.isFinite(Number(last?.input))) return { ...item, label: props.project.mv, value: Number(last.input).toFixed(1), unit: props.project.mvUnit, status: Number(last.input) > 0 ? 'normal' : 'warning', trend: preview.value.slice(-24).map((point) => Number(point.input)) }
+    if (item.id === 'si' && Number.isFinite(Number(last?.output))) return { ...item, label: props.project.target, value: Number(last.output).toFixed(3), unit: props.project.targetUnit, status: Number(last.output) >= 0.1 && Number(last.output) <= 1.5 ? 'normal' : 'warning', trend: preview.value.slice(-24).map((point) => Number(point.output)) }
     return item
   })
 })
@@ -33,24 +33,25 @@ useEChart(sparkline, sparklineOption)
 
 <template>
   <section class="twin-panel">
-    <div class="twin-heading"><div><span class="section-kicker">Industrial Digital Twin</span><h2>工业场景数字孪生</h2><p>{{ isFurnace ? '2# 加热炉工艺测点与物流状态' : '通用流程设备测点占位' }}</p></div><div><StatusPill :tone="latestRun ? 'success' : 'warning'" dot>{{ latestRun ? '任务数据映射' : '演示数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
+    <div class="twin-heading"><div><span class="section-kicker">Industrial Digital Twin</span><h2>工业场景数字孪生</h2><p>{{ isBlastFurnace ? '炼铁高炉过程测点、煤气流与铁水质量状态' : '通用流程设备测点占位' }}</p></div><div><StatusPill :tone="latestRun ? 'success' : 'warning'" dot>{{ latestRun ? '任务数据映射' : '场景占位数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
     <div class="twin-stage">
-      <svg v-if="isFurnace" viewBox="0 0 1000 420" role="img" aria-label="加热炉数字孪生设备示意图">
+      <svg v-if="isBlastFurnace" viewBox="0 0 1000 420" role="img" aria-label="炼铁高炉数字孪生设备示意图">
         <defs>
           <linearGradient id="furnaceShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17375b" stop-opacity=".9"/><stop offset="1" stop-color="#0a1e35" stop-opacity=".94"/></linearGradient>
           <radialGradient id="fireGlow"><stop offset="0" stop-color="#ffb347" stop-opacity=".48"/><stop offset="1" stop-color="#ff6b35" stop-opacity="0"/></radialGradient>
           <filter id="softGlow"><feGaussianBlur stdDeviation="7"/></filter>
         </defs>
         <g class="twin-grid"><path d="M0 70H1000M0 140H1000M0 210H1000M0 280H1000M0 350H1000"/><path d="M100 0V420M200 0V420M300 0V420M400 0V420M500 0V420M600 0V420M700 0V420M800 0V420M900 0V420"/></g>
-        <ellipse cx="505" cy="230" rx="230" ry="150" fill="url(#fireGlow)" filter="url(#softGlow)"/>
-        <path class="furnace-shell" d="M260 110 Q260 75 295 75 H720 Q755 75 755 110 V310 H260Z" fill="url(#furnaceShell)"/>
-        <path class="furnace-roof" d="M282 110Q360 54 438 110Q516 54 594 110Q672 54 733 110"/>
-        <path class="furnace-zone" d="M425 112V310M590 112V310"/><text x="335" y="143">预热段</text><text x="487" y="143">加热段</text><text x="650" y="143">均热段</text>
-        <g class="burners"><path d="M303 201l30-16v32zM468 201l30-16v32zM633 201l30-16v32z"/><circle cx="340" cy="201" r="26"/><circle cx="505" cy="201" r="31"/><circle cx="670" cy="201" r="27"/></g>
-        <path class="slab" d="M82 294H882"/><path class="slab-block" d="M125 277h92v31h-92zM316 277h92v31h-92zM505 277h92v31h-92zM696 277h92v31h-92z"/>
-        <path class="flow-line" d="M55 294H245M758 294H930"/><path class="flow-line gas-flow" d="M74 200H275M102 200V238H303M102 200V164H303"/>
-        <path class="chimney" d="M485 75V24H553V75"/><path class="flow-line smoke-flow" d="M519 68V5"/>
-        <text x="68" y="327">钢坯入口</text><text x="848" y="327">钢坯出口</text><text x="67" y="186">燃气总管</text><text x="566" y="31">烟气</text>
+        <ellipse cx="515" cy="250" rx="180" ry="120" fill="url(#fireGlow)" filter="url(#softGlow)"/>
+        <path class="furnace-shell" d="M405 48H615L650 135L618 302Q610 346 570 365H450Q410 346 402 302L370 135Z" fill="url(#furnaceShell)"/>
+        <path class="furnace-roof" d="M405 48L430 20H590L615 48M389 184H631M405 294H615"/>
+        <path class="furnace-zone" d="M390 135H630M402 232H618"/><text x="475" y="115">炉身</text><text x="475" y="214">炉腹</text><text x="475" y="283">炉缸</text>
+        <g class="burners"><path d="M360 292l48-18v31zM660 292l-48-18v31z"/><circle cx="410" cy="289" r="22"/><circle cx="610" cy="289" r="22"/></g>
+        <path class="flow-line" d="M510 5V42M610 80H820V26M402 286H210M618 328H884"/>
+        <path class="flow-line gas-flow" d="M82 286H394M626 286H790"/>
+        <path class="flow-line smoke-flow" d="M630 82H820V18"/>
+        <path class="slab" d="M618 328H884"/><circle cx="884" cy="328" r="7" class="slab-block"/>
+        <text x="448" y="18">矿焦料批</text><text x="826" y="30">炉顶煤气</text><text x="82" y="274">热风 / 富氧</text><text x="798" y="316">铁水出铁口</text>
       </svg>
       <svg v-else viewBox="0 0 1000 420" role="img" aria-label="通用流程工业设备占位图"><g class="twin-grid"><path d="M0 70H1000M0 140H1000M0 210H1000M0 280H1000M0 350H1000"/></g><rect class="generic-vessel" x="370" y="52" width="260" height="315" rx="125"/><path class="furnace-zone" d="M370 150H630M370 250H630"/><path class="flow-line" d="M80 210H370M630 210H920"/><text x="425" y="215">通用反应设备</text></svg>
 

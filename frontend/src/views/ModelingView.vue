@@ -16,7 +16,7 @@ const training = ref(false)
 const comparisonOpen = ref(false)
 const correlationDetailOpen = ref(false)
 const activeAnalysisTab = ref('identification')
-const { latestRun } = useLatestPipelineRun()
+const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
 const liveModel = computed(() => latestRun.value?.results?.modeling ?? null)
 const liveMetrics = computed(() => liveModel.value?.metrics?.test ?? null)
 const mimoOutputs = computed(() => liveModel.value?.mimo?.outputs ?? [])
@@ -27,7 +27,9 @@ const modelComparisons = computed(() => {
   if (!liveModel.value) return []
   return [{ round: '当前', r2: liveMetrics.value?.r2, rmse: liveMetrics.value?.rmse, mae: liveMetrics.value?.mae, selected: true }]
 })
-const demoMatrixLabels = [props.project.targetTag, props.project.mvTag, 'AIR_RATIO', 'ZONE_PRESS', props.project.disturbanceTag]
+const demoMatrixLabels = props.project.scenarioId === 'blast_furnace'
+  ? [props.project.targetTag, props.project.mvTag, 'HOT_BLAST_PRESS', 'COLD_BLAST_PRESS', props.project.disturbanceTag]
+  : [props.project.targetTag, props.project.mvTag, 'AIR_RATIO', 'ZONE_PRESS', props.project.disturbanceTag]
 const demoMatrix = [
   [1, 0.82, 0.76, 0.44, -0.69],
   [0.82, 1, 0.91, 0.35, -0.41],
@@ -39,10 +41,17 @@ const matrixLabels = computed(() => liveModel.value?.collinearity?.labels?.lengt
 const matrix = computed(() => liveModel.value?.collinearity?.matrix?.length ? liveModel.value.collinearity.matrix : demoMatrix)
 
 const demoLagRows = computed(() => [
-  { input: props.project.mvTag, output: props.project.targetTag, lag: '95 s', corr: 0.82, method: '时间轴前移 + 线性补偿', action: '保留主变量' },
-  { input: 'AIR_FUEL_RATIO', output: props.project.targetTag, lag: '70 s', corr: 0.76, method: '时间轴前移', action: '保留' },
-  { input: 'ZONE_PRESSURE', output: props.project.targetTag, lag: '40 s', corr: 0.44, method: '低权重补偿', action: '降权' },
-  { input: props.project.disturbanceTag, output: props.project.targetTag, lag: '125 s', corr: -0.69, method: '时间轴前移', action: '保留扰动' },
+  ...(props.project.scenarioId === 'blast_furnace' ? [
+    { input: props.project.mvTag, output: props.project.targetTag, lag: '8 h', corr: -0.62, method: '因果时滞补偿', action: '保留主变量' },
+    { input: 'OXYGEN_FLOW', output: props.project.targetTag, lag: '10 h', corr: -0.58, method: '因果时滞补偿', action: '保留' },
+    { input: 'HOT_BLAST_TEMP', output: props.project.targetTag, lag: '6 h', corr: -0.47, method: '使用历史输入，段内对齐', action: '保留' },
+    { input: props.project.disturbanceTag, output: props.project.targetTag, lag: '12 h', corr: 0.51, method: '使用历史输入，段内对齐', action: '保留配料变量' },
+  ] : [
+    { input: props.project.mvTag, output: props.project.targetTag, lag: '95 s', corr: 0.82, method: '时间轴前移 + 线性补偿', action: '保留主变量' },
+    { input: 'AIR_FUEL_RATIO', output: props.project.targetTag, lag: '70 s', corr: 0.76, method: '时间轴前移', action: '保留' },
+    { input: 'ZONE_PRESSURE', output: props.project.targetTag, lag: '40 s', corr: 0.44, method: '低权重补偿', action: '降权' },
+    { input: props.project.disturbanceTag, output: props.project.targetTag, lag: '125 s', corr: -0.69, method: '时间轴前移', action: '保留扰动' },
+  ]),
 ])
 const lagRows = computed(() => liveModel.value?.lags?.length ? liveModel.value.lags.map((row) => ({
   input: row.input,
@@ -85,7 +94,7 @@ async function trainModel() {
   try {
     const latest = await getLatestPipelineRun()
     if (!latest) throw new Error('请先在“数据资产”页面上传CSV。')
-    const snapshot = await rerunPipeline(latest.run_id, { maxLag: 60 })
+    const snapshot = await rerunPipeline(latest.run_id, { maxLag: props.project.maxLag ?? 60 })
     latestRun.value = snapshot
     announcePipelineUpdate(snapshot)
     const metrics = snapshot.results?.modeling?.metrics?.test ?? {}
@@ -123,7 +132,7 @@ async function showFrequencyAnalysis() {
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="modeling" />
+    <IntegratedEvidencePanel module="modeling" :run="latestRun" />
 
     <div class="model-analysis-tabs" role="tablist" aria-label="模型分析视图">
       <button type="button" role="tab" :aria-selected="activeAnalysisTab === 'identification'" :class="{ 'is-active': activeAnalysisTab === 'identification' }" @click="activeAnalysisTab = 'identification'"><AppIcon name="model" :size="16" />时域辨识与解耦</button>

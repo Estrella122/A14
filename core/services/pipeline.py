@@ -197,7 +197,7 @@ def _select_modeling_rows(cleaned: pd.DataFrame, segments: pd.DataFrame, top_k: 
     return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index()
 
 
-def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir: Path, resample_rule: str, max_lag_for_split: int = 60, primary_output: str | None = None, selection_window: int = 30, selection_step: int = 15) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir: Path, resample_rule: str, max_lag_for_split: int = 60, primary_output: str | None = None, selection_window: int = 30, selection_step: int = 15, alignment_policy: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "data_cleaning" / "src"
     with _module_path(module_dir):
         from data_cleaning_agent import DataCleaningSelectionAgent
@@ -207,8 +207,13 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
             raise PipelineError("标准化结果缺少 timestamp，无法执行时序清洗。")
         if not any(item["role"] == "output" for item in spec.values()):
             raise PipelineError("没有识别到可用于建模的被控输出变量。")
+        causal_columns = {
+            item["standard_name"] for item in dictionary
+            if alignment_policy == "causal_asof_backward" and item.get("role") == "controlled"
+        }
         agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output,
-                                           selection_window=selection_window, selection_step=selection_step)
+                                           selection_window=selection_window, selection_step=selection_step,
+                                           causal_columns=causal_columns)
         # Freeze the chronological partitions before cleaning or scoring.
         ordered = standardized.sort_values("timestamp").reset_index(drop=True)
         requested_rule = resample_rule
@@ -225,7 +230,8 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
                             ("validation", ordered.iloc[boundaries[0]:boundaries[1]]),
                             ("test", ordered.iloc[boundaries[1]:])):
             part_agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output,
-                                                    selection_window=selection_window, selection_step=selection_step)
+                                                    selection_window=selection_window, selection_step=selection_step,
+                                                    causal_columns=causal_columns)
             aligned = part_agent.align_timestamp(part)
             processed = part_agent.process_missing_values(aligned)
             frame = part_agent.detect_and_repair_anomalies(processed)
@@ -786,7 +792,7 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
             'path': _artifact(run_dir, report_path), 'summary': review['conclusion']}
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "auto", max_lag: int | None = None, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -805,6 +811,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             "scenario_request": scenario_id or "auto",
             "instruction": instruction,
             "mapping_overrides": overrides or {},
+            "parameters": {"resample_rule": resample_rule, "max_lag": max_lag},
             "created_at": now,
             "updated_at": now,
             "stages": [{"key": key, "label": label, "status": "pending", "message": ""} for key, label in STAGES],
@@ -861,17 +868,37 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 _write_json(run_dir / "snapshot.json", snapshot)
                 return snapshot
 
+            scenario = standardization.get("scenario", {})
+            effective_resample_rule = resample_rule
+            if not effective_resample_rule or effective_resample_rule == "auto":
+                sampling_seconds = max(1, int(scenario.get("sampling_seconds") or 10))
+                effective_resample_rule = f"{sampling_seconds}s"
+            effective_max_lag = max_lag
+            if effective_max_lag is None:
+                effective_max_lag = int(scenario.get("recommended_max_lag") or 60)
+            effective_max_lag = max(1, min(int(effective_max_lag), 600))
+            snapshot["parameters"] = {
+                "resample_rule": effective_resample_rule,
+                "max_lag": effective_max_lag,
+            }
+
             current_stage = "cleaning"
             _set_stage(snapshot, run_dir, current_stage, "running", "正在对齐时间戳并修复缺失、异常值")
             standardized = _read_csv(run_dir / standardization["artifacts"]["standardized_csv"])
             primary_output = standardization.get("scenario", {}).get("primary_output")
             model_outputs = standardization.get("scenario", {}).get("model_outputs") or [primary_output]
             modeling_data, segments, cleaning = _clean(
-                standardized, standardization["dictionary"], run_dir, resample_rule, max_lag,
+                standardized, standardization["dictionary"], run_dir, effective_resample_rule, effective_max_lag,
                 primary_output=primary_output,
                 selection_window=standardization.get("scenario", {}).get("selection_window_samples", 30),
                 selection_step=standardization.get("scenario", {}).get("selection_step_samples", 15),
+                alignment_policy=scenario.get("alignment_policy"),
             )
+            cleaning.setdefault("config", {}).update({
+                "resample_rule": effective_resample_rule,
+                "alignment_policy": scenario.get("alignment_policy"),
+                "causal_target_interpolation": False if scenario.get("alignment_policy") == "causal_asof_backward" else None,
+            })
             snapshot["results"]["cleaning"] = cleaning
             snapshot["artifacts"].update(cleaning["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", f"质量评分 {cleaning['overall_score']}")
@@ -897,7 +924,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["artifacts"].update(modeling["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "已冻结分区，辨识随候选搜索执行")
             if stop_after == "modeling":
-                modeling = _model(modeling_data, standardization["dictionary"], run_dir, max_lag,
+                modeling = _model(modeling_data, standardization["dictionary"], run_dir, effective_max_lag,
                                   primary_output=primary_output)
                 snapshot["results"]["modeling"] = modeling
                 snapshot["artifacts"].update(modeling["artifacts"])
@@ -916,7 +943,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 standardization["dictionary"],
                 modeling,
                 run_dir,
-                max_lag,
+                effective_max_lag,
                 primary_output=primary_output,
                 model_outputs=model_outputs,
             )
@@ -1015,7 +1042,7 @@ def resolve_artifact(run_id: str, artifact_key: str) -> tuple[Path, str]:
     return path, path.name
 
 
-def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None) -> dict[str, Any]:
+def rerun_pipeline(run_id: str, resample_rule: str | None = None, max_lag: int | None = None, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None) -> dict[str, Any]:
     previous = get_run(run_id)
     if not previous:
         raise PipelineError("运行任务不存在。")
@@ -1029,8 +1056,8 @@ def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, s
         original_name=previous.get("original_name", "source.csv"),
         scenario_id=scenario_id or previous.get("scenario_request", "auto"),
         instruction=previous.get("instruction", ""),
-        resample_rule=resample_rule,
-        max_lag=max_lag,
+        resample_rule=resample_rule or previous.get("parameters", {}).get("resample_rule", "auto"),
+        max_lag=max_lag if max_lag is not None else previous.get("parameters", {}).get("max_lag"),
         stop_after=stop_after,
         overrides=overrides if overrides is not None else previous.get("mapping_overrides", {}),
     )

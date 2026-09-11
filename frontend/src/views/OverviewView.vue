@@ -1,18 +1,16 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import IndustrialTwinPanel from '../components/IndustrialTwinPanel.vue'
 import { formatNumber, requirementCoverage } from '../data/projectData'
-import { getLatestPipelineRun } from '../api/pipeline'
+import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate', 'notify'])
 
-const latestRun = ref(null)
-const loadError = ref('')
-let refreshTimer
+const { latestRun, pipelineError: loadError } = useLatestPipelineRun(() => props.project.scenarioId)
 const result = computed(() => latestRun.value?.results ?? {})
 const standard = computed(() => result.value.standardization ?? {})
 const cleaning = computed(() => result.value.cleaning ?? {})
@@ -40,37 +38,11 @@ const dashboardWorkflow = computed(() => (latestRun.value?.stages ?? []).map((st
   meta: stage.message,
 })))
 
-async function loadLatest() {
-  try {
-    latestRun.value = await getLatestPipelineRun()
-    loadError.value = ''
-  } catch (error) {
-    loadError.value = error.message
-  }
-}
-
-function handlePipelineUpdate(event) { latestRun.value = event.detail }
-function handleStorage(event) {
-  if (event.key !== 'processpilot-latest-run' || !event.newValue) return
-  try { latestRun.value = JSON.parse(event.newValue).snapshot } catch { loadLatest() }
-}
-
 function runFullLoop() {
   emit('notify', { tone: 'info', title: '请在 Agent 中枢选择数据', message: '上传CSV后会从字段标准化开始执行完整闭环。' })
   emit('navigate', '/agent-review/')
 }
 
-onMounted(() => {
-  loadLatest()
-  window.addEventListener('processpilot:pipeline-updated', handlePipelineUpdate)
-  window.addEventListener('storage', handleStorage)
-  refreshTimer = window.setInterval(loadLatest, 5000)
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('processpilot:pipeline-updated', handlePipelineUpdate)
-  window.removeEventListener('storage', handleStorage)
-  window.clearInterval(refreshTimer)
-})
 </script>
 
 <template>
@@ -97,9 +69,9 @@ onBeforeUnmount(() => {
           <StatusPill tone="brand">{{ latestRun ? '实时任务' : project.badge }}</StatusPill>
           <span>{{ latestRun?.run_id ?? project.code }}</span>
         </div>
-        <h2 id="hero-title">让高价值动态样本，从海量稳态数据中自动浮现</h2>
+        <h2 id="hero-title">从高炉多源时序中提炼可验证的铁水质量预测数据</h2>
         <p v-if="latestRun">Agent 已对 {{ latestRun.original_name }} 完成 {{ latestRun.stages.length }} 个真实阶段，识别场景为 {{ standard.scenario?.scenario_name ?? '待确认' }}，全部结果来自任务 {{ latestRun.run_id }}。</p>
-        <p v-else>{{ loadError || '正在读取最近一次真实任务…' }}</p>
+        <p v-else>{{ loadError || '正在读取最近一次高炉真实数据任务…' }}</p>
         <div class="hero-value-row">
           <div><span>必需字段覆盖率</span><strong>{{ ((standard.mapping?.required_coverage ?? 0) * 100).toFixed(0) }}%</strong></div>
           <div><span>建模数据保留率</span><strong>{{ selectedRate }}%</strong></div>

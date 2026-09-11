@@ -75,6 +75,10 @@ class ScenarioTemplate:
             "selection_step_samples": self.config.get("selection_step_samples", 15),
             "time_axis_type": self.config.get("time_axis_type", "wall_clock"),
             "sampling_seconds": self.config.get("sampling_seconds"),
+            "recommended_max_lag": self.config.get("recommended_max_lag"),
+            "alignment_policy": self.config.get("alignment_policy"),
+            "lab_tolerance_hours": self.config.get("lab_tolerance_hours"),
+            "source": self.config.get("source"),
             "notes": self.config.get("notes", ""),
         }
 

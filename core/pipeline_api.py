@@ -60,8 +60,8 @@ def pipeline_collection(request):
             original_name=upload.name,
             scenario_id=request.POST.get("scenario_id", "auto"),
             instruction=request.POST.get("instruction", ""),
-            resample_rule=request.POST.get("resample_rule", "10s"),
-            max_lag=int(request.POST.get("max_lag", "60")),
+            resample_rule=request.POST.get("resample_rule", "auto"),
+            max_lag=int(request.POST["max_lag"]) if request.POST.get("max_lag") else None,
             overrides=_mapping_overrides(request.POST.get("overrides")),
         )
         return _response({"ok": True, "data": snapshot}, status=201)
@@ -94,8 +94,8 @@ def pipeline_rerun(request, run_id):
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
         snapshot = rerun_pipeline(
             run_id,
-            resample_rule=payload.get("resample_rule", "10s"),
-            max_lag=int(payload.get("max_lag", 60)),
+            resample_rule=payload.get("resample_rule"),
+            max_lag=int(payload["max_lag"]) if payload.get("max_lag") is not None else None,
             scenario_id=payload.get("scenario_id"),
             overrides=_mapping_overrides(payload["overrides"]) if "overrides" in payload else None,
         )

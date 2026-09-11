@@ -1,0 +1,34 @@
+standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
+timestamp,过程时间戳,高炉过程传感器小时采样时间,time,datetime,datetime,true,dt|时间|采集时间|记录时间|TIME|DATETIME|TS,,
+blast_flow_rate,鼓风流量,送入高炉的鼓风体积流量,manipulated,float,m3/min,true,Fb|Blast flowrate|鼓风量|鼓风流量|BLAST_FLOW,0,10000
+hot_blast_pressure,热风压力,热风总管压力,state,float,kgf/cm2,false,Ph|Hot blast pressure|热风压|HOT_BLAST_PRESSURE,0,10
+cold_blast_pressure,冷风压力,冷风管路压力,state,float,kgf/cm2,false,Pc|Cold blast pressure|冷风压|COLD_BLAST_PRESSURE,0,10
+cold_blast_temperature,冷风温度,进入热风炉前的冷风温度,state,float,degC,false,Tc|Cold-blast temperature|冷风温度|COLD_BLAST_TEMP,-50,300
+oxygen_flow_rate,富氧流量,鼓风系统富氧体积流量,manipulated,float,m3/h,true,Fo|Blast oxygen flowrate|富氧量|富氧流量|OXYGEN_FLOW,0,50000
+total_pressure_drop,高炉总压差,高炉煤气系统总压力差,state,float,kgf/cm2,false,dP|Total gas pressure difference|全压差|总压差|TOTAL_DP,0,10
+upper_pressure_drop,上部压差,高炉上部煤气压力差,state,float,kgf/cm2,false,dPu|Upper gas pressure difference|上部压差|UPPER_DP,0,10
+lower_pressure_drop,下部压差,高炉下部煤气压力差,state,float,kgf/cm2,false,dPl|Lower gas pressure difference|下部压差|LOWER_DP,0,10
+top_gas_pressure,炉顶煤气压力,高炉炉顶煤气压力,state,float,kgf/cm2,false,Pt|Top gas pressure|炉顶压力|TOP_GAS_PRESSURE,0,5
+hot_blast_temperature,热风温度,送入高炉风口的热风温度,manipulated,float,degC,true,Th|Hot-blast temperature|热风温度|HOT_BLAST_TEMP,0,1600
+top_gas_co2,炉顶煤气CO2,炉顶煤气二氧化碳体积分数,state,float,percent,false,CO2|CO2 content of top gas|炉顶CO2|TOP_GAS_CO2,0,40
+top_gas_h2,炉顶煤气H2,炉顶煤气氢气体积分数,state,float,percent,false,H2|H2 content of top gas|炉顶H2|TOP_GAS_H2,0,20
+top_gas_temp_1,炉顶温度1,炉顶第一测点煤气温度,state,float,degC,false,Tt1|Top gas temperature 1|炉顶温度1|TOP_TEMP_1,0,1000
+top_gas_temp_2,炉顶温度2,炉顶第二测点煤气温度,state,float,degC,false,Tt2|Top gas temperature 2|炉顶温度2|TOP_TEMP_2,0,1000
+top_gas_temp_3,炉顶温度3,炉顶第三测点煤气温度,state,float,degC,false,Tt3|Top gas temperature 3|炉顶温度3|TOP_TEMP_3,0,1000
+top_gas_temp_4,炉顶温度4,炉顶第四测点煤气温度,state,float,degC,false,Tt4|Top gas temperature 4|炉顶温度4|TOP_TEMP_4,0,1000
+peripheral_gas_temp_1,周边温度1,炉身周边第一测点煤气温度,state,float,degC,false,Tp1|Peripheral gas temperature 1|周边温度1|PERIPHERAL_TEMP_1,0,1500
+peripheral_gas_temp_2,周边温度2,炉身周边第二测点煤气温度,state,float,degC,false,Tp2|Peripheral gas temperature 2|周边温度2|PERIPHERAL_TEMP_2,0,1500
+peripheral_gas_temp_3,周边温度3,炉身周边第三测点煤气温度,state,float,degC,false,Tp3|Peripheral gas temperature 3|周边温度3|PERIPHERAL_TEMP_3,0,1500
+peripheral_gas_temp_4,周边温度4,炉身周边第四测点煤气温度,state,float,degC,false,Tp4|Peripheral gas temperature 4|周边温度4|PERIPHERAL_TEMP_4,0,1500
+peripheral_gas_temp_5,周边温度5,炉身周边第五测点煤气温度,state,float,degC,false,Tp5|Peripheral gas temperature 5|周边温度5|PERIPHERAL_TEMP_5,0,1500
+peripheral_gas_temp_6,周边温度6,炉身周边第六测点煤气温度,state,float,degC,false,Tp6|Peripheral gas temperature 6|周边温度6|PERIPHERAL_TEMP_6,0,1500
+peripheral_gas_temp_7,周边温度7,炉身周边第七测点煤气温度,state,float,degC,false,Tp7|Peripheral gas temperature 7|周边温度7|PERIPHERAL_TEMP_7,0,1500
+peripheral_gas_temp_8,周边温度8,炉身周边第八测点煤气温度,state,float,degC,false,Tp8|Peripheral gas temperature 8|周边温度8|PERIPHERAL_TEMP_8,0,1500
+peripheral_gas_temp_9,周边温度9,炉身周边第九测点煤气温度,state,float,degC,false,Tp9|Peripheral gas temperature 9|周边温度9|PERIPHERAL_TEMP_9,0,1500
+peripheral_gas_temp_10,周边温度10,炉身周边第十测点煤气温度,state,float,degC,false,Tp10|Peripheral gas temperature 10|周边温度10|PERIPHERAL_TEMP_10,0,1500
+ore_coke_ratio,矿焦比,高炉入炉矿石与焦炭的质量比,manipulated,float,ratio,true,R|Ore-to-coke ratio|矿焦比|ORE_COKE_RATIO,0,10
+hot_metal_si,铁水硅含量,出铁铁水中的硅质量分数,controlled,float,percent,true,Si|Silicon content|Si content in hot metal|铁水含硅量|铁水硅含量|HOT_METAL_SI,0,5
+lab_source_timestamp,最近可用化验时间,当前行铁水硅含量所对应的实际化验时间,identifier,string,string,false,Si_lab_timestamp|化验时间|LAB_TIMESTAMP,,
+lab_age_minutes,化验数据龄期,过程时间相对最近已发生化验的分钟差,quality,float,min,false,Si_lab_age_min|化验龄期|LAB_AGE_MIN,0,360
+lab_fresh,化验新鲜度标记,化验值是否在允许的三小时因果对齐窗口内,quality,boolean,boolean,false,Si_lab_fresh|化验有效标记|LAB_FRESH,,
+blast_furnace_state,高炉炉况,第二数据集给出的八类高炉运行状态,quality,string,string,false,State of blast furnace|炉况|高炉状态|BLAST_FURNACE_STATE,,

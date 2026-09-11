@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 SUPPORTED_SCENARIOS = (
     "steel_reheating_furnace", "thermal_power_boiler", "wastewater_aeration",
     "cement_rotary_kiln", "distillation_column", "debutanizer_column", "industrial_dryer",
+    "blast_furnace",
 )
 
 
@@ -48,7 +49,7 @@ def _s(skill_id, name, category, description, triggers, depends_on=(), handler="
 
 SKILLS = [
     _s("industrial_intent_parser", "工业意图解析", "orchestration", "识别分析、执行、解释与交付目标。", ["分析", "提取", "筛选", "建模", "优化", "报告", "为什么"], handler="intent"),
-    _s("equipment_entity_resolver", "设备实体解析", "orchestration", "识别锅炉、曝气池、回转窑、加热炉、蒸馏塔、脱丁烷塔和工业干燥器及编号。", ["号塔", "号炉", "号池", "号窑", "号干燥器", "锅炉", "曝气池", "回转窑", "加热炉", "精馏塔", "蒸馏塔", "脱丁烷塔", "干燥器", "干燥机", "烘干机", "反应器"], ["industrial_intent_parser"], "entity"),
+    _s("equipment_entity_resolver", "设备实体解析", "orchestration", "识别高炉、锅炉、曝气池、回转窑、加热炉、蒸馏塔、脱丁烷塔和工业干燥器及编号。", ["号塔", "号炉", "号池", "号窑", "号干燥器", "高炉", "铁水", "锅炉", "曝气池", "回转窑", "加热炉", "精馏塔", "蒸馏塔", "脱丁烷塔", "干燥器", "干燥机", "烘干机", "反应器"], ["industrial_intent_parser"], "entity"),
     _s("constraint_parameter_extractor", "约束参数提取", "orchestration", "抽取采样周期、阈值、时滞与模型阶次。", ["秒", "阈值", "时滞", "阶次", "top_k", "max_lag"], ["industrial_intent_parser"], "parameter"),
     _s("skill_capability_matcher", "Skill 能力匹配", "orchestration", "将用户目标映射到能力集合。", ["*"], ["industrial_intent_parser"], "matcher"),
     _s("workflow_dag_planner", "工作流 DAG 规划", "orchestration", "补齐依赖并生成可执行拓扑顺序。", ["*"], ["skill_capability_matcher"], "planner"),
@@ -56,7 +57,7 @@ SKILLS = [
 
     _s("csv_asset_manager", "CSV 数据资产管理", "data", "校验、登记并追踪上传的工业 CSV。", ["csv", "上传", "数据集", "文件"], ["workflow_dag_planner"], "asset"),
     _s("industrial_simulation_generator", "工业仿真数据生成", "data", "生成含稳态、阶跃、噪声和异常的可下载测试集。", ["仿真", "生成数据", "测试集"], ["workflow_dag_planner"], "simulation"),
-    _s("dataset_scenario_profiler", "数据场景画像", "data", "根据字段组合、单位、范围与采样特征识别钢铁、火电、污水、水泥、炼油和工业干燥场景。", ["场景", "画像", "加热炉", "锅炉", "燃煤", "曝气池", "污水", "回转窑", "水泥", "精馏塔", "蒸馏塔", "脱丁烷塔", "干燥器", "干燥机", "烘干机"], ["csv_asset_manager"], "standardization"),
+    _s("dataset_scenario_profiler", "数据场景画像", "data", "根据字段组合、单位、范围与采样特征识别钢铁、火电、污水、水泥、炼油和工业干燥场景。", ["场景", "画像", "高炉", "铁水", "加热炉", "锅炉", "燃煤", "曝气池", "污水", "回转窑", "水泥", "精馏塔", "蒸馏塔", "脱丁烷塔", "干燥器", "干燥机", "烘干机"], ["csv_asset_manager"], "standardization"),
     _s("semantic_field_unit_standardizer", "语义字段与单位标准化", "data", "完成字段映射、角色识别与单位换算。", ["字段", "单位", "映射", "变量角色", "标准化"], ["dataset_scenario_profiler"], "standardization"),
     _s("time_axis_alignment_resampler", "时间轴对齐与重采样", "data", "检查时间戳并按目标周期对齐。", ["时间", "采样", "对齐", "重采样", "秒"], ["semantic_field_unit_standardizer"], "cleaning"),
     _s("missing_anomaly_cleaner", "缺失与异常清洗", "data", "分区内有限前向填充输入；异常与缺失输出保留为空。", ["缺失", "异常", "清洗", "规整", "插值"], ["time_axis_alignment_resampler"], "cleaning"),
