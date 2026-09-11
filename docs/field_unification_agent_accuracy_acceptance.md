@@ -10,7 +10,7 @@
 - 后端调用链：`core/services/pipeline.py`
 - 页面入口：`frontend/src/views/DataAssetsView.vue`、`frontend/src/views/AgentWorkflowView.vue`
 
-当前链路为：CSV 原始数据 → Registry/历史别名字段映射 → 单位与类型标准化 → 数据范围、缺失率和时序变化特征 → 候选场景评分 → 最终场景标签及状态 → 页面展示映射。
+当前远端 Registry 保留脱丁烷塔、工业干燥器和高炉三个场景。链路为：CSV 原始数据 → Registry/历史别名字段映射 → 单位与类型标准化 → 数据范围、缺失率和时序变化特征 → 候选场景评分 → 最终场景标签及状态 → 页面展示映射。
 
 ## 原因与修改
 
@@ -36,20 +36,21 @@
 
 - Django：101 项通过，1 项按原条件跳过。
 - 前端：Vite 生产构建通过。
-- 对照样本：相同 14 例安全判定从修改前 13/14 提升到修改后 14/14。原失败项是缺少 5 个锅炉关键字段仍被 `accept`；修改后为 `uncertain` 且不输出最终场景。
+- 对照样本：在本次三场景 Registry 下，10 类识别行为测试全部通过。对照旧评分逻辑，缺少关键字段、通用列名和混合字段簇曾被 `accept/review`，现在分别进入 `uncertain/unknown` 或 `ambiguous`。
 
 ## 真实数据验收
 
 | 文件 | 最终场景 | 状态 | 置信度 | 数据决策 | 结论 |
 |---|---|---:|---:|---|---|
-| `Steel_industry_data.csv` | `steel_industry_energy` | confirmed | 0.947 | ready | 11 项证据，符合现有钢铁能耗 Registry |
-| `vapor-pressure.csv` | 空 | ambiguous | 0.488 | reject | 前两候选 0.488/0.487，且目标列缺失率约 98.8%，禁止强选 |
-| `xinan_completed_data.csv` | 空 | ambiguous | 0.364 | reject | 厂内 PT/TE/FT 点位编码缺少点位字典，证据不足 |
-| `xinan_uncompleted_data.csv` | 空 | ambiguous | 0.364 | reject | 同上；不因文件名推断工艺语义 |
+| `Steel_industry_data.csv` | 空 | ambiguous | 0.325 | reject | 远端最新 Registry 已移除钢铁能耗场景；安全拒识，恢复该模板后可接入 |
+| `vapor-pressure.csv` | 空 | unknown | 0.239 | reject | 当前三场景均无足够字段证据，且目标列约 98.8% 缺失 |
+| `xinan_completed_data.csv` | 空 | unknown | 0.269 | reject | 厂内 PT/TE/FT 点位编码缺少点位字典，证据不足 |
+| `xinan_uncompleted_data.csv` | 空 | unknown | 0.269 | reject | 同上；不因文件名推断工艺语义 |
 
 ## 剩余风险
 
 - 西南数据需要工厂提供点位号到测量含义、单位、设备和工艺模块的映射，经人工确认后可写入现有历史别名或场景字段表。
+- `Steel_industry_data.csv` 需要把钢铁能耗模板重新登记到当前 Registry，才能进行业务识别；当前拒识是安全行为。
 - `vapor-pressure.csv` 可能属于现有塔器的子任务，也可能是尚未登记的实验/软测量场景；需要来源说明和目标变量采样完整性才能确认。
 - 当前数值范围来自模板通用物理边界，换装置或工况后仍需用现场工程限值校准。
 - 候选评分已降低误判风险，但不能替代点位主数据、设备层级和工艺拓扑。
