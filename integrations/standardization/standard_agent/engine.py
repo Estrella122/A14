@@ -14,6 +14,7 @@ from rapidfuzz import fuzz
 
 from .repository import ROOT, ScenarioRepository, ScenarioTemplate
 from .ml_model import semantic_core
+from .point_dictionary import PointSemanticDictionary
 from .semantic_ensemble import HybridSemanticModel
 from .schema_validation import validate_standardized_frame
 from .units import conversion, split_header_unit
@@ -69,6 +70,7 @@ class StandardizationAgent:
         self.model_path = model_path or ROOT / "models" / "field_semantic_model.json"
         self.encoder_path = ROOT / "models" / "embedding_encoder_multilingual"
         self.web_alias_path = ROOT / "knowledge" / "web_alias_candidates.csv"
+        self.point_dictionary = PointSemanticDictionary(ROOT / "knowledge" / "point_semantics.csv")
         self.semantic_model = HybridSemanticModel.load(self.model_path, self.encoder_path) if self.model_path.exists() else None
         self._lock = threading.Lock()
 
@@ -150,13 +152,83 @@ class StandardizationAgent:
                         register(row["candidate_alias"], row["standard_name"])
         return index
 
-    def _match_one(self, raw_name: str, template: ScenarioTemplate) -> dict[str, Any]:
+    @staticmethod
+    def _profile_series(
+        series: pd.Series | None,
+        definition: Any | None,
+        detected_unit: str | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded, deterministic evidence about values for semantic matching."""
+        if series is None or definition is None:
+            return {"available": False, "plausibility": 0.5, "missing_ratio": 0.0, "anomaly_ratio": 0.0}
+        sample = series.iloc[:2000]
+        total = max(len(sample), 1)
+        missing_ratio = float(sample.isna().sum()) / total
+        non_null = sample.dropna()
+        if non_null.empty:
+            return {"available": True, "plausibility": 0.0, "missing_ratio": 1.0, "anomaly_ratio": 0.0}
+        if definition.data_type == "datetime":
+            parsed = pd.to_datetime(non_null, errors="coerce", format="mixed")
+            valid_ratio = float(parsed.notna().mean())
+            changing = parsed.dropna().nunique() > 1
+            plausibility = valid_ratio * (1.0 if changing else 0.75)
+            anomaly_ratio = 1.0 - valid_ratio
+        elif definition.data_type in {"float", "integer"}:
+            numeric = pd.to_numeric(non_null, errors="coerce")
+            valid = numeric.dropna()
+            unit_conversion = conversion(detected_unit, definition.unit)
+            if unit_conversion:
+                valid = unit_conversion[1](valid)
+            valid_ratio = float(numeric.notna().mean())
+            violations = 0
+            if definition.lower_bound is not None:
+                violations += int((valid < definition.lower_bound).sum())
+            if definition.upper_bound is not None:
+                violations += int((valid > definition.upper_bound).sum())
+            range_ratio = violations / max(len(valid), 1)
+            integer_penalty = 0.0
+            if definition.data_type == "integer" and len(valid):
+                integer_penalty = float(((valid % 1) != 0).mean())
+            anomaly_ratio = min(1.0, (1.0 - valid_ratio) + range_ratio + integer_penalty)
+            plausibility = max(0.0, valid_ratio * (1.0 - range_ratio) * (1.0 - integer_penalty))
+            if valid.nunique() <= 1:
+                plausibility *= 0.92
+        elif definition.data_type == "boolean":
+            allowed = {"0", "1", "true", "false", "yes", "no", "y", "n", "是", "否", "有效", "无效"}
+            valid_ratio = float(non_null.astype(str).str.strip().str.lower().isin(allowed).mean())
+            plausibility, anomaly_ratio = valid_ratio, 1.0 - valid_ratio
+        else:
+            plausibility, anomaly_ratio = 0.85, 0.0
+        return {
+            "available": True,
+            "plausibility": round(float(plausibility), 3),
+            "missing_ratio": round(missing_ratio, 3),
+            "anomaly_ratio": round(float(anomaly_ratio), 3),
+            "changing": bool(non_null.nunique() > 1),
+        }
+
+    def _match_one(
+        self,
+        raw_name: str,
+        template: ScenarioTemplate,
+        series: pd.Series | None = None,
+        neighbors: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
         base_name, detected_unit = split_header_unit(raw_name)
         normalized = normalize_name(base_name)
         aliases = self._aliases(template)
-        target = aliases.get(normalized)
+        point_resolution = self.point_dictionary.resolve(raw_name, template.scenario_id, set(template.by_name))
+        target = point_resolution.get("standard_field") if point_resolution["status"] == "resolved" else aliases.get(normalized)
         method = "alias"
-        score = 1.0 if target else 0.0
+        score = float(point_resolution["confidence"]) if point_resolution["status"] == "resolved" else (1.0 if target else 0.0)
+        if point_resolution["status"] == "resolved":
+            method = "point_dictionary"
+        learned = self._knowledge().get(template.scenario_id, {})
+        if target and any(
+            normalize_name(alias) == normalized
+            for alias in learned.get(target, [])
+        ):
+            method = "learned_alias"
         if target is None:
             core_targets: dict[str, set[str]] = {}
             for alias, candidate in aliases.items():
@@ -213,6 +285,15 @@ class StandardizationAgent:
                 unit_action = unit_conversion[0]
             else:
                 unit_status = "conflict"
+        value_profile = self._profile_series(series, definition, detected_unit)
+        # Names nominate a field; units and values can veto or lower confidence.
+        if target and unit_status == "conflict":
+            score = min(score, 0.58)
+        if target and value_profile["available"]:
+            plausibility = float(value_profile["plausibility"])
+            score *= 0.72 + 0.28 * plausibility
+            if value_profile["missing_ratio"] >= 0.8:
+                score *= 0.72
         return {
             "raw": raw_name,
             "base_name": base_name,
@@ -226,11 +307,19 @@ class StandardizationAgent:
             "unit_action": unit_action,
             "confidence": round(float(score), 3),
             "method": method,
+            "value_profile": value_profile,
+            "neighbor_fields": list(neighbors),
+            "point_resolution": point_resolution,
         }
 
-    def map_columns(self, columns: list[str], scenario_id: str) -> dict[str, Any]:
+    def map_columns(self, columns: list[str], scenario_id: str, frame: pd.DataFrame | None = None) -> dict[str, Any]:
         template = self.repository.get(scenario_id)
-        mappings = [self._match_one(str(column), template) for column in columns]
+        names = [str(column) for column in columns]
+        mappings = []
+        for index, column in enumerate(names):
+            neighbors = tuple(names[max(0, index - 2):index] + names[index + 1:index + 3])
+            series = frame[column] if frame is not None and column in frame.columns else None
+            mappings.append(self._match_one(column, template, series=series, neighbors=neighbors))
         for item in mappings:
             target = item["standard"]
             if target is None:
@@ -253,6 +342,19 @@ class StandardizationAgent:
             "review_count": sum(item["status"] == "review" for item in mappings),
             "unmapped_count": sum(item["status"] == "unmapped" for item in mappings),
             "unit_risk_count": sum(item["unit_status"] == "conflict" for item in mappings),
+            "low_value_confidence_count": sum(
+                item["value_profile"]["available"] and item["value_profile"]["plausibility"] < 0.6
+                for item in mappings if item["standard"]
+            ),
+            "unresolved_points": [
+                {
+                    "point_id": item["point_resolution"]["point_id"],
+                    "measurement_type_candidate": item["point_resolution"].get("measurement_type"),
+                    "confidence": item["point_resolution"].get("confidence"),
+                    "missing_knowledge": item["point_resolution"].get("missing_knowledge", []),
+                }
+                for item in mappings if item["point_resolution"]["status"] == "unresolved"
+            ],
         }
 
     def detect_scenario(
@@ -260,19 +362,50 @@ class StandardizationAgent:
         columns: list[str],
         instruction: str = "",
         selected_scenario_id: str | None = None,
+        frame: pd.DataFrame | None = None,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ranked = []
-        instruction_lower = instruction.lower()
+        context = context or {}
+        context_text = " ".join(str(value) for value in [instruction, context.get("source", ""), context.get("equipment", ""), context.get("process_module", "")]).lower()
+        normalized_columns = {normalize_name(column) for column in columns}
         for template in self.repository.list():
-            mapping = self.map_columns(columns, template.scenario_id)
-            confidences = [item["confidence"] for item in mapping["mappings"] if item["standard"]]
-            keyword_hits = sum(keyword.lower() in instruction_lower for keyword in template.config.get("keywords", []))
-            score = (
-                0.55 * mapping["candidate_coverage"]
-                + 0.25 * (sum(confidences) / max(len(confidences), 1))
-                + 0.15 * min(len(confidences) / max(len(columns), 1), 1.0)
-                + 0.05 * min(keyword_hits, 1)
-            )
+            mapping = self.map_columns(columns, template.scenario_id, frame=frame)
+            recognition = template.recognition
+            usable = [item for item in mapping["mappings"] if item["standard"] and item["status"] in {"matched", "review"}]
+            matched_names = {item["standard"] for item in usable}
+            required = set(recognition["required_features"])
+            supporting = set(recognition["supporting_features"])
+            required_hits = sorted(required & matched_names)
+            supporting_hits = sorted(supporting & matched_names)
+            conflict_hits = sorted({
+                pattern for pattern in recognition["conflicting_features"]
+                if any(normalize_name(pattern) in column or column in normalize_name(pattern) for column in normalized_columns)
+            })
+            confidences = [float(item["confidence"]) for item in usable]
+            unit_conflicts = [item["raw"] for item in usable if item["unit_status"] == "conflict"]
+            abnormal_values = [item["raw"] for item in usable if item["value_profile"]["available"] and item["value_profile"]["anomaly_ratio"] >= 0.2]
+            high_missing = [item["raw"] for item in usable if item["value_profile"]["available"] and item["value_profile"]["missing_ratio"] >= 0.5]
+            keyword_hits = sum(keyword.lower() in context_text for keyword in template.config.get("keywords", []))
+            evidence = ([f"required:{name}" for name in required_hits]
+                        + [f"supporting:{name}" for name in supporting_hits]
+                        + (["context:equipment_or_process"] if keyword_hits else []))
+            conflicts = ([f"conflicting_feature:{name}" for name in conflict_hits]
+                         + [f"unit_conflict:{name}" for name in unit_conflicts]
+                         + [f"abnormal_values:{name}" for name in abnormal_values]
+                         + [f"high_missing:{name}" for name in high_missing])
+            required_coverage = len(required_hits) / max(len(required), 1)
+            support_coverage = len(supporting_hits) / max(len(supporting), 1)
+            mean_confidence = sum(confidences) / max(len(confidences), 1)
+            evidence_count = len(required_hits) + len(supporting_hits)
+            score = (0.47 * required_coverage + 0.18 * support_coverage + 0.22 * mean_confidence
+                     + 0.08 * min(evidence_count / max(int(recognition["min_evidence"]), 1), 1.0)
+                     + 0.05 * min(keyword_hits, 1))
+            score -= 0.08 * len(conflict_hits) + 0.07 * len(unit_conflicts)
+            score -= min(0.12, 0.03 * len(abnormal_values) + 0.02 * len(high_missing))
+            if evidence_count < int(recognition["min_evidence"]):
+                score = min(score, 0.42)
+            score = max(0.0, min(score, 1.0))
             ranked.append({
                 **template.summary(),
                 "confidence": round(score, 3),
@@ -281,8 +414,19 @@ class StandardizationAgent:
                 "review_fields": mapping["review_count"],
                 "required_coverage": mapping["required_coverage"],
                 "missing_required": mapping["missing_required"],
+                "score": round(score, 3),
+                "evidence": evidence,
+                "conflicts": conflicts,
+                "evidence_count": evidence_count,
+                "required_features": sorted(required),
+                "supporting_features": sorted(supporting),
+                "conflicting_features": list(recognition["conflicting_features"]),
+                "minimum_evidence": int(recognition["min_evidence"]),
+                "minimum_confidence": float(recognition["min_confidence"]),
+                "minimum_required_coverage": float(recognition["min_required_coverage"]),
+                "priority": int(recognition["priority"]),
             })
-        ranked.sort(key=lambda item: item["confidence"], reverse=True)
+        ranked.sort(key=lambda item: (item["confidence"], item["priority"]), reverse=True)
         auto_selected = ranked[0]
         selected = auto_selected
         selection_source = "auto"
@@ -294,16 +438,19 @@ class StandardizationAgent:
         auto_margin = auto_selected["confidence"] - ranked[1]["confidence"] if len(ranked) > 1 else auto_selected["confidence"]
         selected_alternatives = [item["confidence"] for item in ranked if item["scenario_id"] != selected["scenario_id"]]
         selected_margin = selected["confidence"] - max(selected_alternatives, default=0.0)
-        low_evidence = selected["confidence"] < 0.45
+        low_evidence = (selected["confidence"] < selected["minimum_confidence"]
+                        or selected["evidence_count"] < selected["minimum_evidence"]
+                        or selected["required_coverage"] < selected["minimum_required_coverage"])
         close_candidates = auto_margin < 0.08
         mixed_scenario_suspected = (
             len(ranked) > 1
-            and auto_margin < 0.12
-            and ranked[1]["confidence"] >= 0.40
+            and (auto_margin < 0.12 or ranked[1]["confidence"] / max(ranked[0]["confidence"], 1e-9) >= 0.78)
+            and ranked[1]["confidence"] >= ranked[1]["minimum_confidence"]
             and ranked[0]["matched_fields"] >= 3
             and ranked[1]["matched_fields"] >= 3
         )
         manual_disagreement = selection_source == "manual" and selected["scenario_id"] != auto_selected["scenario_id"] and selected_margin <= -0.08
+        evidence_conflict = bool(selected["conflicts"])
         if low_evidence:
             ambiguity_reason = "场景证据不足"
         elif manual_disagreement:
@@ -312,19 +459,32 @@ class StandardizationAgent:
             ambiguity_reason = "检测到多个场景的字段簇"
         elif close_candidates:
             ambiguity_reason = "多个场景得分接近"
+        elif evidence_conflict:
+            ambiguity_reason = "字段单位、缺失率或数据范围存在冲突"
         else:
             ambiguity_reason = None
         scenario_groups = self._scenario_groups(columns, [item["scenario_id"] for item in ranked[:2]]) if mixed_scenario_suspected else []
         assigned_columns = {field["raw"] for group in scenario_groups for field in group["fields"]}
+        if close_candidates and auto_selected["confidence"] >= 0.30:
+            status, final_scene = "ambiguous", None
+        elif low_evidence:
+            status, final_scene = ("unknown" if selected["confidence"] < 0.30 else "uncertain"), None
+        elif mixed_scenario_suspected or manual_disagreement:
+            status, final_scene = "ambiguous", None
+        elif selected["conflicts"]:
+            status, final_scene = "uncertain", selected["scenario_id"]
+        else:
+            status, final_scene = "confirmed", selected["scenario_id"]
         return {
             "selected": selected,
             "auto_selected": auto_selected,
             "selection_source": selection_source,
             "candidates": ranked,
-            "confidence_margin": round(selected_margin, 3),
+            "confidence_margin": round(auto_margin, 3),
             "auto_confidence_margin": round(auto_margin, 3),
-            "is_ambiguous": low_evidence or close_candidates or mixed_scenario_suspected or manual_disagreement,
-            "decision": "reject" if low_evidence else "review" if (close_candidates or mixed_scenario_suspected or manual_disagreement) else "accept",
+            "selected_confidence_margin": round(selected_margin, 3),
+            "is_ambiguous": low_evidence or close_candidates or mixed_scenario_suspected or manual_disagreement or evidence_conflict,
+            "decision": "reject" if low_evidence else "review" if (close_candidates or mixed_scenario_suspected or manual_disagreement or evidence_conflict) else "accept",
             "is_out_of_scope": low_evidence,
             "ambiguity_reason": ambiguity_reason,
             "mixed_scenario": {
@@ -333,6 +493,10 @@ class StandardizationAgent:
                 "groups": scenario_groups,
                 "unassigned_columns": [str(column) for column in columns if str(column) not in assigned_columns] if mixed_scenario_suspected else [],
             },
+            "scene_candidates": ranked,
+            "final_scene": final_scene,
+            "confidence": selected["confidence"],
+            "status": status,
         }
 
     def _scenario_groups(self, columns: list[str], scenario_ids: list[str]) -> list[dict[str, Any]]:
@@ -380,6 +544,7 @@ class StandardizationAgent:
         overrides: dict[str, str] | None = None,
         convert_units: bool = True,
         include_unmapped: bool = False,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if frame.empty:
             raise ValueError("CSV 数据为空。")
@@ -390,10 +555,12 @@ class StandardizationAgent:
             list(frame.columns),
             instruction,
             selected_scenario_id=None if scenario_id == "auto" else scenario_id,
+            frame=frame,
+            context=context,
         )
         selected_id = detection["selected"]["scenario_id"] if scenario_id == "auto" else scenario_id
         template = self.repository.get(selected_id)
-        mapping = self.map_columns(list(frame.columns), selected_id)
+        mapping = self.map_columns(list(frame.columns), selected_id, frame=frame)
         overrides = overrides or {}
         for item in mapping["mappings"]:
             if item["raw"] in overrides:
@@ -568,7 +735,7 @@ class StandardizationAgent:
             status = "reject"
         reasons = []
         if ambiguous:
-            reasons.append(f"场景判定不明确：{detection.get('ambiguity_reason') or '需要人工确认'}（领先差 {detection.get('confidence_margin', 0):.1%}）")
+            reasons.append(f"场景判定不明确：{detection.get('ambiguity_reason') or '需要人工确认'}（领先差 {detection.get('auto_confidence_margin', 0):.1%}）")
         if mapping["missing_required"]:
             reasons.append("缺少必需字段：" + "、".join(mapping["missing_required"]))
         if mapping["review_count"]:

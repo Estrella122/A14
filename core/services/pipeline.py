@@ -117,12 +117,20 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         from standard_agent import ScenarioRepository, StandardizationAgent
 
         frame = _read_csv(source_path)
-        result = StandardizationAgent(ScenarioRepository()).standardize(
+        repository = ScenarioRepository()
+        result = StandardizationAgent(repository).standardize(
             frame,
             scenario_id=scenario_id or "auto",
             instruction=instruction,
             overrides=overrides,
         )
+        effective_scene_id = result["scenario"]["scenario_id"]
+        effective_template = repository.get(effective_scene_id)
+        template_path = repository.root / "scenarios" / effective_scene_id / "template.json"
+        recognition_required_features = list(effective_template.recognition["required_features"])
+        modeling_required_features = [
+            field.standard_name for field in effective_template.fields if field.required
+        ]
 
     output_path = run_dir / "02_standardization" / "standardized.csv"
     mapping_path = run_dir / "02_standardization" / "mapping_report.csv"
@@ -141,6 +149,27 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         "data_decision": result["data_decision"],
         "schema_validation": result["schema_validation"],
         "dictionary": result["dictionary"],
+        "runtime_trace": {
+            "scene_id": scenario_id or "auto",
+            "agent_scene": result["detection"]["auto_selected"]["scenario_id"],
+            "selected_scene": result["detection"]["selected"]["scenario_id"],
+            "final_scene": result["detection"].get("final_scene"),
+            "status": result["detection"].get("status"),
+            "confidence": result["detection"].get("confidence"),
+            "confidence_margin": result["detection"].get("auto_confidence_margin"),
+            "registry_scene_id": effective_scene_id,
+            "template_path": str(template_path),
+            "required_features_source": f"{template_path.parent / 'fields.csv'}#required=true",
+            "required_features": modeling_required_features,
+            "recognition_required_features_source": f"{template_path}#recognition.required_features",
+            "recognition_required_features": recognition_required_features,
+            "modeling_gate": {
+                "scene_id": effective_scene_id,
+                "template_path": str(template_path),
+                "required_features_source": f"{template_path.parent / 'fields.csv'}#required=true",
+                "required_features": modeling_required_features,
+            },
+        },
         "preview": result["standardized_data"].head(MAX_PREVIEW_ROWS).where(pd.notna(result["standardized_data"]), None).to_dict("records"),
     }
     _write_json(report_path, report)
@@ -799,6 +828,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 standardization["scenario"]["effective_max_lag"] = effective_max_lag
                 standardization["scenario"]["requested_max_lag"] = max_lag
             snapshot["results"]["standardization"] = standardization
+            snapshot["runtime_trace"] = standardization.get("runtime_trace", {})
             snapshot["artifacts"].update(standardization["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
             if finish_requested_stage("standardization"):

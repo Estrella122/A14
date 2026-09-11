@@ -8,6 +8,42 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
     rng = np.random.default_rng(seed)
     time = pd.date_range("2026-01-01 08:00:00", periods=rows, freq="min")
     x = np.arange(rows)
+    if scenario_id == "blast_furnace":
+        # TODO(mock): 仅用于接口联调和压力测试；正式演示请使用内置的 Mendeley 真实高炉数据。
+        time = pd.date_range("2026-01-01", periods=rows, freq="h")
+        blast = 4000 + 180 * np.sin(x / 31) + rng.normal(0, 35, rows)
+        oxygen = 9200 + 0.9 * (blast - 4000) + rng.normal(0, 110, rows)
+        hot_blast_temp = 1080 + 22 * np.sin((x - 4) / 45) + rng.normal(0, 4, rows)
+        ore_coke = 3.25 + 0.12 * np.sin(x / 70) + rng.normal(0, 0.025, rows)
+        silicon = 0.58 - 0.00008 * (hot_blast_temp - 1080) - 0.055 * (ore_coke - 3.25) + 0.018 * np.sin((x - 8) / 28) + rng.normal(0, 0.018, rows)
+        return pd.DataFrame({
+            "dt": time, "Fb": blast, "Ph": 3.35 + rng.normal(0, 0.05, rows),
+            "Pc": 3.58 + rng.normal(0, 0.05, rows), "Fo": oxygen,
+            "dP": 1.42 + rng.normal(0, 0.035, rows), "Pt": 1.85 + rng.normal(0, 0.025, rows),
+            "Th": hot_blast_temp, "CO2": 19.5 + rng.normal(0, 0.35, rows),
+            "H2": 3.1 + rng.normal(0, 0.12, rows), "R": ore_coke, "Si": silicon,
+        })
+    if scenario_id == "industrial_dryer":
+        # Coupled 3x3 dynamic benchmark. This is synthetic acceptance data and is
+        # deliberately labelled as such wherever it is exported.
+        hot_air = 180 + 8 * np.sin(x / 31) + 4 * (x > rows * .28) - 6 * (x > rows * .67) + rng.normal(0, .35, rows)
+        air_flow = 42000 + 2400 * np.sin(x / 43) + 1800 * (x > rows * .45) + rng.normal(0, 90, rows)
+        feed = 38 + 2.6 * np.sin(x / 53) + 2.2 * (x > rows * .58) + rng.normal(0, .12, rows)
+        moisture = np.empty(rows); product_temp = np.empty(rows); exhaust = np.empty(rows)
+        moisture[0], product_temp[0], exhaust[0] = 9.2, 82., 61.
+        for i in range(1, rows):
+            j = max(0, i - 4)
+            moisture[i] = (.91 * moisture[i-1] + .09 * (9.2 - .055*(hot_air[j]-180)
+                           - .000055*(air_flow[j]-42000) + .13*(feed[j]-38)) + rng.normal(0, .025))
+            product_temp[i] = (.88 * product_temp[i-1] + .12 * (82 + .31*(hot_air[j]-180)
+                              + .00008*(air_flow[j]-42000) - .18*(feed[j]-38)) + rng.normal(0, .07))
+            exhaust[i] = (.9 * exhaust[i-1] + .1 * (61 - .12*(hot_air[j]-180)
+                          - .00018*(air_flow[j]-42000) + .55*(feed[j]-38)) + rng.normal(0, .08))
+        return pd.DataFrame({
+            "采集时间": pd.date_range("2026-01-01", periods=rows, freq="10s"),
+            "入口热风温度": hot_air, "热风流量": air_flow, "给料量": feed,
+            "产品水分": moisture, "物料出口温度": product_temp, "尾气湿度": exhaust,
+        })
     if scenario_id == "steel_industry_energy":
         usage = 24 + 10 * np.sin(x / 36) + rng.normal(0, 1.2, rows)
         return pd.DataFrame(
@@ -26,37 +62,17 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
             }
         )
     if scenario_id == "debutanizer_column":
-        time = pd.date_range("2026-07-01 00:00:00", periods=rows, freq="min")
-        reflux = 82 + 4.8 * np.sin(x / 85) + rng.normal(0, 0.45, rows)
-        product = 112 + 6.2 * np.sin(x / 110 + 0.7) + rng.normal(0, 0.55, rows)
-        pressure_kpa = 620 + 24 * np.sin(x / 140 + 0.3) + rng.normal(0, 2.2, rows)
-        top_temp = 54 + 0.018 * pressure_kpa - 0.026 * reflux + rng.normal(0, 0.12, rows)
-        tray6 = 75 + 0.085 * product - 0.031 * reflux + rng.normal(0, 0.16, rows)
-        bottom_a = 102 + 0.048 * product + 0.010 * pressure_kpa + rng.normal(0, 0.18, rows)
-        bottom_b = bottom_a + 1.2 * np.sin(x / 70) + rng.normal(0, 0.12, rows)
-        lag = min(max(30, rows // 45), 75)
-        lagged_reflux = pd.Series(reflux).shift(lag).bfill().to_numpy()
-        lagged_product = pd.Series(product).shift(lag).bfill().to_numpy()
-        lagged_tray6 = pd.Series(tray6).shift(max(1, lag - 8)).bfill().to_numpy()
-        c4 = (
-            1.18
-            - 0.0105 * (lagged_reflux - 82)
-            + 0.0072 * (lagged_product - 112)
-            + 0.018 * (lagged_tray6 - 84)
-            + 0.10 * np.sin(x / 180)
-            + rng.normal(0, 0.018, rows)
-        )
         return pd.DataFrame(
             {
-                "采集时间": time,
-                "塔顶温度(℃)": top_temp.clip(20, 120),
-                "塔顶压力(kPa)": pressure_kpa.clip(0, 2000),
-                "回流流量(t/h)": reflux.clip(0, 500),
-                "后续流程流量(t/h)": product.clip(0, 500),
-                "第六塔板温度(℃)": tray6.clip(20, 150),
-                "塔底温度A(℃)": bottom_a.clip(50, 180),
-                "塔底温度B(℃)": bottom_b.clip(50, 180),
-                "C4浓度(%)": c4.clip(0, 10),
+                "timestamp": time,
+                "U1": .50 + rng.normal(0, .03, rows),
+                "U2": .45 + rng.normal(0, .03, rows),
+                "U3": .55 + rng.normal(0, .04, rows),
+                "U4": .48 + rng.normal(0, .03, rows),
+                "U5": .52 + rng.normal(0, .03, rows),
+                "U6": .51 + rng.normal(0, .03, rows),
+                "U7": .49 + rng.normal(0, .03, rows),
+                "U8": .20 + rng.normal(0, .02, rows),
             }
         )
     if scenario_id == "steel_reheating_furnace":

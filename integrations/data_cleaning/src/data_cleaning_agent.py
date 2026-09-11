@@ -73,10 +73,15 @@ class SegmentScore:
 
 
 class DataCleaningSelectionAgent:
-    def __init__(self, variable_spec: dict[str, dict], resample_rule: str = "10s", primary_output: str | None = None):
+    def __init__(self, variable_spec: dict[str, dict], resample_rule: str = "10s", primary_output: str | None = None,
+                 selection_window: int = 30, selection_step: int = 15,
+                 causal_columns: set[str] | None = None):
         self.variable_spec = variable_spec
         self.resample_rule = resample_rule
         self.primary_output = primary_output
+        self.selection_window = max(10, int(selection_window))
+        self.selection_step = max(1, int(selection_step))
+        self.causal_columns = set(causal_columns or ())
         self.logs: list[str] = []
         self.anomaly_flags: pd.DataFrame | None = None
         self.raw_missing_rate: dict[str, float] = {}
@@ -123,6 +128,8 @@ class DataCleaningSelectionAgent:
 
             if self.variable_spec.get(column, {}).get("role") in {"output", "quality"}:
                 action = "缺失输出保留为空，不作为训练或评估真值"
+                if column in self.causal_columns:
+                    action += "；不使用未来观测插值"
             else:
                 frame[column] = frame[column].ffill(limit=6)
                 action = "仅向前填充最多6个采样点；不读取未来值"
@@ -160,8 +167,8 @@ class DataCleaningSelectionAgent:
         return frame
 
     def select_dynamic_segments(self, data: pd.DataFrame) -> pd.DataFrame:
-        window = 30
-        step = 15
+        window = self.selection_window
+        step = self.selection_step
         input_columns = [
             name for name, spec in self.variable_spec.items()
             if spec["role"] == "input" and name in data.columns

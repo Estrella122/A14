@@ -65,3 +65,7 @@ class SceneRegistryCoverageTests(SimpleTestCase):
                 frame = pd.read_csv(path, encoding="utf-8-sig")
                 result = self.agent.standardize(frame)
                 self.assertEqual((result["detection"]["final_scene"], result["detection"]["status"]), expected)
+                candidates = result["detection"]["candidates"]
+                expected_margin = round(candidates[0]["score"] - candidates[1]["score"], 3)
+                self.assertEqual(result["detection"]["confidence_margin"], expected_margin)
+                self.assertGreaterEqual(result["detection"]["confidence_margin"], 0)
