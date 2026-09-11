@@ -1,17 +1,37 @@
 ﻿scenario_id,scenario_name,standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
-cement_rotary_kiln,水泥回转窑,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
-cement_rotary_kiln,水泥回转窑,raw_meal_feed,生料喂料量,进入预热器系统的生料质量流量,manipulated,float,t/h,True,生料量|喂料量|RAW_MEAL_FEED|RAW_FEED,0.0,1000.0
-cement_rotary_kiln,水泥回转窑,coal_feed,窑头喂煤量,回转窑燃烧器煤粉质量流量,manipulated,float,t/h,True,窑头煤量|喂煤量|KILN_COAL_FEED|COAL_FEED,0.0,100.0
-cement_rotary_kiln,水泥回转窑,calciner_coal_feed,分解炉喂煤量,分解炉煤粉质量流量,manipulated,float,t/h,False,炉煤量|分解炉煤量|CALCINER_COAL,0.0,150.0
-cement_rotary_kiln,水泥回转窑,kiln_speed,窑转速,回转窑筒体转速,manipulated,float,rpm,True,回转窑转速|窑速|KILN_SPEED,0.0,10.0
-cement_rotary_kiln,水泥回转窑,kiln_inlet_temperature,窑尾温度,回转窑入口气体或物料温度,state,float,degC,True,窑尾烟室温度|窑入口温度|KILN_INLET_TEMP,0.0,1600.0
-cement_rotary_kiln,水泥回转窑,kiln_outlet_temperature,窑头温度,回转窑出口熟料或火焰区代表温度,controlled,float,degC,True,窑头罩温度|窑出口温度|KILN_OUTLET_TEMP,0.0,2000.0
-cement_rotary_kiln,水泥回转窑,preheater_exit_temperature,预热器出口温度,一级筒出口气体温度,state,float,degC,False,C1出口温度|一级筒出口温度|PREHEATER_EXIT_TEMP,0.0,800.0
-cement_rotary_kiln,水泥回转窑,kiln_inlet_o2,窑尾含氧量,窑尾烟气氧气含量,state,float,percent,False,窑尾氧量|KILN_INLET_O2,0.0,21.0
-cement_rotary_kiln,水泥回转窑,id_fan_speed,高温风机转速,窑尾高温风机运行速度,manipulated,float,rpm,False,窑尾风机转速|ID_FAN_SPEED,0.0,5000.0
-cement_rotary_kiln,水泥回转窑,kiln_current,窑主电机电流,回转窑主电机负载电流,state,float,A,False,窑电流|主传电流|KILN_CURRENT,0.0,2000.0
-cement_rotary_kiln,水泥回转窑,clinker_free_lime,熟料游离钙,熟料中游离氧化钙质量百分比,controlled,float,percent,True,游离钙|f-CaO|FREE_LIME|CLINKER_FCAO,0.0,10.0
-cement_rotary_kiln,水泥回转窑,clinker_temperature,熟料温度,篦冷机入口熟料温度,state,float,degC,False,出窑熟料温度|CLINKER_TEMP,0.0,1600.0
+blast_furnace,钢铁高炉铁水质量预测,timestamp,过程时间戳,高炉过程传感器小时采样时间,time,datetime,datetime,True,dt|时间|采集时间|记录时间|TIME|DATETIME|TS,,
+blast_furnace,钢铁高炉铁水质量预测,blast_flow_rate,鼓风流量,送入高炉的鼓风体积流量,manipulated,float,m3/min,True,Fb|Blast flowrate|鼓风量|鼓风流量|BLAST_FLOW,0.0,10000.0
+blast_furnace,钢铁高炉铁水质量预测,hot_blast_pressure,热风压力,热风总管压力,state,float,kgf/cm2,False,Ph|Hot blast pressure|热风压|HOT_BLAST_PRESSURE,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,cold_blast_pressure,冷风压力,冷风管路压力,state,float,kgf/cm2,False,Pc|Cold blast pressure|冷风压|COLD_BLAST_PRESSURE,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,cold_blast_temperature,冷风温度,进入热风炉前的冷风温度,state,float,degC,False,Tc|Cold-blast temperature|冷风温度|COLD_BLAST_TEMP,-50.0,300.0
+blast_furnace,钢铁高炉铁水质量预测,oxygen_flow_rate,富氧流量,鼓风系统富氧体积流量,manipulated,float,m3/h,True,Fo|Blast oxygen flowrate|富氧量|富氧流量|OXYGEN_FLOW,0.0,50000.0
+blast_furnace,钢铁高炉铁水质量预测,total_pressure_drop,高炉总压差,高炉煤气系统总压力差,state,float,kgf/cm2,False,dP|Total gas pressure difference|全压差|总压差|TOTAL_DP,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,upper_pressure_drop,上部压差,高炉上部煤气压力差,state,float,kgf/cm2,False,dPu|Upper gas pressure difference|上部压差|UPPER_DP,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,lower_pressure_drop,下部压差,高炉下部煤气压力差,state,float,kgf/cm2,False,dPl|Lower gas pressure difference|下部压差|LOWER_DP,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_pressure,炉顶煤气压力,高炉炉顶煤气压力,state,float,kgf/cm2,False,Pt|Top gas pressure|炉顶压力|TOP_GAS_PRESSURE,0.0,5.0
+blast_furnace,钢铁高炉铁水质量预测,hot_blast_temperature,热风温度,送入高炉风口的热风温度,manipulated,float,degC,True,Th|Hot-blast temperature|热风温度|HOT_BLAST_TEMP,0.0,1600.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_co2,炉顶煤气CO2,炉顶煤气二氧化碳体积分数,state,float,percent,False,CO2|CO2 content of top gas|炉顶CO2|TOP_GAS_CO2,0.0,40.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_h2,炉顶煤气H2,炉顶煤气氢气体积分数,state,float,percent,False,H2|H2 content of top gas|炉顶H2|TOP_GAS_H2,0.0,20.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_temp_1,炉顶温度1,炉顶第一测点煤气温度,state,float,degC,False,Tt1|Top gas temperature 1|炉顶温度1|TOP_TEMP_1,0.0,1000.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_temp_2,炉顶温度2,炉顶第二测点煤气温度,state,float,degC,False,Tt2|Top gas temperature 2|炉顶温度2|TOP_TEMP_2,0.0,1000.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_temp_3,炉顶温度3,炉顶第三测点煤气温度,state,float,degC,False,Tt3|Top gas temperature 3|炉顶温度3|TOP_TEMP_3,0.0,1000.0
+blast_furnace,钢铁高炉铁水质量预测,top_gas_temp_4,炉顶温度4,炉顶第四测点煤气温度,state,float,degC,False,Tt4|Top gas temperature 4|炉顶温度4|TOP_TEMP_4,0.0,1000.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_1,周边温度1,炉身周边第一测点煤气温度,state,float,degC,False,Tp1|Peripheral gas temperature 1|周边温度1|PERIPHERAL_TEMP_1,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_2,周边温度2,炉身周边第二测点煤气温度,state,float,degC,False,Tp2|Peripheral gas temperature 2|周边温度2|PERIPHERAL_TEMP_2,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_3,周边温度3,炉身周边第三测点煤气温度,state,float,degC,False,Tp3|Peripheral gas temperature 3|周边温度3|PERIPHERAL_TEMP_3,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_4,周边温度4,炉身周边第四测点煤气温度,state,float,degC,False,Tp4|Peripheral gas temperature 4|周边温度4|PERIPHERAL_TEMP_4,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_5,周边温度5,炉身周边第五测点煤气温度,state,float,degC,False,Tp5|Peripheral gas temperature 5|周边温度5|PERIPHERAL_TEMP_5,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_6,周边温度6,炉身周边第六测点煤气温度,state,float,degC,False,Tp6|Peripheral gas temperature 6|周边温度6|PERIPHERAL_TEMP_6,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_7,周边温度7,炉身周边第七测点煤气温度,state,float,degC,False,Tp7|Peripheral gas temperature 7|周边温度7|PERIPHERAL_TEMP_7,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_8,周边温度8,炉身周边第八测点煤气温度,state,float,degC,False,Tp8|Peripheral gas temperature 8|周边温度8|PERIPHERAL_TEMP_8,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_9,周边温度9,炉身周边第九测点煤气温度,state,float,degC,False,Tp9|Peripheral gas temperature 9|周边温度9|PERIPHERAL_TEMP_9,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,peripheral_gas_temp_10,周边温度10,炉身周边第十测点煤气温度,state,float,degC,False,Tp10|Peripheral gas temperature 10|周边温度10|PERIPHERAL_TEMP_10,0.0,1500.0
+blast_furnace,钢铁高炉铁水质量预测,ore_coke_ratio,矿焦比,高炉入炉矿石与焦炭的质量比,manipulated,float,ratio,True,R|Ore-to-coke ratio|矿焦比|ORE_COKE_RATIO,0.0,10.0
+blast_furnace,钢铁高炉铁水质量预测,hot_metal_si,铁水硅含量,出铁铁水中的硅质量分数,controlled,float,percent,True,Si|Silicon content|Si content in hot metal|铁水含硅量|铁水硅含量|HOT_METAL_SI,0.0,5.0
+blast_furnace,钢铁高炉铁水质量预测,lab_source_timestamp,最近可用化验时间,当前行铁水硅含量所对应的实际化验时间,identifier,string,string,False,Si_lab_timestamp|化验时间|LAB_TIMESTAMP,,
+blast_furnace,钢铁高炉铁水质量预测,lab_age_minutes,化验数据龄期,过程时间相对最近已发生化验的分钟差,quality,float,min,False,Si_lab_age_min|化验龄期|LAB_AGE_MIN,0.0,360.0
+blast_furnace,钢铁高炉铁水质量预测,lab_fresh,化验新鲜度标记,化验值是否在允许的三小时因果对齐窗口内,quality,boolean,boolean,False,Si_lab_fresh|化验有效标记|LAB_FRESH,,
+blast_furnace,钢铁高炉铁水质量预测,blast_furnace_state,高炉炉况,第二数据集给出的八类高炉运行状态,quality,string,string,False,State of blast furnace|炉况|高炉状态|BLAST_FURNACE_STATE,,
 debutanizer_column,炼油脱丁烷塔,timestamp,序列时间,由公开样本顺序派生的单调时间轴,time,datetime,datetime,True,sample_timestamp|sequence_time|timestamp|time,,
 debutanizer_column,炼油脱丁烷塔,top_temperature,塔顶温度,脱丁烷塔塔顶温度；公开文件为归一化数值,state,float,ratio,True,U1|u1|Top_Temperature|top temperature,0.0,1.5
 debutanizer_column,炼油脱丁烷塔,top_pressure,塔顶压力,脱丁烷塔塔顶压力；公开文件为归一化数值,state,float,ratio,True,U2|u2|Top_Pressure|top pressure,0.0,1.5
@@ -22,16 +42,6 @@ debutanizer_column,炼油脱丁烷塔,bottom_temperature_a,塔底温度A,脱丁�
 debutanizer_column,炼油脱丁烷塔,bottom_temperature_b,塔底温度B,脱丁烷塔塔底第二温度测点；公开文件为归一化数值,state,float,ratio,True,U7|u7|Bottom_Temperature_B|bottom temperature b,0.0,1.5
 debutanizer_column,炼油脱丁烷塔,bottom_butane_content,塔底丁烷含量,塔底物流中丁烷C4含量软测量目标；源数据已平移8个样本补偿测量时滞,controlled,float,ratio,True,U8|u8|y|Butane_Content|butane content,0.0,1.5
 debutanizer_column,炼油脱丁烷塔,sample_index,样本序号,公开数据的原始顺序编号,identifier,integer,string,False,sample|row_number|sample_index,0.0,
-distillation_column,化工精馏塔,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
-distillation_column,化工精馏塔,reflux_flow,回流流量,塔顶回流液体质量流量,manipulated,float,t/h,True,回流量|回流液流量|REFLUX_FLOW,0.0,500.0
-distillation_column,化工精馏塔,steam_flow,再沸蒸汽流量,再沸器加热蒸汽质量流量,manipulated,float,t/h,True,蒸汽流量|再沸器蒸汽|STEAM_FLOW,0.0,500.0
-distillation_column,化工精馏塔,feed_flow,进料流量,进入精馏塔的物料质量流量,disturbance,float,t/h,True,原料流量|塔进料|FEED_FLOW,0.0,1000.0
-distillation_column,化工精馏塔,feed_temperature,进料温度,进料进入塔前的温度,disturbance,float,degC,False,原料温度|进料温度|FEED_TEMP,0.0,500.0
-distillation_column,化工精馏塔,top_temperature,塔顶温度,精馏塔顶部代表温度,controlled,float,degC,True,顶温|塔顶温度|TOP_TEMP,0.0,500.0
-distillation_column,化工精馏塔,bottom_temperature,塔釜温度,精馏塔底部代表温度,state,float,degC,True,釜温|塔底温度|BOTTOM_TEMP,0.0,600.0
-distillation_column,化工精馏塔,column_pressure,塔压,精馏塔代表压力,state,float,Pa,False,塔顶压力|塔内压力|COLUMN_PRESSURE,0.0,5000000.0
-distillation_column,化工精馏塔,top_product_purity,塔顶产品纯度,塔顶产品中目标组分含量,controlled,float,percent,True,塔顶纯度|产品纯度|TOP_PURITY,0.0,100.0
-distillation_column,化工精馏塔,bottom_level,塔釜液位,塔釜液位百分比,state,float,percent,False,釜液位|塔底液位|BOTTOM_LEVEL,0.0,100.0
 industrial_dryer,工业干燥器,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
 industrial_dryer,工业干燥器,hot_air_temperature,热风入口温度,进入干燥器的热风温度,manipulated,float,degC,True,入口热风温度|进风温度|HOT_AIR_TEMP|INLET_AIR_TEMP,0.0,500.0
 industrial_dryer,工业干燥器,drying_air_flow,干燥风量,进入干燥器的热风体积流量,manipulated,float,Nm3/h,True,热风流量|进风量|干燥空气流量|DRYING_AIR_FLOW|AIR_FLOW,0.0,500000.0
@@ -39,59 +49,3 @@ industrial_dryer,工业干燥器,wet_feed_rate,湿料进料量,进入干燥器�
 industrial_dryer,工业干燥器,product_moisture,产品含水率,干燥产品出口含水质量百分数,controlled,float,percent,True,出口含水率|产品水分|物料含水率|PRODUCT_MOISTURE|OUTLET_MOISTURE,0.0,100.0
 industrial_dryer,工业干燥器,product_temperature,产品出口温度,干燥产品离开设备时的温度,controlled,float,degC,True,物料出口温度|产品温度|PRODUCT_TEMP|OUTLET_PRODUCT_TEMP,0.0,300.0
 industrial_dryer,工业干燥器,exhaust_humidity,排风湿度,干燥器尾气相对湿度,controlled,float,percent,True,尾气湿度|出口空气湿度|排气湿度|EXHAUST_HUMIDITY|OUTLET_AIR_HUMIDITY,0.0,100.0
-steel_industry_energy,钢铁工业能源监测,timestamp,时间戳,十五分钟能源采样时间,time,datetime,datetime,True,date|Date|datetime|记录时间|采集时间,,
-steel_industry_energy,钢铁工业能源监测,energy_usage,工业用电量,采样区间内的工业电能消耗,controlled,float,kWh,True,Usage_kWh|usage kwh|energy consumption|industry energy consumption|用电量|能耗,0.0,
-steel_industry_energy,钢铁工业能源监测,lagging_reactive_energy,滞后无功电量,滞后电流对应的无功电量,disturbance,float,kVarh,True,Lagging_Current_Reactive.Power_kVarh|lagging current reactive power|滞后无功电量,0.0,
-steel_industry_energy,钢铁工业能源监测,leading_reactive_energy,超前无功电量,超前电流对应的无功电量,disturbance,float,kVarh,True,Leading_Current_Reactive_Power_kVarh|leading current reactive power|超前无功电量,0.0,
-steel_industry_energy,钢铁工业能源监测,co2_emission,二氧化碳排放,数据源记录的二氧化碳指标,state,float,tCO2,False,CO2(tCO2)|CO2|carbon emission|二氧化碳排放,0.0,
-steel_industry_energy,钢铁工业能源监测,lagging_power_factor,滞后功率因数,滞后电流功率因数,state,float,percent,False,Lagging_Current_Power_Factor|lagging power factor|滞后功率因数,0.0,100.0
-steel_industry_energy,钢铁工业能源监测,leading_power_factor,超前功率因数,超前电流功率因数,state,float,percent,False,Leading_Current_Power_Factor|leading power factor|超前功率因数,0.0,100.0
-steel_industry_energy,钢铁工业能源监测,seconds_from_midnight,午夜起秒数,从当日午夜起算的秒数,state,integer,s,False,NSM|number of seconds from midnight|午夜起秒数,0.0,86399.0
-steel_industry_energy,钢铁工业能源监测,week_status,工作日状态,工作日或周末分类,identifier,category,string,False,WeekStatus|week status|weekday status|工作日状态,,
-steel_industry_energy,钢铁工业能源监测,day_of_week,星期,一周中的日期分类,identifier,category,string,False,Day_of_week|day of week|weekday|星期,,
-steel_industry_energy,钢铁工业能源监测,load_type,负荷等级,轻载中载或最大负荷分类,state,category,string,False,Load_Type|load type|load category|负荷类型,,
-steel_reheating_furnace,钢厂步进梁式加热炉,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
-steel_reheating_furnace,钢厂步进梁式加热炉,gas_flow,煤气流量,进入炉区的标准状态煤气体积流量,manipulated,float,Nm3/h,True,燃气流量|煤气瞬时流量|GAS_FLOW|GAS_FLOW_NM3H|COALGAS_FLOW,0.0,60000.0
-steel_reheating_furnace,钢厂步进梁式加热炉,air_flow,助燃空气流量,进入炉区的助燃空气体积流量,manipulated,float,Nm3/h,True,空气流量|助燃风量|风量|AIR_FLOW|AIR_FLOW_NM3H,0.0,120000.0
-steel_reheating_furnace,钢厂步进梁式加热炉,furnace_zone1_temp,预热段炉温,预热段代表性炉膛温度,controlled,float,degC,True,一段炉温|预热段温度|炉温1|ZONE1_TEMP|ZONE1_TEMP_C,500.0,1450.0
-steel_reheating_furnace,钢厂步进梁式加热炉,furnace_zone2_temp,加热段炉温,加热段代表性炉膛温度,controlled,float,degC,True,二段炉温|加热段温度|炉温2|ZONE2_TEMP|ZONE2_TEMP_C,500.0,1450.0
-steel_reheating_furnace,钢厂步进梁式加热炉,furnace_zone3_temp,均热段炉温,均热段代表性炉膛温度,controlled,float,degC,True,三段炉温|均热段温度|炉温3|ZONE3_TEMP|ZONE3_TEMP_C,500.0,1450.0
-steel_reheating_furnace,钢厂步进梁式加热炉,walking_beam_speed,步进梁速度,步进梁输送钢坯的等效线速度,manipulated,float,m/min,True,步进速度|推钢速度|出钢速度|BEAM_SPEED|WALKING_BEAM_SPEED,0.05,5.0
-steel_reheating_furnace,钢厂步进梁式加热炉,slab_entry_temp,入炉钢坯温度,钢坯进入加热炉时的表面或代表温度,disturbance,float,degC,False,入炉温度|钢坯入口温度|板坯入炉温度|SLAB_IN_TEMP|ENTRY_TEMP,0.0,1000.0
-steel_reheating_furnace,钢厂步进梁式加热炉,slab_discharge_temp,出炉钢坯温度,钢坯离开加热炉时的目标质量温度,controlled,float,degC,True,出炉温度|钢坯出口温度|板坯出炉温度|SLAB_OUT_TEMP|SLAB_OUT_TEMP_C,700.0,1350.0
-steel_reheating_furnace,钢厂步进梁式加热炉,furnace_pressure,炉膛压力,炉膛相对环境的压力,state,float,Pa,False,炉压|炉膛压强|FURNACE_PRESSURE|PRESSURE_PA,-100.0,100.0
-steel_reheating_furnace,钢厂步进梁式加热炉,flue_gas_o2,烟气含氧量,烟气中的氧气体积分数,state,float,percent,False,含氧量|烟气氧|氧量|O2_PERCENT|FLUE_GAS_O2,0.0,21.0
-steel_reheating_furnace,钢厂步进梁式加热炉,flue_gas_temp,烟气温度,烟道或排烟口温度,state,float,degC,False,排烟温度|烟道温度|FLUE_GAS_TEMP|EXHAUST_TEMP,0.0,1600.0
-steel_reheating_furnace,钢厂步进梁式加热炉,air_fuel_ratio,空燃比,助燃空气与燃料的比值,state,float,ratio,False,空气燃料比|风燃比|AIR_FUEL_RATIO|AFR,0.0,10.0
-steel_reheating_furnace,钢厂步进梁式加热炉,slab_thickness,钢坯厚度,入炉钢坯厚度,disturbance,float,mm,False,板坯厚度|坯料厚度|THICKNESS|SLAB_THICKNESS,50.0,500.0
-steel_reheating_furnace,钢厂步进梁式加热炉,slab_width,钢坯宽度,入炉钢坯宽度,disturbance,float,mm,False,板坯宽度|坯料宽度|WIDTH|SLAB_WIDTH,300.0,2500.0
-steel_reheating_furnace,钢厂步进梁式加热炉,production_rate,生产节奏,单位时间加热炉钢坯产出质量,disturbance,float,t/h,False,产量|生产率|小时产量|PRODUCTION_RATE|THROUGHPUT,0.0,500.0
-steel_reheating_furnace,钢厂步进梁式加热炉,heat_id,炉次号,钢坯所属生产炉次或批次标识,identifier,string,string,False,炉号|批次号|HEAT_ID|BATCH_ID,,
-steel_reheating_furnace,钢厂步进梁式加热炉,data_valid,数据有效标记,源系统给出的采样有效性标记,quality,boolean,boolean,False,有效标记|质量码|VALID|QUALITY_FLAG,,
-thermal_power_boiler,火电燃煤锅炉,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
-thermal_power_boiler,火电燃煤锅炉,unit_load,机组负荷,发电机组当前有功负荷,disturbance,float,MW,True,负荷|有功功率|LOAD|UNIT_LOAD,0.0,1200.0
-thermal_power_boiler,火电燃煤锅炉,coal_flow,给煤量,进入锅炉的总给煤质量流量,manipulated,float,t/h,True,总煤量|燃煤量|COAL_FLOW|FUEL_FLOW,0.0,600.0
-thermal_power_boiler,火电燃煤锅炉,primary_air_flow,一次风量,输送煤粉的一次风流量,manipulated,float,Nm3/h,False,一次风流量|PRIMARY_AIR_FLOW|PA_FLOW,0.0,2000000.0
-thermal_power_boiler,火电燃煤锅炉,secondary_air_flow,二次风量,参与燃烧的二次风流量,manipulated,float,Nm3/h,False,二次风流量|SECONDARY_AIR_FLOW|SA_FLOW,0.0,3000000.0
-thermal_power_boiler,火电燃煤锅炉,feedwater_flow,给水流量,进入锅炉系统的给水质量流量,manipulated,float,t/h,True,锅炉给水|给水量|FEEDWATER_FLOW,0.0,4000.0
-thermal_power_boiler,火电燃煤锅炉,main_steam_pressure,主蒸汽压力,主蒸汽管道压力,controlled,float,Pa,True,主汽压力|主汽压|MAIN_STEAM_PRESSURE|MS_PRESSURE,0.0,40000000.0
-thermal_power_boiler,火电燃煤锅炉,main_steam_temperature,主蒸汽温度,主蒸汽出口温度,controlled,float,degC,True,主汽温度|主汽温|MAIN_STEAM_TEMP|MS_TEMP,0.0,700.0
-thermal_power_boiler,火电燃煤锅炉,main_steam_flow,主蒸汽流量,锅炉主蒸汽质量流量,state,float,t/h,False,主汽流量|MAIN_STEAM_FLOW,0.0,5000.0
-thermal_power_boiler,火电燃煤锅炉,furnace_pressure,炉膛压力,锅炉炉膛相对压力,state,float,Pa,True,炉膛负压|炉压|FURNACE_PRESSURE,-10000.0,5000.0
-thermal_power_boiler,火电燃煤锅炉,flue_gas_o2,烟气含氧量,锅炉尾部烟气氧量,state,float,percent,True,氧量|空预器入口氧量|O2_PERCENT|FLUE_GAS_O2,0.0,21.0
-thermal_power_boiler,火电燃煤锅炉,drum_level,汽包水位,汽包锅炉水位偏差,controlled,float,mm,False,汽包液位|DRUM_LEVEL,-1000.0,1000.0
-thermal_power_boiler,火电燃煤锅炉,furnace_temperature,炉膛温度,炉膛代表性燃烧温度,state,float,degC,False,炉温|火焰温度|FURNACE_TEMP,0.0,2000.0
-thermal_power_boiler,火电燃煤锅炉,sootblower_state,吹灰器状态,锅炉吹灰系统运行状态,state,boolean,boolean,False,吹灰状态|SOOTBLOWER_STATE,,
-wastewater_aeration,污水生化曝气池,timestamp,时间戳,工业时序采样时间,time,datetime,datetime,True,时间|采集时间|记录时间|TIME|DATETIME|TS,,
-wastewater_aeration,污水生化曝气池,influent_flow,进水流量,进入生化处理单元的污水流量,disturbance,float,m3/h,True,进水量|污水流量|INFLUENT_FLOW|IN_FLOW,0.0,100000.0
-wastewater_aeration,污水生化曝气池,influent_cod,进水COD,进水化学需氧量,disturbance,float,mg/L,True,进水化学需氧量|INFLUENT_COD|IN_COD,0.0,5000.0
-wastewater_aeration,污水生化曝气池,influent_ammonia,进水氨氮,进水氨氮浓度,disturbance,float,mg/L,False,进水NH3-N|INFLUENT_NH3N|IN_AMMONIA,0.0,1000.0
-wastewater_aeration,污水生化曝气池,aeration_air_flow,曝气风量,进入曝气池的空气流量,manipulated,float,Nm3/h,True,鼓风量|曝气空气量|AERATION_AIR_FLOW|BLOWER_AIR_FLOW,0.0,1000000.0
-wastewater_aeration,污水生化曝气池,blower_frequency,鼓风机频率,曝气鼓风机变频器输出频率,manipulated,float,Hz,False,风机频率|BLOWER_FREQ,0.0,100.0
-wastewater_aeration,污水生化曝气池,dissolved_oxygen,溶解氧,曝气池混合液溶解氧浓度,controlled,float,mg/L,True,DO|曝气池DO|DISSOLVED_OXYGEN,0.0,20.0
-wastewater_aeration,污水生化曝气池,mlss,污泥浓度,曝气池混合液悬浮固体浓度,state,float,mg/L,True,混合液污泥浓度|MLSS,0.0,30000.0
-wastewater_aeration,污水生化曝气池,ph,酸碱度,曝气池混合液pH,state,float,pH,False,PH值|酸碱值|PH,0.0,14.0
-wastewater_aeration,污水生化曝气池,water_temperature,水温,曝气池水体温度,state,float,degC,False,池温|污水温度|WATER_TEMP,0.0,60.0
-wastewater_aeration,污水生化曝气池,effluent_cod,出水COD,处理出水化学需氧量,controlled,float,mg/L,True,出水化学需氧量|EFFLUENT_COD|OUT_COD,0.0,1000.0
-wastewater_aeration,污水生化曝气池,effluent_ammonia,出水氨氮,处理出水氨氮浓度,controlled,float,mg/L,True,出水NH3-N|EFFLUENT_NH3N|OUT_AMMONIA,0.0,500.0
-wastewater_aeration,污水生化曝气池,return_sludge_flow,回流污泥量,回流至生化池的污泥流量,manipulated,float,m3/h,False,污泥回流量|RAS_FLOW|RETURN_SLUDGE_FLOW,0.0,100000.0

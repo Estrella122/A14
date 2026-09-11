@@ -54,16 +54,11 @@ def list_skills() -> dict[str, Any]:
 
 
 def _entities(message: str) -> dict[str, Any]:
-    equipment = re.search(r"(\d+)\s*号\s*(钢铁高炉|炼铁高炉|高炉|脱丁烷塔|蒸馏塔|精馏塔|加热炉|锅炉|曝气池|回转窑|工业干燥器|干燥器|干燥机|烘干机|反应器|塔|炉|池|窑)", message)
+    equipment = re.search(r"(\d+)\s*号\s*(钢铁高炉|炼铁高炉|高炉|脱丁烷塔|脱丁烷精馏塔|精馏塔|工业干燥器|干燥器|干燥机|烘干机|塔|炉)", message)
     scene_rules = (
         (("钢铁高炉", "炼铁高炉", "高炉", "铁水", "铁水硅"), "钢铁高炉铁水质量预测", "blast_furnace"),
         (("工业干燥器", "干燥器", "干燥机", "烘干机", "热风干燥"), "工业干燥器", "industrial_dryer"),
-        (("脱丁烷塔",), "炼油厂脱丁烷塔", "debutanizer_column"),
-        (("蒸馏塔", "精馏塔"), "蒸馏塔", "distillation_column"),
-        (("火电", "燃煤", "锅炉", "主汽温"), "火电燃煤锅炉", "thermal_power_boiler"),
-        (("污水", "曝气池", "氨氮"), "污水曝气池", "wastewater_aeration"),
-        (("水泥", "回转窑", "游离钙"), "水泥回转窑", "cement_rotary_kiln"),
-        (("钢厂", "加热炉", "板坯"), "钢厂加热炉", "steel_reheating_furnace"),
+        (("脱丁烷塔", "脱丁烷精馏塔", "炼油精馏"), "炼油脱丁烷精馏塔", "debutanizer_column"),
     )
     scenario = scenario_id = None
     for terms, label, identifier in scene_rules:
@@ -72,14 +67,8 @@ def _entities(message: str) -> dict[str, Any]:
             break
     if scenario is None and equipment:
         generic = equipment.group(2)
-        if generic in {"塔"}:
-            scenario, scenario_id = "蒸馏塔", "distillation_column"
-        elif generic in {"炉"}:
-            scenario, scenario_id = "钢厂加热炉", "steel_reheating_furnace"
-        elif generic in {"池"}:
-            scenario, scenario_id = "污水曝气池", "wastewater_aeration"
-        elif generic in {"窑"}:
-            scenario, scenario_id = "水泥回转窑", "cement_rotary_kiln"
+        if generic in {"塔", "精馏塔"}:
+            scenario, scenario_id = "炼油脱丁烷精馏塔", "debutanizer_column"
     return {
         "equipment_id": f"{equipment.group(1)}号{equipment.group(2)}" if equipment else None,
         "scenario": scenario, "scenario_id": scenario_id,

@@ -51,7 +51,7 @@ def standardization_payload():
         "passed": report.get("passed", False),
         "passed_items": report.get("passed_items", 0),
         "total_items": report.get("total_items", 0),
-        "template_count": 9,
+        "template_count": 3,
         "generated_at": report.get("generated_at"),
         "checks": report.get("items", [])[:8],
         "mapping_preview": _read_csv("standardization/standards/scenarios/blast_furnace/fields.csv", 8),

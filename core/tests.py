@@ -421,79 +421,11 @@ class LivePipelineApiTests(SimpleTestCase):
         self.assertEqual([item['run_id'] for item in response.json()['data']], ['run_new', 'run_old'])
         mocked_list.assert_called_once_with(20)
 
-    def test_chinese_furnace_csv_runs_all_stages_and_exports_artifacts(self):
-        source = Path(settings.BASE_DIR) / 'integrations' / 'standardization' / 'examples' / 'A14_2号任务_合格测试数据_钢厂加热炉.csv'
-        upload = SimpleUploadedFile('中文钢厂加热炉.csv', source.read_bytes(), content_type='text/csv')
-        response = self.client.post('/api/pipeline/runs/', {
-            'file': upload,
-            'scenario_id': 'auto',
-            'instruction': '钢厂加热炉APC建模',
-            'resample_rule': '10s',
-            'max_lag': '30',
-        })
-
-        self.assertEqual(response.status_code, 201, response.content)
-        snapshot = response.json()['data']
-        self.assertEqual(snapshot['status'], 'completed')
-        self.assertEqual(
-            [stage['status'] for stage in snapshot['stages']],
-            ['completed', 'completed', 'completed', 'completed', 'completed', 'completed', 'completed'],
-        )
-        self.assertEqual(snapshot['results']['standardization']['scenario']['scenario_id'], 'steel_reheating_furnace')
-        self.assertGreater(snapshot['results']['cleaning']['overall_score'], 0)
-        self.assertTrue(snapshot['results']['cleaning']['timeseries_preview']['points'])
-        self.assertEqual(snapshot['results']['cleaning']['timeseries_preview']['input']['role'], 'manipulated')
-        self.assertEqual(snapshot['results']['cleaning']['timeseries_preview']['output']['role'], 'controlled')
-        self.assertIn('test', snapshot['results']['modeling']['metrics'])
-        self.assertTrue(snapshot['results']['modeling']['collinearity']['labels'])
-        self.assertTrue(snapshot['results']['modeling']['collinearity']['vif'])
-        self.assertGreaterEqual(len(snapshot['results']['optimization']['iterations']), 8)
-        self.assertLessEqual(len(snapshot['results']['optimization']['iterations']), 16)
-        self.assertIn(snapshot['results']['optimization']['best_round'], range(1, 17))
-        self.assertIn('前6轮', snapshot['results']['optimization']['search_strategy'])
-        self.assertEqual(snapshot['results']['optimization']['stopping']['min_rounds'], 8)
-        self.assertEqual(snapshot['results']['optimization']['stopping']['max_rounds'], 16)
-        self.assertIn('passed', snapshot['results']['review'])
-        self.assertEqual(snapshot['results']['report']['format'], 'markdown')
-
-        run_id = snapshot['run_id']
-        latest = self.client.get('/api/pipeline/runs/latest/')
-        self.assertEqual(latest.status_code, 200)
-        self.assertEqual(latest.json()['data']['run_id'], run_id)
-        artifact = self.client.get(f'/api/pipeline/runs/{run_id}/artifacts/standardized_csv/')
-        self.assertEqual(artifact.status_code, 200)
-        self.assertIn('attachment', artifact['Content-Disposition'])
-        report = self.client.get(f'/api/pipeline/runs/{run_id}/artifacts/analysis_report_md/')
-        self.assertEqual(report.status_code, 200)
-        report_text = b''.join(report.streaming_content).decode('utf-8')
-        self.assertIn('总控与子Agent执行链', report_text)
-        self.assertIn('闭环寻优过程', report_text)
-        self.assertIn('系统辨识结果', report_text)
-
     def test_pipeline_rejects_non_csv_upload(self):
         upload = SimpleUploadedFile('notes.txt', b'not a csv', content_type='text/plain')
         response = self.client.post('/api/pipeline/runs/', {'file': upload})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['ok'])
-
-    def test_pipeline_ignores_text_metadata_during_numeric_resampling(self):
-        source = Path(settings.BASE_DIR) / 'integrations' / 'standardization' / 'examples' / 'A14_2号任务_钢厂字段标准化综合测试数据.csv'
-        upload = SimpleUploadedFile('含炉号和质量码.csv', source.read_bytes(), content_type='text/csv')
-        response = self.client.post('/api/pipeline/runs/', {
-            'file': upload,
-            'scenario_id': 'auto',
-            'instruction': '验证文本元数据不会参与数值重采样',
-            'resample_rule': '60s',
-            'max_lag': '30',
-        })
-
-        self.assertEqual(response.status_code, 201, response.content)
-        snapshot = response.json()['data']
-        self.assertEqual(snapshot['status'], 'completed')
-        logs = snapshot['results']['cleaning']['logs']
-        self.assertTrue(any('heat_id' in item and '排除' in item for item in logs))
-        self.assertNotIn('heat_id', snapshot['results']['cleaning']['variable_spec'])
-
 
 class OptimizationServiceTests(SimpleTestCase):
     def test_benchmark_evaluation_is_reproducible(self):

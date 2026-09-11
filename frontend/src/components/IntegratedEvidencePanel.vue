@@ -66,7 +66,7 @@ function liveEvidence(run, module) {
     passed: result.data_decision?.status === 'ready',
     passed_items: result.mapping?.mappings?.filter((item) => item.status === 'matched').length ?? 0,
     total_items: result.mapping?.mappings?.length ?? 0,
-    template_count: 6,
+    template_count: 3,
     mapping_preview: result.mapping?.mappings ?? [],
   }
   if (module === 'cleaning') return {
@@ -126,7 +126,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
       <div v-if="module === 'standardization'" class="evidence-kpis">
         <div><span>验收结果</span><strong>{{ data.passed ? '通过' : '待复核' }}</strong></div>
         <div><span>验收条目</span><strong>{{ data.passed_items }} / {{ data.total_items }}</strong></div>
-        <div><span>模板能力</span><strong>{{ data.template_count ?? 6 }} 场景</strong></div>
+        <div><span>模板能力</span><strong>{{ data.template_count ?? 3 }} 场景</strong></div>
       </div>
       <div v-else-if="module === 'cleaning'" class="evidence-kpis">
         <div><span>质量评分</span><strong>{{ data.overall_score }}<small> / 100</small></strong></div>
