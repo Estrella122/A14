@@ -70,9 +70,9 @@ class ScenarioTemplate:
             "supporting_features": configured.get("supporting_features", optional),
             "conflicting_features": configured.get("conflicting_features", []),
             "priority": configured.get("priority", 0),
-            "min_evidence": configured.get("min_evidence", min(3, max(2, len(required)))),
-            "min_confidence": configured.get("min_confidence", 0.52),
-            "min_required_coverage": configured.get("min_required_coverage", 0.55),
+            "min_evidence": configured.get("minimum_evidence", configured.get("min_evidence", min(3, max(2, len(required))))),
+            "min_confidence": configured.get("minimum_confidence", configured.get("min_confidence", 0.52)),
+            "min_required_coverage": configured.get("minimum_required_field_coverage", configured.get("min_required_coverage", 0.55)),
         }
 
     def summary(self) -> dict[str, Any]:

@@ -1,0 +1,24 @@
+{
+  "scenario_id": "thermal_power_boiler_long_tail",
+  "scenario_name": "燃煤工业锅炉长尾运行",
+  "industry": "工业锅炉",
+  "process_unit": "燃煤锅炉蒸汽温度系统",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["燃煤锅炉", "锅炉出口蒸汽温度", "长尾锅炉", "boiler outlet steam temperature", "PT_8313A", "TE_8332A"],
+  "sampling_seconds": 1,
+  "time_axis_type": "wall_clock",
+  "timestamp_field": "timestamp",
+  "primary_output": "boiler_outlet_steam_temperature",
+  "recognition": {
+    "required_features": ["timestamp", "upper_furnace_pressure_a", "container_outlet_vapour_pressure", "upper_furnace_temperature_right", "primary_fan_outlet_flow", "primary_desuperheating_water_flow", "compensated_main_steam_flow", "boiler_outlet_steam_temperature"],
+    "supporting_features": ["economizer_outlet_flue_gas_temperature_left", "economizer_outlet_flue_gas_temperature_right", "secondary_fan_outlet_flow", "economizer_inlet_flue_gas_oxygen_left", "economizer_inlet_flue_gas_oxygen_right", "induced_draft_fan_motor_current", "induced_draft_fan_vibration_a", "induced_draft_fan_vibration_b"],
+    "conflicting_features": ["energy_usage", "hot_metal_si", "bottom_butane_content", "product_moisture"],
+    "priority": 90,
+    "minimum_evidence": 6,
+    "minimum_confidence": 0.58,
+    "minimum_required_field_coverage": 0.75
+  },
+  "source": {"dataset": "A long-tailed distribution time-series dataset in boiler equipment", "doi": "10.1038/s41597-025-05096-4", "table": "Table 1"},
+  "notes": "精确点位语义来自论文 Table 1。部分工程单位未由论文表格声明，字段字典采用数据源尺度或按量纲标识，投产前需由现场点表确认。"
+}

@@ -1,0 +1,24 @@
+{
+  "scenario_id": "steel_industry_energy",
+  "scenario_name": "钢铁工业能源监测",
+  "industry": "冶金能源管理",
+  "process_unit": "钢铁企业用电负荷",
+  "version": "1.1.0",
+  "dictionary": "fields.csv",
+  "keywords": ["钢铁用电", "工业能耗", "能源监测", "energy consumption", "Usage_kWh", "Load_Type"],
+  "sampling_seconds": 900,
+  "time_axis_type": "wall_clock",
+  "timestamp_field": "timestamp",
+  "primary_output": "energy_usage",
+  "recognition": {
+    "required_features": ["timestamp", "energy_usage", "lagging_reactive_energy", "leading_reactive_energy"],
+    "supporting_features": ["co2_emission", "lagging_power_factor", "leading_power_factor", "seconds_from_midnight", "week_status", "day_of_week", "load_type"],
+    "conflicting_features": ["hot_metal_si", "boiler_outlet_steam_temperature", "bottom_butane_content", "product_moisture"],
+    "priority": 80,
+    "minimum_evidence": 4,
+    "minimum_confidence": 0.52,
+    "minimum_required_field_coverage": 0.75
+  },
+  "source": {"dataset": "Steel Industry Energy Consumption", "repository": "UCI Machine Learning Repository", "doi": "10.24432/C52G8C"},
+  "notes": "恢复真实钢铁工业用电场景；字段与 UCI 数据集列定义一致。"
+}

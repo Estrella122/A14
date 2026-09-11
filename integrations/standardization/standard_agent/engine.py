@@ -14,6 +14,7 @@ from rapidfuzz import fuzz
 
 from .repository import ROOT, ScenarioRepository, ScenarioTemplate
 from .ml_model import semantic_core
+from .point_dictionary import PointSemanticDictionary
 from .semantic_ensemble import HybridSemanticModel
 from .schema_validation import validate_standardized_frame
 from .units import conversion, split_header_unit
@@ -69,6 +70,7 @@ class StandardizationAgent:
         self.model_path = model_path or ROOT / "models" / "field_semantic_model.json"
         self.encoder_path = ROOT / "models" / "embedding_encoder_multilingual"
         self.web_alias_path = ROOT / "knowledge" / "web_alias_candidates.csv"
+        self.point_dictionary = PointSemanticDictionary(ROOT / "knowledge" / "point_semantics.csv")
         self.semantic_model = HybridSemanticModel.load(self.model_path, self.encoder_path) if self.model_path.exists() else None
         self._lock = threading.Lock()
 
@@ -215,9 +217,12 @@ class StandardizationAgent:
         base_name, detected_unit = split_header_unit(raw_name)
         normalized = normalize_name(base_name)
         aliases = self._aliases(template)
-        target = aliases.get(normalized)
+        point_resolution = self.point_dictionary.resolve(raw_name, template.scenario_id, set(template.by_name))
+        target = point_resolution.get("standard_field") if point_resolution["status"] == "resolved" else aliases.get(normalized)
         method = "alias"
-        score = 1.0 if target else 0.0
+        score = float(point_resolution["confidence"]) if point_resolution["status"] == "resolved" else (1.0 if target else 0.0)
+        if point_resolution["status"] == "resolved":
+            method = "point_dictionary"
         learned = self._knowledge().get(template.scenario_id, {})
         if target and any(
             normalize_name(alias) == normalized
@@ -304,6 +309,7 @@ class StandardizationAgent:
             "method": method,
             "value_profile": value_profile,
             "neighbor_fields": list(neighbors),
+            "point_resolution": point_resolution,
         }
 
     def map_columns(self, columns: list[str], scenario_id: str, frame: pd.DataFrame | None = None) -> dict[str, Any]:
@@ -340,6 +346,15 @@ class StandardizationAgent:
                 item["value_profile"]["available"] and item["value_profile"]["plausibility"] < 0.6
                 for item in mappings if item["standard"]
             ),
+            "unresolved_points": [
+                {
+                    "point_id": item["point_resolution"]["point_id"],
+                    "measurement_type_candidate": item["point_resolution"].get("measurement_type"),
+                    "confidence": item["point_resolution"].get("confidence"),
+                    "missing_knowledge": item["point_resolution"].get("missing_knowledge", []),
+                }
+                for item in mappings if item["point_resolution"]["status"] == "unresolved"
+            ],
         }
 
     def detect_scenario(
