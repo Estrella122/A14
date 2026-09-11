@@ -3,12 +3,12 @@ export const mockAgentTrace = {
   source: 'mock',
   total_duration_ms: 4280,
   nodes: [
-    { id: 'instruction', name: '用户指令', kind: 'input', duration_ms: 12, status: 'success', input: { message: '提取高炉高信噪比动态数据并预测铁水硅含量' }, output: { accepted: true } },
-    { id: 'intent', name: '意图解析', kind: 'reason', duration_ms: 286, status: 'success', input: { language: 'zh-CN', scene: '钢铁高炉' }, output: { intent: 'hot_metal_quality_prediction', confidence: 0.96, constraints: ['因果化验对齐', '高信噪比', '共线性处理'] } },
+    { id: 'instruction', name: '用户指令', kind: 'input', duration_ms: 12, status: 'success', input: { message: '提取高信噪比动态数据并闭环寻找最佳模型' }, output: { accepted: true } },
+    { id: 'intent', name: '意图解析', kind: 'reason', duration_ms: 286, status: 'success', input: { language: 'zh-CN', scene: '加热炉' }, output: { intent: 'closed_loop_identification', confidence: 0.96, constraints: ['高信噪比', '共线性处理'] } },
     { id: 'tools', name: '工具选择', kind: 'tool', duration_ms: 174, status: 'success', input: { capability_count: 9 }, output: { tools: ['cleaning_agent', 'dynamic_segmenter', 'lag_analyzer', 'arx_identifier', 'optimizer'] } },
-    { id: 'parameters', name: '参数生成', kind: 'parameter', duration_ms: 238, status: 'success', input: { objective: 'R²↑, RMSE↓, coverage↑' }, output: { resample_rule: '1h', top_k: 8, max_lag: 24, lab_alignment: 'causal_asof_backward' } },
-    { id: 'execution', name: '算法调用', kind: 'execution', duration_ms: 2140, status: 'success', input: { rows: 703, variables: 31 }, output: { target: 'hot_metal_si', leakage_guard: true } },
-    { id: 'evaluation', name: '结果评估', kind: 'evaluation', duration_ms: 492, status: 'success', input: { metrics: ['R²', 'RMSE', 'coverage'] }, output: { evidence_source: 'real_dataset', gate: 'pending_run' } },
+    { id: 'parameters', name: '参数生成', kind: 'parameter', duration_ms: 238, status: 'success', input: { objective: 'R²↑, RMSE↓, coverage↑' }, output: { resample_rule: '5s', top_k: 8, max_lag: 60, outlier_sigma: 3 } },
+    { id: 'execution', name: '算法调用', kind: 'execution', duration_ms: 2140, status: 'success', input: { rows: 48000, variables: 36 }, output: { selected_segments: 11, modeling_rows: 12120, features: 7 } },
+    { id: 'evaluation', name: '结果评估', kind: 'evaluation', duration_ms: 492, status: 'success', input: { metrics: ['R²', 'RMSE', 'coverage'] }, output: { r2: 0.913, rmse: 5.14, coverage: 0.82, gate: 'passed' } },
     { id: 'decision', name: '下一步决策', kind: 'decision', duration_ms: 321, status: 'success', input: { best_round: 6, no_improvement_rounds: 2 }, output: { action: 'stop_and_deliver', reason: '连续两轮改善低于阈值' } },
     { id: 'output', name: '最终输出', kind: 'output', duration_ms: 617, status: 'success', input: { evidence_items: 24 }, output: { artifacts: ['modeling_dataset.csv', 'analysis_report.md', 'optimization_report.json'] } },
   ],
@@ -33,28 +33,28 @@ export const defaultPipelineGraph = {
   edges: pipelineNodeTypes.slice(0, -1).map((_, index) => ({ id: `edge-${index + 1}`, from: `node-${index + 1}`, to: `node-${index + 2}` })),
 }
 
-const prediction = (phase = 0, bias = 0) => Array.from({ length: 36 }, (_, index) => Number((0.48 + Math.sin(index / 4 + phase) * 0.045 + bias).toFixed(3)))
-const residuals = (spread = .04) => Array.from({ length: 40 }, (_, index) => Number((Math.sin(index * 1.7) * spread + Math.cos(index * .42) * spread * .45).toFixed(3)))
+const prediction = (phase = 0, bias = 0) => Array.from({ length: 36 }, (_, index) => Number((885 + index * 1.28 + Math.sin(index / 4 + phase) * 8 + bias).toFixed(2)))
+const residuals = (spread = 5) => Array.from({ length: 40 }, (_, index) => Number((Math.sin(index * 1.7) * spread + Math.cos(index * .42) * spread * .45).toFixed(2)))
 export const mockExperiments = [
-  { id: 'BF-RUN-006', time: '2026-09-11 09:42', dataset: '高炉真实数据-720h', preprocessing: '1h / 因果化验对齐', algorithm: 'ARX', order: '2-2-1', r2: .712, aic: -318.4, duration: 38.8, status: 'completed', tag: '最佳结果', note: '仅供离线界面降级展示', actual: prediction(0), predicted: prediction(.12, -.006), residuals: residuals(.025) },
-  { id: 'BF-RUN-005', time: '2026-09-11 09:26', dataset: '高炉真实数据-720h', preprocessing: '1h / Top8动态段', algorithm: 'ARX', order: '3-2-1', r2: .684, aic: -302.1, duration: 41.3, status: 'completed', tag: '候选', note: '', actual: prediction(0), predicted: prediction(.25, -.009), residuals: residuals(.032) },
-  { id: 'BF-RUN-004', time: '2026-09-11 09:08', dataset: '高炉真实数据-720h', preprocessing: '1h / VIF消减', algorithm: 'OE', order: '2-3-1', r2: .653, aic: -289.3, duration: 44.7, status: 'completed', tag: '尝试2', note: '离线降级示例，不作为真实运行结论', actual: prediction(0), predicted: prediction(.48, -.012), residuals: residuals(.037) },
-  { id: 'BF-RUN-003', time: '2026-09-11 08:45', dataset: '高炉真实数据-720h', preprocessing: '1h / 物理边界', algorithm: 'ARX', order: '2-2-2', r2: .621, aic: -276.6, duration: 37.4, status: 'completed', tag: '尝试1', note: '', actual: prediction(0), predicted: prediction(.34, -.014), residuals: residuals(.041) },
-  { id: 'BF-RUN-002', time: '2026-09-11 08:20', dataset: '高炉真实数据-720h', preprocessing: '1h / 全量变量', algorithm: '状态空间', order: '4阶', r2: .587, aic: -251.1, duration: 51.2, status: 'completed', tag: '基线', note: '', actual: prediction(0), predicted: prediction(.58, -.018), residuals: residuals(.048) },
-  { id: 'BF-RUN-001', time: '2026-09-11 08:02', dataset: '高炉真实数据-720h', preprocessing: '1h / 原始基线', algorithm: 'ARX', order: '1-1-1', r2: .544, aic: -230.8, duration: 29.9, status: 'completed', tag: '原始基线', note: '', actual: prediction(0), predicted: prediction(.9, -.022), residuals: residuals(.056) },
+  { id: 'RUN-0907-1421', time: '2026-09-07 14:21', dataset: '2#炉历史数据-v4', preprocessing: '5s / Hampel 3σ', algorithm: 'ARX', order: '2-2-1', r2: .928, aic: 182.4, duration: 42.8, status: 'completed', tag: '最佳结果', note: '增加高负荷阶跃片段', actual: prediction(0), predicted: prediction(.12, -.8), residuals: residuals(3.2) },
+  { id: 'RUN-0907-1350', time: '2026-09-07 13:50', dataset: '2#炉历史数据-v4', preprocessing: '5s / Hampel 3σ', algorithm: 'ARX', order: '3-2-1', r2: .913, aic: 191.7, duration: 46.1, status: 'completed', tag: '候选', note: '', actual: prediction(0), predicted: prediction(.25, -1.4), residuals: residuals(4.1) },
+  { id: 'RUN-0906-1728', time: '2026-09-06 17:28', dataset: '2#炉历史数据-v3', preprocessing: '10s / IQR', algorithm: 'OE', order: '2-3-1', r2: .887, aic: 209.3, duration: 38.7, status: 'completed', tag: '尝试2', note: '对比 OE 模型', actual: prediction(0), predicted: prediction(.48, -2.1), residuals: residuals(5.3) },
+  { id: 'RUN-0906-1605', time: '2026-09-06 16:05', dataset: '2#炉历史数据-v3', preprocessing: '10s / Hampel 2.5σ', algorithm: 'ARX', order: '2-2-2', r2: .901, aic: 198.6, duration: 40.4, status: 'completed', tag: '尝试1', note: '', actual: prediction(0), predicted: prediction(.34, -1.8), residuals: residuals(4.7) },
+  { id: 'RUN-0905-1043', time: '2026-09-05 10:43', dataset: '仿真阶跃集-v2', preprocessing: '5s / 物理边界', algorithm: '状态空间', order: '4阶', r2: .865, aic: 224.1, duration: 55.2, status: 'completed', tag: '基线', note: '仿真数据验证', actual: prediction(0), predicted: prediction(.58, -2.8), residuals: residuals(6.1) },
+  { id: 'RUN-0904-0912', time: '2026-09-04 09:12', dataset: '2#炉历史数据-v2', preprocessing: '30s / 线性插值', algorithm: 'ARX', order: '1-1-1', r2: .804, aic: 246.8, duration: 26.9, status: 'completed', tag: '原始基线', note: '未做动态优选', actual: prediction(0), predicted: prediction(.9, -4.5), residuals: residuals(7.8) },
 ]
 
 export const mockTwin = {
   metrics: [
-    { id: 'blast', label: '鼓风流量', value: 3514, unit: 'm³/min', status: 'normal', x: 17, y: 68, trend: [3488, 3514, 3509, 3505, 3498, 3522] },
-    { id: 'topPressure', label: '炉顶压力', value: 1.30, unit: 'kgf/cm²', status: 'normal', x: 67, y: 20, trend: [1.30, 1.30, 1.31, 1.30, 1.29, 1.30] },
-    { id: 'hotBlast', label: '热风温度', value: 1118, unit: '℃', status: 'normal', x: 26, y: 52, trend: [1117, 1131, 1112, 1108, 1122, 1118] },
-    { id: 'co2', label: '炉顶煤气 CO₂', value: 22.97, unit: '%', status: 'normal', x: 78, y: 36, trend: [22.62, 22.97, 23.31, 23.38, 23.10, 22.97] },
-    { id: 'si', label: '铁水硅含量', value: 0.50, unit: '%', status: 'warning', x: 72, y: 82, trend: [.50, .50, .62, .62, .60, .55] },
+    { id: 'gas', label: '煤气流量', value: 18620, unit: 'Nm³/h', status: 'normal', x: 13, y: 58, trend: [18120, 18280, 18410, 18360, 18520, 18620] },
+    { id: 'pressure', label: '炉膛压力', value: -18, unit: 'Pa', status: 'warning', x: 48, y: 43, trend: [-24, -21, -19, -17, -14, -18] },
+    { id: 'temp', label: '炉温', value: 1248, unit: '℃', status: 'normal', x: 54, y: 27, trend: [1236, 1240, 1245, 1244, 1247, 1248] },
+    { id: 'slabIn', label: '入炉钢坯', value: 842, unit: '℃', status: 'normal', x: 22, y: 76, trend: [836, 838, 839, 841, 843, 842] },
+    { id: 'slabOut', label: '出炉温度', value: 1186, unit: '℃', status: 'normal', x: 83, y: 76, trend: [1172, 1177, 1180, 1183, 1184, 1186] },
   ],
 }
 
-export const mockTransferFunction = { numerator: [.12], denominator: [1, .8, .12], sampleTime: 1, label: '高炉Si归一化示例 G(s) = 0.12 / (s² + 0.8s + 0.12)' }
+export const mockTransferFunction = { numerator: [1], denominator: [1, .5, 1], sampleTime: .1, label: 'G(s) = 1 / (s² + 0.5s + 1)' }
 
 export const mockQualityDimensions = [
   { key: 'completeness', label: '完整性', score: 96, method: '1 - 缺失单元格数 / 总单元格数', value: '缺失率 4.0%', suggestion: '保持当前缺失修复策略。' },

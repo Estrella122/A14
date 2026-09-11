@@ -9,7 +9,7 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const results = computed(() => latestRun.value?.results ?? {})
 const cleaning = computed(() => results.value.cleaning ?? {})
 const modeling = computed(() => results.value.modeling ?? {})
@@ -36,7 +36,7 @@ const segmentEntries = computed(() => (cleaning.value.segments_preview ?? []).sl
 
 const reviewItems = computed(() => [
   { label: '数据质量', result: Number(cleaning.value.overall_score ?? 0) >= 60 ? '通过' : '待复核', detail: `质量评分 ${cleaning.value.overall_score ?? '—'}，规整后 ${cleaning.value.cleaned_row_count ?? '—'} 行`, tone: Number(cleaning.value.overall_score ?? 0) >= 60 ? 'success' : 'warning' },
-  { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '候选兜底', detail: `${cleaning.value.selected_segment_count ?? 0} 个严格优质段，建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
+  { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '候选兜底', detail: `${cleaning.value.selected_segment_count ?? 0} 个训练达标窗口，建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
   { label: '时滞与共线性', result: modeling.value.selected_inputs?.length ? '完成' : '待运行', detail: `${modeling.value.input_cols?.length ?? 0} 个输入筛选为 ${modeling.value.selected_inputs?.length ?? 0} 个模型特征`, tone: modeling.value.selected_inputs?.length ? 'success' : 'warning' },
   { label: '辨识效果', result: Number(testMetrics.value.r2 ?? -1) >= 0 ? '通过' : '未通过', detail: `测试 R² ${Number(testMetrics.value.r2 ?? 0).toFixed(3)}，RMSE ${Number(testMetrics.value.rmse ?? 0).toFixed(3)}`, tone: Number(testMetrics.value.r2 ?? -1) >= 0 ? 'success' : 'warning' },
   { label: 'Agent评审', result: reviewPassed.value ? '通过' : '待复核', detail: `${review.value.blockers?.length ?? 0} 项阻断，${review.value.warnings?.length ?? 0} 项警告`, tone: reviewPassed.value ? 'success' : 'warning' },
@@ -100,7 +100,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
               <h3>执行摘要</h3>
               <p>本次运行面向 <strong>{{ standardization.scenario?.scenario_name ?? project.unit }}</strong> 的系统辨识任务。Agent 对 {{ Number(cleaning.cleaned_row_count ?? 0).toLocaleString('zh-CN') }} 行规整数据完成动态优选、时滞解耦、系统辨识和真实候选寻优。</p>
               <div class="report-highlight"><span><AppIcon name="spark" /></span><p><strong>Agent 核心结论</strong>第 {{ optimization.best_round ?? '—' }} 轮“{{ optimization.best_label ?? '等待寻优' }}”综合得分最高（{{ optimization.best_score ?? '—' }}）。最终评审：{{ conclusion }}。</p></div>
-              <div class="report-kpis"><div><span>严格优质段</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>核心变量</span><strong>{{ modeling.selected_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>验证 R²</span><strong>{{ Number(testMetrics.r2 ?? 0).toFixed(3) }}</strong><small>RMSE {{ Number(testMetrics.rmse ?? 0).toFixed(3) }}</small></div></div>
+              <div class="report-kpis"><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>核心变量</span><strong>{{ modeling.selected_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>独立测试 R²</span><strong>{{ Number(testMetrics.r2 ?? 0).toFixed(3) }}</strong><small>RMSE {{ Number(testMetrics.rmse ?? 0).toFixed(3) }}</small></div></div>
             </template>
 
             <template v-else-if="activeReportSection === 'quality'">
@@ -112,9 +112,9 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
             <template v-else-if="activeReportSection === 'selection'">
               <h3>动态段优选</h3>
-              <p>动态优选 Agent 按变化强度、信息量与完整性评价候选窗口。严格优质段共 {{ cleaning.selected_segment_count ?? 0 }} 个，最终保留 {{ cleaning.modeling_row_count ?? 0 }} 行用于辨识。</p>
-              <div class="report-kpis"><div><span>候选窗口</span><strong>{{ cleaning.candidate_segment_count ?? segmentEntries.length }}</strong><small>滑动窗口评价</small></div><div><span>严格优质段</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>满足全部阈值</small></div><div><span>建模数据</span><strong>{{ cleaning.modeling_row_count ?? 0 }}</strong><small>优选后行数</small></div></div>
-              <div class="table-wrap report-table-wrap"><table class="data-table"><thead><tr><th>段编号</th><th>起始位置</th><th>结束位置</th><th>动态分</th><th>入选</th></tr></thead><tbody><tr v-for="(item, index) in segmentEntries" :key="item.segment_id ?? index"><td>{{ item.segment_id ?? index + 1 }}</td><td>{{ item.start ?? item.start_idx ?? '—' }}</td><td>{{ item.end ?? item.end_idx ?? '—' }}</td><td>{{ Number(item.score ?? item.dynamic_score ?? 0).toFixed(3) }}</td><td>{{ item.selected ? '是' : '候选' }}</td></tr><tr v-if="!segmentEntries.length"><td colspan="5">当前任务未生成段预览。</td></tr></tbody></table></div>
+              <p>动态优选 Agent 按变化强度、信息量与完整性评价候选窗口。训练达标窗口共 {{ cleaning.selected_segment_count ?? 0 }} 个，最终保留 {{ cleaning.modeling_row_count ?? 0 }} 行用于辨识。</p>
+              <div class="report-kpis"><div><span>候选窗口</span><strong>{{ cleaning.candidate_segment_count ?? segmentEntries.length }}</strong><small>滑动窗口评价</small></div><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>动态分≥80且SNR代理≥10 dB</small></div><div><span>建模数据</span><strong>{{ cleaning.modeling_row_count ?? 0 }}</strong><small>优选后行数</small></div></div>
+              <div class="table-wrap report-table-wrap"><table class="data-table"><thead><tr><th>段编号</th><th>起始位置</th><th>结束位置</th><th>动态分</th><th>入选</th></tr></thead><tbody><tr v-for="(item, index) in segmentEntries" :key="item.segment_id ?? index"><td>{{ item.segment_id ?? index + 1 }}</td><td>{{ item.start_time ?? item.start ?? item.start_idx ?? '—' }}</td><td>{{ item.end_time ?? item.end ?? item.end_idx ?? '—' }}</td><td>{{ Number(item.segment_score ?? item.score ?? item.dynamic_score ?? 0).toFixed(3) }}</td><td>{{ item.selected ? '是' : '候选' }}</td></tr><tr v-if="!segmentEntries.length"><td colspan="5">当前任务未生成段预览。</td></tr></tbody></table></div>
             </template>
 
             <template v-else-if="activeReportSection === 'lag'">
@@ -125,9 +125,9 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
             <template v-else-if="activeReportSection === 'modeling'">
               <h3>系统辨识评价</h3>
-              <p>当前输出变量为 <strong>{{ modeling.output_col ?? '—' }}</strong>，模型使用 {{ modeling.selected_inputs?.length ?? 0 }} 个输入特征。评审以时序留出测试集为主，不使用训练集分数替代泛化结论。</p>
+              <p>当前输出变量为 <strong>{{ modeling.output_col ?? '—' }}</strong>，{{ modeling.config?.family ?? '—' }} 模型实际使用 {{ modeling.fitted_inputs?.length ?? 0 }} 个外部输入特征。评审以时序留出测试集为主，不使用训练集分数替代泛化结论。</p>
               <div class="report-kpis"><div><span>测试 R²</span><strong>{{ Number(testMetrics.r2 ?? 0).toFixed(4) }}</strong><small>越接近 1 越好</small></div><div><span>测试 RMSE</span><strong>{{ Number(testMetrics.rmse ?? 0).toFixed(4) }}</strong><small>原始量纲误差</small></div><div><span>测试 MAE</span><strong>{{ Number(testMetrics.mae ?? 0).toFixed(4) }}</strong><small>绝对误差均值</small></div></div>
-              <div class="report-highlight" :class="{ 'is-warning': Number(testMetrics.r2 ?? -1) < 0 }"><span><AppIcon :name="Number(testMetrics.r2 ?? -1) >= 0 ? 'check' : 'alert'" /></span><p><strong>泛化判断</strong>{{ Number(testMetrics.r2 ?? -1) >= 0 ? '测试集具备正向解释能力，可继续进行离线复验。' : '测试集 R² 小于 0，当前模型不具备交付条件，需要调整数据段或变量。' }}</p></div>
+              <div class="report-highlight" :class="{ 'is-warning': !review.passed }"><span><AppIcon :name="review.passed ? 'check' : 'alert'" /></span><p><strong>泛化判断</strong>{{ conclusion }} {{ (review.blockers ?? []).join('；') }}</p></div>
             </template>
 
             <template v-else-if="activeReportSection === 'optimization'">

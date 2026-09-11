@@ -47,7 +47,7 @@ function getStoredProject() {
 const activePath = ref(normalizePath(window.location.pathname))
 const currentProjectId = ref(getStoredProject())
 const currentProject = computed(() => projects.find((project) => project.id === currentProjectId.value) ?? projects[0])
-const { latestRun } = useLatestPipelineRun(() => currentProject.value.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const runtimeStandardization = computed(() => latestRun.value?.results?.standardization ?? {})
 const runtimeDictionary = computed(() => runtimeStandardization.value.dictionary ?? [])
 const runtimeInput = computed(() => runtimeDictionary.value.find((item) => item.role === 'manipulated') ?? runtimeDictionary.value.find((item) => item.role === 'disturbance'))
@@ -107,7 +107,7 @@ function handleStrategyAccepted(strategy) {
   showToast({
     tone: 'success',
     title: '闭环策略已交接给总工程',
-    message: `${strategy?.strategy_version ?? '当前策略'} 已写入统一交接事件，评审与报告模块可读取该高炉铁水质量预测策略包。`,
+    message: `${strategy?.strategy_version ?? '当前策略'} 已写入统一交接事件，评审与报告模块可读取该策略包。`,
   })
 }
 
@@ -204,7 +204,12 @@ onBeforeUnmount(() => {
         <div class="mobile-brand"><span class="brand-symbol small"><i></i><b></b><em></em></span><strong>ProcessPilot</strong></div>
         <div class="topbar-context">
           <span class="topbar-breadcrumb">工作台 <AppIcon name="chevron" :size="14" /> {{ activeItem.label }}</span>
-          <div class="project-selector runtime-project-context" aria-label="2号标准化 Agent 识别的当前场景">
+          <label v-if="!latestRun" class="project-selector" aria-label="切换当前项目场景">
+            <select v-model="currentProjectId">
+              <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.shortName }} · {{ project.target }}</option>
+            </select>
+          </label>
+          <div v-else class="runtime-project-context" aria-label="2号标准化 Agent 识别的当前场景">
             <strong>{{ effectiveProject.shortName }}</strong><small>{{ effectiveProject.mv }} → {{ effectiveProject.target }}</small>
           </div>
           <StatusPill :tone="latestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>{{ latestRun ? '当前CSV真实运行' : '等待CSV' }}</StatusPill>

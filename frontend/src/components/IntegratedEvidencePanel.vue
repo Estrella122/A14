@@ -1,11 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 
 const props = defineProps({
   module: { type: String, required: true },
-  run: { type: Object, default: null },
 })
 
 const data = ref(null)
@@ -31,12 +30,6 @@ async function loadEvidence() {
   loading.value = true
   error.value = ''
   try {
-    const suppliedResultKey = props.module === 'agent' ? 'review' : props.module
-    if (props.run?.results?.[suppliedResultKey]) {
-      runId.value = props.run.run_id
-      data.value = liveEvidence(props.run, props.module)
-      return
-    }
     const latestResponse = await fetch('/api/pipeline/runs/latest/')
     const latestPayload = await latestResponse.json()
     const run = latestPayload?.data
@@ -66,7 +59,6 @@ function liveEvidence(run, module) {
     passed: result.data_decision?.status === 'ready',
     passed_items: result.mapping?.mappings?.filter((item) => item.status === 'matched').length ?? 0,
     total_items: result.mapping?.mappings?.length ?? 0,
-    template_count: 3,
     mapping_preview: result.mapping?.mappings ?? [],
   }
   if (module === 'cleaning') return {
@@ -88,8 +80,7 @@ function liveEvidence(run, module) {
     ...common,
     module: 'Agent 总控编排（1号）',
     candidate: {
-      validation_r2: Number(result.evidence?.test_r2 ?? 0),
-      validation_fit_percent: Number(result.evidence?.test_r2 ?? 0) * 100,
+      test_r2: result.evidence?.test_r2,
       dynamic_ratio: Number(run.results?.cleaning?.modeling_row_count ?? 0) / Math.max(Number(run.results?.cleaning?.cleaned_row_count ?? 0), 1),
       conclusion: result.conclusion,
     },
@@ -98,7 +89,6 @@ function liveEvidence(run, module) {
 }
 
 function handlePipelineUpdate() { loadEvidence() }
-watch(() => props.run, () => loadEvidence(), { deep: true })
 onMounted(() => {
   loadEvidence()
   window.addEventListener('processpilot:pipeline-updated', handlePipelineUpdate)
@@ -126,7 +116,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
       <div v-if="module === 'standardization'" class="evidence-kpis">
         <div><span>验收结果</span><strong>{{ data.passed ? '通过' : '待复核' }}</strong></div>
         <div><span>验收条目</span><strong>{{ data.passed_items }} / {{ data.total_items }}</strong></div>
-        <div><span>模板能力</span><strong>{{ data.template_count ?? 3 }} 场景</strong></div>
+        <div><span>模板能力</span><strong>6 场景</strong></div>
       </div>
       <div v-else-if="module === 'cleaning'" class="evidence-kpis">
         <div><span>质量评分</span><strong>{{ data.overall_score }}<small> / 100</small></strong></div>
@@ -134,12 +124,12 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
         <div><span>清洗日志</span><strong>{{ data.logs?.length ?? 0 }} 条</strong></div>
       </div>
       <div v-else-if="module === 'modeling'" class="evidence-kpis">
-        <div><span>验证 R²</span><strong>{{ Number(data.metrics?.test?.r2 ?? 0).toFixed(3) }}</strong></div>
-        <div><span>验证 RMSE</span><strong>{{ Number(data.metrics?.test?.rmse ?? 0).toFixed(3) }}</strong></div>
+        <div><span>独立测试 R²</span><strong>{{ data.metrics?.test?.r2 == null ? '—' : Number(data.metrics.test.r2).toFixed(3) }}</strong></div>
+        <div><span>独立测试 RMSE</span><strong>{{ data.metrics?.test?.rmse == null ? '—' : Number(data.metrics.test.rmse).toFixed(3) }}</strong></div>
         <div><span>保留输入</span><strong>{{ data.selected_inputs?.length ?? 0 }} 个</strong></div>
       </div>
       <div v-else class="evidence-kpis">
-        <div v-if="data.live"><span>验证 R²</span><strong>{{ Number(data.candidate?.validation_r2 ?? 0).toFixed(3) }}</strong></div>
+        <div v-if="data.live"><span>独立测试 R²</span><strong>{{ data.candidate?.test_r2 == null ? '—' : Number(data.candidate.test_r2).toFixed(3) }}</strong></div>
         <div v-else><span>验证 Fit</span><strong>{{ Number(data.candidate?.validation_fit_percent ?? 0).toFixed(1) }}<small>%</small></strong></div>
         <div><span>动态段占比</span><strong>{{ Number(data.candidate?.dynamic_ratio ?? 0).toFixed(3) }}</strong></div>
         <div><span>Agent 阶段</span><strong>{{ data.stages?.length ?? 0 }} 步</strong></div>

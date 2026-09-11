@@ -10,11 +10,11 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
 
-const recommendedConfig = { sample: props.project.sample ?? '1 h', missing: '因果化验对齐 + 分级插值', method: 'Hampel + 高炉工艺边界', threshold: 2.4, align: true }
+const recommendedConfig = { sample: '5 s', missing: '局部线性插值', method: 'Hampel + 工艺边界', threshold: 2.4, align: true }
 const config = ref({ ...recommendedConfig })
 const running = ref(false)
 const auditFilter = ref('all')
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? null)
 const liveMissing = computed(() => {
   const values = Object.values(liveCleaning.value?.missing_rate ?? {})
@@ -88,7 +88,7 @@ async function executeCleaning() {
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="cleaning" :run="latestRun" />
+    <IntegratedEvidencePanel module="cleaning" />
 
     <div class="notice-banner" :class="liveCleaning ? 'success-banner' : 'warning-banner'">
       <span class="notice-icon"><AppIcon name="alert" /></span>

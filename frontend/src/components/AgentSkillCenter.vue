@@ -23,8 +23,9 @@ const visibleSkills = computed(() => {
 })
 const activeCount = computed(() => props.executions.filter((item) => item.status === 'success').length)
 function activityText(item) {
+  if (item?.status === 'unavailable') return '未执行/缺证据'
   if (item?.status === 'blocked') return '已阻断'
-  return item?.activity === 'executed' ? '已执行' : item?.activity === 'read' ? '读取证据' : item?.activity === 'planned' ? '已规划' : '已调用'
+  return item?.activity === 'executed' ? '旧版记录，未核验' : item?.activity === 'read' ? '读取证据' : item?.activity === 'planned' ? '已规划' : '已调用'
 }
 </script>
 
@@ -60,7 +61,7 @@ function activityText(item) {
           <summary>
             <span class="skill-index">{{ String((catalog?.skills ?? []).findIndex((item) => item.id === skill.id) + 1).padStart(2, '0') }}</span>
             <span class="skill-copy"><strong>{{ skill.name }}</strong><code>{{ skill.id }}</code></span>
-            <span v-if="executionMap[skill.id]" class="skill-hit" :class="{ 'is-blocked': executionMap[skill.id].status === 'blocked' }"><AppIcon :name="executionMap[skill.id].status === 'blocked' ? 'alert' : 'check'" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
+            <span v-if="executionMap[skill.id]" class="skill-hit" :class="{ 'is-blocked': ['blocked', 'unavailable'].includes(executionMap[skill.id].status) }"><AppIcon :name="['blocked', 'unavailable'].includes(executionMap[skill.id].status) ? 'alert' : 'check'" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
             <span v-else class="skill-ready">READY</span>
           </summary>
           <p>{{ skill.description }}</p>

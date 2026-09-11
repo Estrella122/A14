@@ -1,4 +1,4 @@
-"""Read-only bridge for the member delivery packages.
+"""Read-only bridge for the four member delivery packages.
 
 The packages are kept under ``integrations/`` unchanged.  This adapter exposes
 their published evidence in the main Django service, so the Vue application has
@@ -51,10 +51,9 @@ def standardization_payload():
         "passed": report.get("passed", False),
         "passed_items": report.get("passed_items", 0),
         "total_items": report.get("total_items", 0),
-        "template_count": 3,
         "generated_at": report.get("generated_at"),
         "checks": report.get("items", [])[:8],
-        "mapping_preview": _read_csv("standardization/standards/scenarios/blast_furnace/fields.csv", 8),
+        "mapping_preview": _read_csv("standardization/examples/钢厂加热炉_字段映射报告样例.csv", 8),
     }
 
 

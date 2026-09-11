@@ -9,7 +9,7 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? {})
 const seriesPreview = computed(() => liveCleaning.value.timeseries_preview ?? {})
 const seriesPoints = computed(() => (seriesPreview.value.points ?? []).filter((item) => Number.isFinite(Number(item.input)) && Number.isFinite(Number(item.output))))
@@ -21,12 +21,12 @@ const selectedIds = ref([])
 const scoringApplied = ref(false)
 const segmentFilter = ref('all')
 const demoSegments = [
-  { id: 'SEG-018', time: '01-04 06:00 — 01-05 11:00', duration: '30 h', type: '富氧响应', dynamic: 94, snr: 90, integrity: 97, score: 93.1, reason: '富氧流量变化后铁水硅含量响应清晰' },
-  { id: 'SEG-031', time: '01-09 12:00 — 01-10 17:00', duration: '30 h', type: '强动态', dynamic: 96, snr: 92, integrity: 98, score: 94.8, reason: '鼓风与热风温度变化显著，化验龄期满足门禁' },
-  { id: 'SEG-052', time: '01-15 03:00 — 01-16 08:00', duration: '30 h', type: '协同变化', dynamic: 91, snr: 88, integrity: 96, score: 90.7, reason: '多变量协同变化，覆盖不同矿焦比工况' },
-  { id: 'SEG-061', time: '01-20 17:00 — 01-21 22:00', duration: '30 h', type: '扰动响应', dynamic: 89, snr: 91, integrity: 93, score: 89.8, reason: '炉顶煤气成分变化后Si响应具备可辨识性' },
-  { id: 'SEG-024', time: '01-23 08:00 — 01-24 13:00', duration: '30 h', type: '中动态', dynamic: 81, snr: 76, integrity: 94, score: 81.2, reason: 'Si响应较弱，保留为候选窗口' },
-  { id: 'SEG-047', time: '01-27 02:00 — 01-28 07:00', duration: '30 h', type: '异常扰动', dynamic: 84, snr: 53, integrity: 61, score: 63.1, reason: '压差突变且化验数据龄期偏高，不建议入选' },
+  { id: 'SEG-018', time: '07-01 08:12:20 — 08:28:45', duration: '16.4 min', type: '阶跃响应', dynamic: 96, snr: 93, integrity: 95, score: 94.2, reason: '煤气流量阶跃完整，目标响应清晰' },
+  { id: 'SEG-031', time: '07-01 13:40:00 — 14:02:00', duration: '22.0 min', type: '强动态', dynamic: 98, snr: 95, integrity: 97, score: 96.5, reason: '主变量时滞特征清晰，无异常干扰' },
+  { id: 'SEG-052', time: '07-02 17:02:15 — 17:20:40', duration: '18.4 min', type: '协同变化', dynamic: 93, snr: 91, integrity: 92, score: 91.6, reason: '多变量协同变化，覆盖高负荷工况' },
+  { id: 'SEG-061', time: '07-03 02:16:05 — 02:31:35', duration: '15.5 min', type: '扰动响应', dynamic: 90, snr: 94, integrity: 89, score: 90.8, reason: '钢坯速度扰动引起可辨识输出响应' },
+  { id: 'SEG-024', time: '07-01 10:01:10 — 10:12:58', duration: '11.8 min', type: '中动态', dynamic: 82, snr: 78, integrity: 86, score: 81.7, reason: '目标变量响应较弱，建议作为候选' },
+  { id: 'SEG-047', time: '07-02 16:18:30 — 16:27:06', duration: '8.6 min', type: '异常扰动', dynamic: 86, snr: 51, integrity: 59, score: 62.4, reason: '压力尖峰超工艺边界，不建议入选' },
 ]
 
 const segments = computed(() => {
@@ -125,7 +125,7 @@ function toggleSegment(id) {
 }
 
 function freezeDataset() {
-  emit('notify', { tone: 'success', title: '当前优选结果已确认', message: `任务 ${latestRun.value?.run_id ?? '—'} 的 ${selectedCount.value} 个严格优质段已记录。` })
+  emit('notify', { tone: 'success', title: '当前优选结果已确认', message: `任务 ${latestRun.value?.run_id ?? '—'} 的 ${selectedCount.value} 个训练达标窗口已记录。` })
 }
 </script>
 
@@ -146,7 +146,7 @@ function freezeDataset() {
 
     <section class="metric-grid four-col">
       <article class="metric-card"><span class="metric-label">检测候选段</span><div class="metric-value">{{ candidateCount }} <small>段</small></div><p>当前任务 {{ latestRun?.run_id ?? '等待运行' }}</p><span class="metric-trend neutral">真实滑动窗口结果</span></article>
-      <article class="metric-card accent-cyan"><span class="metric-label">严格优质段</span><div class="metric-value">{{ selectedCount }} <small>段</small></div><p>建模数据 {{ liveCleaning.modeling_row_count ?? '—' }} 行</p><span class="metric-trend positive">严格阈值 80 分</span></article>
+      <article class="metric-card accent-cyan"><span class="metric-label">训练达标窗口</span><div class="metric-value">{{ selectedCount }} <small>段</small></div><p>建模数据 {{ liveCleaning.modeling_row_count ?? '—' }} 行</p><span class="metric-trend positive">动态分≥80且SNR代理≥10 dB</span></article>
       <article class="metric-card"><span class="metric-label">建模数据保留率</span><div class="metric-value">{{ (modelingRate * 100).toFixed(1) }}%</div><p>规整后 {{ liveCleaning.cleaned_row_count ?? '—' }} 行</p><span class="metric-trend positive">候选不足时使用Top窗口兜底</span></article>
       <article class="metric-card"><span class="metric-label">候选质量均分</span><div class="metric-value">{{ averageScore.toFixed(1) }}</div><p>综合五维动态评分</p><span class="metric-trend positive">来自本次CSV</span></article>
     </section>
@@ -204,7 +204,7 @@ function freezeDataset() {
     </div>
 
     <div class="selection-footer-card">
-      <div class="dataset-freeze"><span><AppIcon name="database" /></span><div><strong>优选数据集 {{ latestRun?.run_id ?? '等待运行' }}</strong><p>{{ selectedCount }} 个严格优质段 · {{ liveCleaning.modeling_row_count ?? 0 }} 行建模数据</p></div></div>
+      <div class="dataset-freeze"><span><AppIcon name="database" /></span><div><strong>优选数据集 {{ latestRun?.run_id ?? '等待运行' }}</strong><p>{{ selectedCount }} 个训练达标窗口 · {{ liveCleaning.modeling_row_count ?? 0 }} 行建模数据</p></div></div>
       <div class="dataset-gains"><span>建模保留率<strong>{{ (modelingRate * 100).toFixed(1) }}%</strong></span><span>质量评分<strong>{{ liveCleaning.overall_score ?? '—' }}</strong></span><a v-if="latestRun" :href="artifactUrl(latestRun.run_id, 'modeling_csv')">下载优选CSV</a></div>
       <button class="btn btn-primary" type="button" @click="emit('navigate', '/identification-modeling/')">进入解耦辨识 <AppIcon name="arrow" /></button>
     </div>

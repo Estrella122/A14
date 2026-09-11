@@ -67,11 +67,6 @@ def split_header_unit(header: str) -> tuple[str, str | None]:
     lowered = text.lower().replace(" ", "")
     for suffix in suffixes:
         normalized_suffix = suffix.lower().replace(" ", "")
-        # A/B/C are common sensor-channel suffixes. Only an explicit uppercase
-        # one-letter suffix is treated as a unit; lower snake-case names such as
-        # upper_furnace_pressure_c keep their channel identity.
-        if len(normalized_suffix) == 1 and not text.replace(" ", "").endswith("_" + suffix.upper()):
-            continue
         if lowered.endswith("_" + normalized_suffix):
             return text[: -(len(suffix) + 1)], UNIT_ALIASES[suffix]
     return text, None

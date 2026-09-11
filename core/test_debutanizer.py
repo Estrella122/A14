@@ -10,6 +10,7 @@ if str(STANDARDIZATION) not in sys.path:
     sys.path.insert(0, str(STANDARDIZATION))
 
 from standard_agent import ScenarioRepository, StandardizationAgent
+from standard_agent.demo import generate_demo
 
 
 class DebutanizerScenarioTests(SimpleTestCase):
@@ -33,14 +34,32 @@ class DebutanizerScenarioTests(SimpleTestCase):
 
     def test_time_axis_limit_is_exposed(self):
         scenario = ScenarioRepository().get("debutanizer_column").summary()
-        self.assertEqual(scenario["time_axis_type"], "ordered_samples")
-        self.assertIsNone(scenario["sampling_seconds"])
+        self.assertEqual(scenario["time_axis_type"], "wall_clock")
+        self.assertEqual(scenario["sampling_seconds"], 60)
+        self.assertEqual(scenario["measurement_delay_minutes"], {"min": 30, "max": 75})
+        self.assertEqual(scenario["expected_rows"], 2394)
         self.assertEqual(scenario["primary_output"], "bottom_butane_content")
+
+    def test_physical_debutanizer_demo_matches_second_scene(self):
+        frame = generate_demo("debutanizer_column", rows=2394, seed=20260911)
+        self.assertEqual(frame.shape, (2394, 9))
+        self.assertIn("C4浓度(%)", frame.columns)
+        result = StandardizationAgent(ScenarioRepository()).standardize(
+            frame,
+            scenario_id="auto",
+            instruction="炼油脱丁烷精馏塔，7个温度压力流量输入，C4浓度输出，30-75分钟测量滞后",
+        )
+        self.assertEqual(result["scenario"]["scenario_id"], "debutanizer_column")
+        self.assertEqual(result["mapping"]["required_coverage"], 1.0)
+        self.assertEqual(result["data_decision"]["status"], "ready")
+        resolved = {row["raw"]: row["standard"] for row in result["mapping"]["mappings"]}
+        self.assertEqual(resolved["塔顶压力(kPa)"], "top_pressure")
+        self.assertEqual(resolved["C4浓度(%)"], "bottom_butane_content")
 
     def test_prepared_public_dataset_is_complete(self):
         path = Path(settings.BASE_DIR) / "datasets/public/debutanizer/debutanizer_processpilot.csv"
         if not path.exists():
-            self.skipTest("上游数据未随仓库再分发；取得合法副本并完成转换后执行此项。")
+            self.skipTest("上游数据未声明可再分发许可证；按 datasets/public/debutanizer/README.md 在本地获取后运行此项")
         frame = pd.read_csv(path)
         self.assertEqual(frame.shape, (2394, 10))
         self.assertFalse(frame.isna().any().any())
