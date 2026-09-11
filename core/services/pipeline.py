@@ -122,6 +122,7 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
             scenario_id=scenario_id or "auto",
             instruction=instruction,
             overrides=overrides,
+            context={"source": source_path.name},
         )
 
     output_path = run_dir / "02_standardization" / "standardized.csv"

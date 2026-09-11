@@ -10,5 +10,6 @@
   "time_axis_type": "ordered_samples",
   "timestamp_field": "timestamp",
   "primary_output": "bottom_butane_content",
+  "recognition": {"priority": 70, "min_evidence": 4, "min_confidence": 0.52, "conflicting_features": ["top_product_purity", "clinker_free_lime", "product_moisture"]},
   "notes": "Fortuna公开工业脱丁烷塔软测量场景。公开数据只有有序样本且为归一化值；派生时间轴仅保存顺序，时滞单位为sample。"
 }

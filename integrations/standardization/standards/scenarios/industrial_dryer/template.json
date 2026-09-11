@@ -12,5 +12,6 @@
   "model_outputs": ["product_moisture", "product_temperature", "exhaust_humidity"],
   "selection_window_samples": 18,
   "selection_step_samples": 6,
+  "recognition": {"priority": 60, "min_evidence": 3, "min_confidence": 0.52, "conflicting_features": ["slab_discharge_temp", "bottom_butane_content", "dissolved_oxygen"]},
   "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。"
 }

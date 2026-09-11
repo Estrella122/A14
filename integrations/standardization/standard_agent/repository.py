@@ -60,6 +60,21 @@ class ScenarioTemplate:
     def by_name(self) -> dict[str, FieldDefinition]:
         return {field.standard_name: field for field in self.fields}
 
+    @property
+    def recognition(self) -> dict[str, Any]:
+        configured = self.config.get("recognition", {})
+        required = [field.standard_name for field in self.fields if field.required]
+        optional = [field.standard_name for field in self.fields if not field.required]
+        return {
+            "required_features": configured.get("required_features", required),
+            "supporting_features": configured.get("supporting_features", optional),
+            "conflicting_features": configured.get("conflicting_features", []),
+            "priority": configured.get("priority", 0),
+            "min_evidence": configured.get("min_evidence", min(3, max(2, len(required)))),
+            "min_confidence": configured.get("min_confidence", 0.52),
+            "min_required_coverage": configured.get("min_required_coverage", 0.55),
+        }
+
     def summary(self) -> dict[str, Any]:
         return {
             "scenario_id": self.scenario_id,
@@ -156,6 +171,13 @@ class ScenarioRepository:
         ]
         if invalid_bounds:
             raise ValueError(f"{template.scenario_id} 存在上下限倒置字段：{invalid_bounds}")
+        recognition = template.recognition
+        referenced = set(recognition["required_features"]) | set(recognition["supporting_features"])
+        unknown_features = sorted(referenced - set(names))
+        if unknown_features:
+            raise ValueError(f"{template.scenario_id} 的识别规则引用未知字段：{unknown_features}")
+        if int(recognition["min_evidence"]) < 2:
+            raise ValueError(f"{template.scenario_id} 的 min_evidence 不能小于 2。")
         required = {template.config.get("timestamp_field"), template.config.get("primary_output")}
         if not required.issubset(set(names)):
             raise ValueError(f"{template.scenario_id} 缺少时间字段或主输出字段。")
