@@ -3,6 +3,44 @@ name: industrial-analysis
 description: 对调用方提供的标准字段、设备、工艺、质量与限值上下文执行可复用工业数据分析。用于画像、质量、趋势、时序、异常、相关、稳定性、能耗、设备健康、质量、工况、瓶颈、缺失和根因候选分析；不负责宿主工程代码、Pipeline、前端或 Registry 管理。
 ---
 
+<!-- skill-runtime-manifest
+{
+  "triggers": ["工业数据", "能耗", "能源", "异常", "趋势", "时序", "相关", "稳定性", "设备健康", "工况", "瓶颈", "根因", "数据质量", "缺失", "高炉", "锅炉", "精馏塔", "干燥器", "软测量"],
+  "capabilities": {
+    "DATA_PROFILING": {"path": "capabilities/data-profiling.md", "triggers": ["画像", "概览", "数据概况"]},
+    "DATA_QUALITY_ANALYSIS": {"path": "capabilities/data-quality-analysis.md", "triggers": ["数据质量", "完整性", "可用性"]},
+    "TREND_ANALYSIS": {"path": "capabilities/trend-analysis.md", "triggers": ["趋势", "走势", "变化"]},
+    "TIME_SERIES_ANALYSIS": {"path": "capabilities/time-series-analysis.md", "triggers": ["时序", "周期", "预测", "滞后"]},
+    "ANOMALY_DETECTION": {"path": "capabilities/anomaly-detection.md", "triggers": ["异常", "离群", "异常点"]},
+    "CORRELATION_ANALYSIS": {"path": "capabilities/correlation-analysis.md", "triggers": ["相关", "关联", "共线"]},
+    "PROCESS_STABILITY": {"path": "capabilities/process-stability.md", "triggers": ["稳定性", "稳定", "波动"]},
+    "ENERGY_ANALYSIS": {"path": "capabilities/energy-analysis.md", "triggers": ["能耗", "能源", "电量", "功率", "燃料"]},
+    "EQUIPMENT_HEALTH": {"path": "capabilities/equipment-health.md", "triggers": ["设备健康", "设备故障", "劣化", "振动"]},
+    "QUALITY_ANALYSIS": {"path": "capabilities/quality-analysis.md", "triggers": ["质量分析", "产品质量", "合格率", "硅含量", "水分"]},
+    "OPERATING_STATE": {"path": "capabilities/operating-state.md", "triggers": ["工况", "运行状态", "动态段"]},
+    "BOTTLENECK_ANALYSIS": {"path": "capabilities/bottleneck-analysis.md", "triggers": ["瓶颈", "产能", "卡点"]},
+    "MISSING_DATA_ANALYSIS": {"path": "capabilities/missing-data-analysis.md", "triggers": ["缺失", "空值"]},
+    "ROOT_CAUSE_CANDIDATES": {"path": "capabilities/root-cause-candidates.md", "triggers": ["根因", "原因", "为什么"]}
+  },
+  "workflows": {
+    "generic-analysis": {"path": "workflows/generic-analysis.md", "when": "capability_selected"},
+    "unknown-scene": {"path": "workflows/unknown-scene.md", "when": "unknown_scene"},
+    "validation": {"path": "workflows/validation.md", "triggers": ["验证", "审计", "测试"]}
+  },
+  "references": {
+    "industrial-semantics": {"path": "references/industrial-semantics.md", "when": "semantic_analysis"},
+    "evidence-rules": {"path": "references/evidence-rules.md", "when": "capability_selected"},
+    "confidence-rules": {"path": "references/confidence-rules.md", "when": "capability_selected"},
+    "capability-routing": {"path": "references/capability-routing.md", "when": "debug"}
+  },
+  "scripts": {
+    "build-analysis-plan": {"path": "scripts/build_analysis_plan.py", "purpose": "ANALYSIS_PLAN"}
+  },
+  "input_requirements": ["objective", "data_or_dataset_ref"],
+  "output_contract": "contracts/analysis-result.schema.json"
+}
+-->
+
 # Industrial Analysis
 
 本 Skill 是项目 Agent 可独立加载的通用工业分析能力包。它不导入宿主工程模块，也不保存任何项目的场景注册表。

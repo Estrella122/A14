@@ -13,6 +13,7 @@ from django.conf import settings
 from .analysis_plan import build_analysis_plan
 from .catalog import CATEGORIES, SKILLS, SKILL_MAP, identify_scene_from_text
 from .routing import select
+from .skill_loader import default_skill_roots, load_skill_context
 
 
 RUNS_DIR = Path(settings.BASE_DIR) / "runtime" / "agent_skill_runs"
@@ -181,6 +182,12 @@ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
                  for decision in route["decisions"] for candidate in decision["candidates"]]
     execution_mode = route["mode"]
     detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
+    skill_runtime = load_skill_context(
+        text,
+        default_skill_roots(),
+        scene=detected_scene_id or "unknown_scene",
+    )
+    # SKILL.md 先完成发现和按需路由；声明的 ANALYSIS_PLAN 脚本继续通过兼容 adapter 调用。
     analysis_plan = build_analysis_plan(text, list(direct), scene=detected_scene_id or "unknown_scene")
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": route["needs_clarification"],
@@ -188,7 +195,14 @@ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
                      "routing_decisions": route["decisions"],
                      "excluded_skills": sorted(route["denied"]),
                      "full_pipeline_requested": route["full_pipeline_requested"],
-                     "analysis_plan": analysis_plan})
+                     "analysis_plan": analysis_plan,
+                     "skill_runtime": skill_runtime,
+                     "agent_context": {
+                         "base_agent_context": "ProcessPilot Agent Runtime",
+                         "loaded_skill_context": skill_runtime["context"],
+                         "task_context": {"objective": text, "run_id": run_id},
+                         "data_context": {"scene": detected_scene_id or "unknown_scene"},
+                     }})
     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
     if execution_mode == "execute":
         runtime_skills.add("execution_supervisor_replanner")
