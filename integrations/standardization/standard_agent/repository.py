@@ -93,6 +93,8 @@ class ScenarioTemplate:
             "recommended_max_lag": self.config.get("recommended_max_lag"),
             "alignment_policy": self.config.get("alignment_policy"),
             "lab_tolerance_hours": self.config.get("lab_tolerance_hours"),
+            "measurement_delay_minutes": self.config.get("measurement_delay_minutes"),
+            "expected_rows": self.config.get("expected_rows"),
             "source": self.config.get("source"),
             "data_provenance_required": self.config.get("data_provenance_required", []),
             "notes": self.config.get("notes", ""),

@@ -4,10 +4,10 @@ export const mockAgentTrace = {
   total_duration_ms: 4280,
   nodes: [
     { id: 'instruction', name: '用户指令', kind: 'input', duration_ms: 12, status: 'success', input: { message: '提取高信噪比动态数据并闭环寻找最佳模型' }, output: { accepted: true } },
-    { id: 'intent', name: '意图解析', kind: 'reason', duration_ms: 286, status: 'success', input: { language: 'zh-CN', scene: '加热炉' }, output: { intent: 'closed_loop_identification', confidence: 0.96, constraints: ['高信噪比', '共线性处理'] } },
+    { id: 'intent', name: '意图解析', kind: 'reason', duration_ms: 286, status: 'success', input: { language: 'zh-CN', scene: '钢铁高炉' }, output: { intent: 'hot_metal_quality_prediction', confidence: 0.96, constraints: ['高信噪比', '因果对齐', '共线性处理'] } },
     { id: 'tools', name: '工具选择', kind: 'tool', duration_ms: 174, status: 'success', input: { capability_count: 9 }, output: { tools: ['cleaning_agent', 'dynamic_segmenter', 'lag_analyzer', 'arx_identifier', 'optimizer'] } },
     { id: 'parameters', name: '参数生成', kind: 'parameter', duration_ms: 238, status: 'success', input: { objective: 'R²↑, RMSE↓, coverage↑' }, output: { resample_rule: '5s', top_k: 8, max_lag: 60, outlier_sigma: 3 } },
-    { id: 'execution', name: '算法调用', kind: 'execution', duration_ms: 2140, status: 'success', input: { rows: 48000, variables: 36 }, output: { selected_segments: 11, modeling_rows: 12120, features: 7 } },
+    { id: 'execution', name: '算法调用', kind: 'execution', duration_ms: 2140, status: 'success', input: { rows: 29602, variables: 28 }, output: { selected_segments: 11, modeling_rows: 12120, features: 7 } },
     { id: 'evaluation', name: '结果评估', kind: 'evaluation', duration_ms: 492, status: 'success', input: { metrics: ['R²', 'RMSE', 'coverage'] }, output: { r2: 0.913, rmse: 5.14, coverage: 0.82, gate: 'passed' } },
     { id: 'decision', name: '下一步决策', kind: 'decision', duration_ms: 321, status: 'success', input: { best_round: 6, no_improvement_rounds: 2 }, output: { action: 'stop_and_deliver', reason: '连续两轮改善低于阈值' } },
     { id: 'output', name: '最终输出', kind: 'output', duration_ms: 617, status: 'success', input: { evidence_items: 24 }, output: { artifacts: ['modeling_dataset.csv', 'analysis_report.md', 'optimization_report.json'] } },

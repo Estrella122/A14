@@ -2,103 +2,95 @@
   "version": "1.0.0",
   "scenarios": [
     {
-      "scenario_id": "cement_rotary_kiln",
-      "scenario_name": "水泥回转窑",
-      "industry": "建材",
-      "process_unit": "新型干法水泥回转窑",
+      "scenario_id": "blast_furnace",
+      "scenario_name": "钢铁高炉铁水质量预测",
+      "industry": "钢铁冶金",
+      "process_unit": "炼铁高炉",
       "version": "1.0.0",
-      "field_count": 13,
-      "required_count": 7,
-      "primary_output": "clinker_free_lime",
+      "field_count": 33,
+      "required_count": 6,
+      "primary_output": "hot_metal_si",
+      "model_outputs": [
+        "hot_metal_si"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
-      "sampling_seconds": 60,
-      "notes": "用于水泥熟料烧成系统的字段需求判定与统一。"
+      "sampling_seconds": 3600,
+      "recommended_max_lag": 24,
+      "alignment_policy": "causal_asof_backward",
+      "lab_tolerance_hours": 3,
+      "source": {
+        "dataset": "Process data collected by blast-furnace sensors",
+        "author": "Vladimir Trofimov",
+        "version": "1",
+        "doi": "10.17632/6d7jbc7tb5.1",
+        "license": "CC BY 4.0"
+      },
+      "data_provenance_required": [],
+      "notes": "真实高炉过程量为1小时采样，铁水Si为非等间隔化验值。派生CSV只允许向后as-of对齐，并保留化验时间与数据龄期，禁止使用未来化验值。"
     },
     {
       "scenario_id": "debutanizer_column",
       "scenario_name": "炼油脱丁烷塔",
       "industry": "石油炼制",
-      "process_unit": "脱丁烷塔软测量",
-      "version": "1.0.0",
+      "process_unit": "脱丁烷精馏塔软测量",
+      "version": "1.1.0",
       "field_count": 10,
       "required_count": 9,
       "primary_output": "bottom_butane_content",
-      "time_axis_type": "ordered_samples",
-      "sampling_seconds": null,
-      "notes": "Fortuna公开工业脱丁烷塔软测量场景。公开数据只有有序样本且为归一化值；派生时间轴仅保存顺序，时滞单位为sample。"
-    },
-    {
-      "scenario_id": "distillation_column",
-      "scenario_name": "化工精馏塔",
-      "industry": "化工",
-      "process_unit": "连续精馏塔",
-      "version": "1.0.0",
-      "field_count": 10,
-      "required_count": 7,
-      "primary_output": "top_product_purity",
-      "time_axis_type": "wall_clock",
-      "sampling_seconds": 30,
-      "notes": "用于连续精馏塔时序数据的字段需求判定与统一，字段语义已纳入来源审计。"
-    },
-    {
-      "scenario_id": "steel_industry_energy",
-      "scenario_name": "钢铁工业能源监测",
-      "industry": "冶金能源管理",
-      "process_unit": "钢铁企业用电负荷",
-      "version": "1.0.0",
-      "field_count": 11,
-      "required_count": 4,
-      "primary_output": "energy_usage",
-      "time_axis_type": "wall_clock",
-      "sampling_seconds": 900,
-      "notes": "字段依据 UCI Steel Industry Energy Consumption 数据集 851 建立；用于能耗回归和数据质量分析，不代表生产控制变量或特定工厂上线验收。"
-    },
-    {
-      "scenario_id": "steel_reheating_furnace",
-      "scenario_name": "钢厂步进梁式加热炉",
-      "industry": "冶金",
-      "process_unit": "步进梁式加热炉",
-      "version": "1.0.0",
-      "field_count": 18,
-      "required_count": 8,
-      "primary_output": "slab_discharge_temp",
+      "model_outputs": [
+        "bottom_butane_content"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 60,
-      "notes": "2号任务重点场景模板。字段范围用于标准校验，不执行异常清洗。"
+      "recommended_max_lag": null,
+      "alignment_policy": null,
+      "lab_tolerance_hours": null,
+      "source": null,
+      "data_provenance_required": [],
+      "notes": "炼油脱丁烷精馏塔软测量场景：7个温度/压力/流量输入预测塔底C4浓度，质量化验或软测量目标通常存在30-75分钟测量滞后。公开Fortuna样本仍可通过U1-U8别名接入，但若源数据为归一化值需保留数据来源说明。"
     },
     {
-      "scenario_id": "thermal_power_boiler",
-      "scenario_name": "火电燃煤锅炉",
-      "industry": "电力",
-      "process_unit": "亚临界/超临界燃煤锅炉",
+      "scenario_id": "industrial_dryer",
+      "scenario_name": "工业干燥器",
+      "industry": "流程工业",
+      "process_unit": "连续式热风工业干燥装置",
       "version": "1.0.0",
-      "field_count": 14,
-      "required_count": 8,
-      "primary_output": "main_steam_temperature",
+      "field_count": 7,
+      "required_count": 7,
+      "primary_output": "product_moisture",
+      "model_outputs": [
+        "product_moisture",
+        "product_temperature",
+        "exhaust_humidity"
+      ],
+      "selection_window_samples": 18,
+      "selection_step_samples": 6,
       "time_axis_type": "wall_clock",
-      "sampling_seconds": 30,
-      "notes": "用于锅炉运行时序数据的字段需求判定与统一。"
-    },
-    {
-      "scenario_id": "wastewater_aeration",
-      "scenario_name": "污水生化曝气池",
-      "industry": "环保水处理",
-      "process_unit": "活性污泥曝气系统",
-      "version": "1.0.0",
-      "field_count": 13,
-      "required_count": 8,
-      "primary_output": "effluent_ammonia",
-      "time_axis_type": "wall_clock",
-      "sampling_seconds": 300,
-      "notes": "用于污水生化处理曝气系统的字段需求判定与统一。"
+      "sampling_seconds": 10,
+      "recommended_max_lag": null,
+      "alignment_policy": null,
+      "lab_tolerance_hours": null,
+      "source": null,
+      "data_provenance_required": [
+        "source_system",
+        "equipment_id",
+        "collection_period",
+        "instrument_traceability",
+        "usage_authorization"
+      ],
+      "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。"
     }
   ],
-  "field_samples": 6128,
-  "intent_samples": 252,
+  "field_samples": 3964,
+  "intent_samples": 108,
   "splits": {
-    "train": 4192,
-    "validation": 849,
-    "test": 1087
+    "train": 2824,
+    "validation": 620,
+    "test": 520
   },
   "label_policy": {
     "required": "场景必需字段",

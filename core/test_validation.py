@@ -141,7 +141,7 @@ class CausalModelingTests(SimpleTestCase):
 
     def test_explicit_unsupported_parameter_does_not_silently_rerun(self):
         from core.services.agent_chat import chat
-        snapshot = {'run_id':'example', 'results':{'standardization':{'scenario':{'scenario_name':'钢厂加热炉'}}}}
+        snapshot = {'run_id':'example', 'results':{'standardization':{'scenario':{'scenario_name':'钢铁高炉铁水质量预测'}}}}
         with patch('core.services.agent_chat.get_run', return_value=snapshot), patch('core.services.agent_chat.rerun_pipeline') as rerun:
             with self.assertRaisesRegex(pipeline.PipelineError, 'top_k'):
                 chat('提取加热炉动态数据 top_k=3')

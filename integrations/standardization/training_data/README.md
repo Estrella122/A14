@@ -7,7 +7,7 @@
 - `field_semantics_validation.csv`：验证集。
 - `field_semantics_test.csv`：测试集。
 - `scenario_intents.csv`：自然语言场景意图样本。
-- `multi_scenario_dictionary.csv`：五场景统一数据字典。
+- `multi_scenario_dictionary.csv`：钢铁高炉、炼油脱丁烷精馏塔和工业干燥器三场景统一数据字典。
 - `raw_samples/`：每个场景 360 行原始异构字段 CSV。
 - `manifest.json`：数据版本、场景和样本数量。
 

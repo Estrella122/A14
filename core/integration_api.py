@@ -53,7 +53,8 @@ def standardization_payload():
         "total_items": report.get("total_items", 0),
         "generated_at": report.get("generated_at"),
         "checks": report.get("items", [])[:8],
-        "mapping_preview": _read_csv("standardization/examples/钢厂加热炉_字段映射报告样例.csv", 8),
+        "template_count": 3,
+        "mapping_preview": _read_csv("standardization/standards/scenarios/blast_furnace/fields.csv", 8),
     }
 
 

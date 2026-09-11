@@ -25,6 +25,17 @@ const mappingDraft = ref({})
 const reviewScenario = ref('')
 
 function buildFiles(project) {
+  if (project.scenarioId === 'blast_furnace') return [
+    { id: 1, name: '1_blast_furnace_data_first_dataset.xlsx', source: 'Mendeley Data · 原始过程数据', rows: 29602, variables: 27, size: '公开数据', period: '2013-01-01 — 2016-05-18', quality: 100, status: '原始只读' },
+    { id: 2, name: 'Si laboratory measurements', source: '同源实验室化验', rows: 16589, variables: 1, size: '非等间隔', period: '中位间隔约 99 min', quality: 100, status: '因果对齐' },
+    { id: 3, name: 'blast_furnace_real_720h.csv', source: '真实数据演示切片', rows: 720, variables: 32, size: '约 160 KB', period: '2013-01-01 — 2013-01-30', quality: 97.6, status: '可直接运行', downloadUrl: project.source?.demoUrl },
+  ]
+  if (project.scenarioId === 'debutanizer_column') return [
+    { id: 1, name: 'debutanizer_process_data.csv', source: 'Fortuna 等公开工业基准', rows: 2394, variables: 8, size: '授权后本地导入', period: '1 min 等间隔样本', quality: null, status: '待授权数据' },
+  ]
+  if (project.scenarioId === 'industrial_dryer') return [
+    { id: 1, name: '工业干燥器_10秒_867条_3输入3输出_合成验收数据.csv', source: '团队合成验收数据', rows: 867, variables: 6, size: '约 110 KB', period: '867 个连续采样点', quality: 96.8, status: '可直接运行' },
+  ]
   return [
     { id: 1, name: `${project.code}_historian.csv`, source: 'DCS Historian', rows: project.rows, variables: project.variables, size: '18.6 MB', period: project.timeRange, quality: 96.4, status: '已解析' },
     { id: 2, name: `${project.code}_batch_context.csv`, source: 'MES', rows: 8640, variables: 8, size: '2.4 MB', period: project.timeRange, quality: 98.8, status: '已对齐' },

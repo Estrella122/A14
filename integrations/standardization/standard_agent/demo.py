@@ -62,19 +62,22 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
             }
         )
     if scenario_id == "debutanizer_column":
-        return pd.DataFrame(
-            {
-                "timestamp": time,
-                "U1": .50 + rng.normal(0, .03, rows),
-                "U2": .45 + rng.normal(0, .03, rows),
-                "U3": .55 + rng.normal(0, .04, rows),
-                "U4": .48 + rng.normal(0, .03, rows),
-                "U5": .52 + rng.normal(0, .03, rows),
-                "U6": .51 + rng.normal(0, .03, rows),
-                "U7": .49 + rng.normal(0, .03, rows),
-                "U8": .20 + rng.normal(0, .02, rows),
-            }
-        )
+        reflux = 82 + 4.8 * np.sin(x / 85) + 6 * (x > rows * .45) - 8 * (x > rows * .72) + rng.normal(0, .4, rows)
+        product = 112 + 6.2 * np.sin(x / 110 + .7) + rng.normal(0, .5, rows)
+        pressure = 620 + 24 * np.sin(x / 140 + .3) + rng.normal(0, 2, rows)
+        top_temp = 54 + .018 * pressure - .026 * reflux + rng.normal(0, .12, rows)
+        tray6 = 75 + .085 * product - .031 * reflux + rng.normal(0, .16, rows)
+        bottom_a = 102 + .048 * product + .010 * pressure + rng.normal(0, .18, rows)
+        bottom_b = bottom_a + 1.2 * np.sin(x / 70) + rng.normal(0, .12, rows)
+        lag = min(52, max(1, rows // 8))
+        c4 = 1.18 - .0105 * (np.roll(reflux, lag) - 82) + .0072 * (np.roll(product, lag) - 112) + .018 * (np.roll(tray6, max(1, lag - 8)) - 84) + rng.normal(0, .018, rows)
+        c4[:lag] = c4[lag]
+        return pd.DataFrame({
+            "采集时间": time, "塔顶温度(℃)": top_temp, "塔顶压力(kPa)": pressure,
+            "回流流量(t/h)": reflux, "后续流程流量(t/h)": product,
+            "第六塔板温度(℃)": tray6, "塔底温度A(℃)": bottom_a,
+            "塔底温度B(℃)": bottom_b, "C4浓度(%)": c4,
+        })
     if scenario_id == "steel_reheating_furnace":
         gas = 24500 + 900 * np.sin(x / 34) + rng.normal(0, 120, rows)
         air = gas * 1.78 + rng.normal(0, 240, rows)

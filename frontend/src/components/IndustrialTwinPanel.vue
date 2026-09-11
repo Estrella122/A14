@@ -8,15 +8,17 @@ import { useEChart } from '../composables/useEChart'
 const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null } })
 const selectedId = ref('temp')
 const sparkline = ref(null)
-const isFurnace = computed(() => /炉|furnace/i.test(`${props.project.scene} ${props.project.shortName}`))
+const isBlastFurnace = computed(() => props.project.scenarioId === 'blast_furnace')
 const preview = computed(() => props.latestRun?.results?.cleaning?.timeseries_preview?.points ?? [])
 const metrics = computed(() => {
   // TODO(mock): 后端增加实时测点快照后，以 tag/value/status/trend 直接替换当前任务末点与演示趋势的合成逻辑。
   const last = preview.value.at(-1)
   return mockTwin.metrics.map((item) => {
-    if (item.id === 'gas' && Number.isFinite(Number(last?.input))) return { ...item, label: props.project.mv, value: Number(last.input).toFixed(1), unit: props.project.mvUnit, trend: preview.value.slice(-24).map((point) => Number(point.input)) }
-    if ((item.id === 'slabOut' || item.id === 'temp') && Number.isFinite(Number(last?.output))) return { ...item, label: item.id === 'slabOut' ? props.project.target : item.label, value: Number(last.output).toFixed(1), unit: props.project.targetUnit, trend: preview.value.slice(-24).map((point) => Number(point.output)) }
-    return item
+    const blastLabels = { temp: ['热风温度', '℃'], gas: ['鼓风流量', 'm³/min'], slabIn: ['炉顶温度', '℃'], slabOut: ['铁水硅含量', '%'] }
+    const sceneItem = isBlastFurnace.value && blastLabels[item.id] ? { ...item, label: blastLabels[item.id][0], unit: blastLabels[item.id][1] } : item
+    if (item.id === 'gas' && Number.isFinite(Number(last?.input))) return { ...sceneItem, label: props.project.mv, value: Number(last.input).toFixed(1), unit: props.project.mvUnit, trend: preview.value.slice(-24).map((point) => Number(point.input)) }
+    if (item.id === 'slabOut' && Number.isFinite(Number(last?.output))) return { ...sceneItem, label: props.project.target, value: Number(last.output).toFixed(3), unit: props.project.targetUnit, trend: preview.value.slice(-24).map((point) => Number(point.output)) }
+    return sceneItem
   })
 })
 const selected = computed(() => metrics.value.find((item) => item.id === selectedId.value) ?? null)
@@ -33,9 +35,18 @@ useEChart(sparkline, sparklineOption)
 
 <template>
   <section class="twin-panel">
-    <div class="twin-heading"><div><span class="section-kicker">Industrial Digital Twin</span><h2>工业场景数字孪生</h2><p>{{ isFurnace ? '2# 加热炉工艺测点与物流状态' : '通用流程设备测点占位' }}</p></div><div><StatusPill :tone="latestRun ? 'success' : 'warning'" dot>{{ latestRun ? '任务数据映射' : '演示数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
+    <div class="twin-heading"><div><span class="section-kicker">Industrial Digital Twin</span><h2>工业场景数字孪生</h2><p>{{ isBlastFurnace ? '炼铁高炉传感器、炉料与铁水质量状态' : `${project.shortName}流程测点占位` }}</p></div><div><StatusPill :tone="latestRun ? 'success' : 'warning'" dot>{{ latestRun ? '任务数据映射' : '演示数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
     <div class="twin-stage">
-      <svg v-if="isFurnace" viewBox="0 0 1000 420" role="img" aria-label="加热炉数字孪生设备示意图">
+      <svg v-if="isBlastFurnace" viewBox="0 0 1000 420" role="img" aria-label="钢铁高炉数字孪生设备示意图">
+        <defs><linearGradient id="blastShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17375b"/><stop offset="1" stop-color="#0a1e35"/></linearGradient></defs>
+        <g class="twin-grid"><path d="M0 70H1000M0 140H1000M0 210H1000M0 280H1000M0 350H1000"/></g>
+        <path class="furnace-shell" fill="url(#blastShell)" d="M410 35H590L575 92L625 165L605 300Q595 360 500 378Q405 360 395 300L375 165L425 92Z"/>
+        <path class="furnace-zone" d="M425 92H575M390 165H610M401 300H599"/>
+        <text x="464" y="72">炉喉</text><text x="463" y="138">炉身</text><text x="463" y="236">炉腹</text><text x="463" y="338">炉缸</text>
+        <path class="flow-line" d="M500 5V48M155 255H397M603 255H850M500 375V410"/>
+        <text x="520" y="22">矿石 / 焦炭</text><text x="160" y="240">热风 / 富氧</text><text x="720" y="240">炉顶煤气</text><text x="520" y="405">铁水</text>
+      </svg>
+      <svg v-else-if="false" viewBox="0 0 1000 420" role="img" aria-label="加热炉数字孪生设备示意图">
         <defs>
           <linearGradient id="furnaceShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17375b" stop-opacity=".9"/><stop offset="1" stop-color="#0a1e35" stop-opacity=".94"/></linearGradient>
           <radialGradient id="fireGlow"><stop offset="0" stop-color="#ffb347" stop-opacity=".48"/><stop offset="1" stop-color="#ff6b35" stop-opacity="0"/></radialGradient>

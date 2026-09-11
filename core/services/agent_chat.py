@@ -71,12 +71,12 @@ def _requires_execution(message: str) -> bool:
 
 def _scenario_family(name: str | None) -> str | None:
     value = str(name or "")
-    if "加热炉" in value or value.endswith("炉"):
-        return "加热炉"
-    if "精馏塔" in value or value.endswith("塔"):
-        return "精馏塔"
-    if "反应器" in value:
-        return "反应器"
+    if any(term in value for term in ("钢铁高炉", "炼铁高炉", "铁水")):
+        return "钢铁高炉"
+    if any(term in value for term in ("脱丁烷", "精馏塔")):
+        return "炼油脱丁烷精馏塔"
+    if any(term in value for term in ("工业干燥器", "干燥机", "烘干机")):
+        return "工业干燥器"
     return None
 
 
@@ -416,14 +416,14 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     if mismatch:
         answer = (
             f"已识别为复合执行任务，但已被设备一致性门禁阻断：{blocked_reason}"
-            f"我没有把当前加热炉结果冒充为{skill_plan['entities'].get('equipment_id') or requested_family}的结果，也没有启动后续辨识和寻优。"
-            "请上传对应设备的 CSV，或明确说明仅使用当前加热炉数据做流程演示。"
+            f"我没有把当前场景结果冒充为{skill_plan['entities'].get('equipment_id') or requested_family}的结果，也没有启动后续辨识和寻优。"
+            "请上传对应设备的 CSV，或明确说明仅使用当前数据做流程演示。"
         )
         cards = [
             {"label": "执行状态", "value": "已阻断"}, {"label": "请求设备", "value": skill_plan["entities"].get("equipment_id") or requested_family},
             {"label": "当前数据", "value": current_scenario}, {"label": "原因", "value": "设备场景不一致"},
         ]
-        suggestions = ["上传1号塔CSV", "改用当前加热炉数据执行这条任务", "查看当前数据的设备与字段"]
+        suggestions = ["上传对应场景CSV", "改用当前数据执行这条任务", "查看当前数据的设备与字段"]
     elif executed and is_compound:
         degraded = int(snapshot.get("results", {}).get("cleaning", {}).get("selected_segment_count") or 0) == 0
         answer, cards, suggestions = _compound_result(snapshot, degraded)

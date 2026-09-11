@@ -116,7 +116,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
       <div v-if="module === 'standardization'" class="evidence-kpis">
         <div><span>验收结果</span><strong>{{ data.passed ? '通过' : '待复核' }}</strong></div>
         <div><span>验收条目</span><strong>{{ data.passed_items }} / {{ data.total_items }}</strong></div>
-        <div><span>模板能力</span><strong>6 场景</strong></div>
+        <div><span>模板能力</span><strong>3 场景</strong></div>
       </div>
       <div v-else-if="module === 'cleaning'" class="evidence-kpis">
         <div><span>质量评分</span><strong>{{ data.overall_score }}<small> / 100</small></strong></div>
