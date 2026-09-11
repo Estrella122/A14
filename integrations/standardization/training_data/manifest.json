@@ -10,6 +10,11 @@
       "field_count": 13,
       "required_count": 7,
       "primary_output": "clinker_free_lime",
+      "model_outputs": [
+        "clinker_free_lime"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 60,
       "notes": "用于水泥熟料烧成系统的字段需求判定与统一。"
@@ -23,6 +28,11 @@
       "field_count": 10,
       "required_count": 9,
       "primary_output": "bottom_butane_content",
+      "model_outputs": [
+        "bottom_butane_content"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "ordered_samples",
       "sampling_seconds": null,
       "notes": "Fortuna公开工业脱丁烷塔软测量场景。公开数据只有有序样本且为归一化值；派生时间轴仅保存顺序，时滞单位为sample。"
@@ -36,9 +46,34 @@
       "field_count": 10,
       "required_count": 7,
       "primary_output": "top_product_purity",
+      "model_outputs": [
+        "top_product_purity"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 30,
       "notes": "用于连续精馏塔时序数据的字段需求判定与统一，字段语义已纳入来源审计。"
+    },
+    {
+      "scenario_id": "industrial_dryer",
+      "scenario_name": "工业干燥器",
+      "industry": "流程工业",
+      "process_unit": "连续式热风工业干燥装置",
+      "version": "1.0.0",
+      "field_count": 7,
+      "required_count": 7,
+      "primary_output": "product_moisture",
+      "model_outputs": [
+        "product_moisture",
+        "product_temperature",
+        "exhaust_humidity"
+      ],
+      "selection_window_samples": 18,
+      "selection_step_samples": 6,
+      "time_axis_type": "wall_clock",
+      "sampling_seconds": 10,
+      "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。"
     },
     {
       "scenario_id": "steel_industry_energy",
@@ -49,6 +84,11 @@
       "field_count": 11,
       "required_count": 4,
       "primary_output": "energy_usage",
+      "model_outputs": [
+        "energy_usage"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 900,
       "notes": "字段依据 UCI Steel Industry Energy Consumption 数据集 851 建立；用于能耗回归和数据质量分析，不代表生产控制变量或特定工厂上线验收。"
@@ -62,6 +102,11 @@
       "field_count": 18,
       "required_count": 8,
       "primary_output": "slab_discharge_temp",
+      "model_outputs": [
+        "slab_discharge_temp"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 60,
       "notes": "2号任务重点场景模板。字段范围用于标准校验，不执行异常清洗。"
@@ -75,6 +120,11 @@
       "field_count": 14,
       "required_count": 8,
       "primary_output": "main_steam_temperature",
+      "model_outputs": [
+        "main_steam_temperature"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 30,
       "notes": "用于锅炉运行时序数据的字段需求判定与统一。"
@@ -88,17 +138,22 @@
       "field_count": 13,
       "required_count": 8,
       "primary_output": "effluent_ammonia",
+      "model_outputs": [
+        "effluent_ammonia"
+      ],
+      "selection_window_samples": 30,
+      "selection_step_samples": 15,
       "time_axis_type": "wall_clock",
       "sampling_seconds": 300,
       "notes": "用于污水生化处理曝气系统的字段需求判定与统一。"
     }
   ],
-  "field_samples": 6128,
-  "intent_samples": 252,
+  "field_samples": 6748,
+  "intent_samples": 288,
   "splits": {
-    "train": 4192,
-    "validation": 849,
-    "test": 1087
+    "train": 4615,
+    "validation": 937,
+    "test": 1196
   },
   "label_policy": {
     "required": "场景必需字段",

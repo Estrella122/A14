@@ -54,8 +54,9 @@ def list_skills() -> dict[str, Any]:
 
 
 def _entities(message: str) -> dict[str, Any]:
-    equipment = re.search(r"(\d+)\s*号\s*(脱丁烷塔|蒸馏塔|精馏塔|加热炉|锅炉|曝气池|回转窑|反应器|塔|炉|池|窑)", message)
+    equipment = re.search(r"(\d+)\s*号\s*(脱丁烷塔|蒸馏塔|精馏塔|加热炉|锅炉|曝气池|回转窑|工业干燥器|干燥器|干燥机|烘干机|反应器|塔|炉|池|窑)", message)
     scene_rules = (
+        (("工业干燥器", "干燥器", "干燥机", "烘干机", "热风干燥"), "工业干燥器", "industrial_dryer"),
         (("脱丁烷塔",), "炼油厂脱丁烷塔", "debutanizer_column"),
         (("蒸馏塔", "精馏塔"), "蒸馏塔", "distillation_column"),
         (("火电", "燃煤", "锅炉", "主汽温"), "火电燃煤锅炉", "thermal_power_boiler"),

@@ -197,7 +197,7 @@ def _select_modeling_rows(cleaned: pd.DataFrame, segments: pd.DataFrame, top_k: 
     return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index()
 
 
-def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir: Path, resample_rule: str, max_lag_for_split: int = 60, primary_output: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir: Path, resample_rule: str, max_lag_for_split: int = 60, primary_output: str | None = None, selection_window: int = 30, selection_step: int = 15) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "data_cleaning" / "src"
     with _module_path(module_dir):
         from data_cleaning_agent import DataCleaningSelectionAgent
@@ -207,7 +207,8 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
             raise PipelineError("标准化结果缺少 timestamp，无法执行时序清洗。")
         if not any(item["role"] == "output" for item in spec.values()):
             raise PipelineError("没有识别到可用于建模的被控输出变量。")
-        agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output)
+        agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output,
+                                           selection_window=selection_window, selection_step=selection_step)
         # Freeze the chronological partitions before cleaning or scoring.
         ordered = standardized.sort_values("timestamp").reset_index(drop=True)
         requested_rule = resample_rule
@@ -223,7 +224,8 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
         for label, part in (("train", ordered.iloc[:boundaries[0]]),
                             ("validation", ordered.iloc[boundaries[0]:boundaries[1]]),
                             ("test", ordered.iloc[boundaries[1]:])):
-            part_agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output)
+            part_agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output,
+                                                    selection_window=selection_window, selection_step=selection_step)
             aligned = part_agent.align_timestamp(part)
             processed = part_agent.process_missing_values(aligned)
             frame = part_agent.detect_and_repair_anomalies(processed)
@@ -238,6 +240,7 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
         if requested_rule != resample_rule:
             report["logs"].append(f"请求周期{requested_rule}短于原始典型周期，实际采用{resample_rule}，避免插值制造输出真值。")
         report["config"] = {"requested_resample_rule": requested_rule, "resample_rule": resample_rule}
+        report["config"].update({"selection_window_samples": selection_window, "selection_step_samples": selection_step})
         segments = train_segments
         cleaned = pd.concat(parts.values()).sort_index()
         split_dir = run_dir / "03_cleaning"
@@ -431,6 +434,7 @@ def _optimize_real_data(
     run_dir: Path,
     max_lag: int,
     primary_output: str | None = None,
+    model_outputs: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     exploration_candidates = [
         {"round": 1, "top_k": 5, "max_lag": max_lag, "label": "基线策略"},
@@ -547,6 +551,41 @@ def _optimize_real_data(
     best_model["artifacts"]["test_residuals_csv"] = _artifact(run_dir, run_dir / best_model["output_dir"] / "03_system_identification/test_residual_autocorrelation.csv")
     best_model["metrics"] = metrics
     best_model["diagnostics"] = diagnostics
+    requested_outputs = list(dict.fromkeys(model_outputs or [primary_output]))
+    secondary_models = []
+    for output_name in requested_outputs:
+        if not output_name or output_name == best_model.get("output_col"):
+            continue
+        try:
+            secondary_dir = run_dir / "05_optimization" / "mimo_outputs" / output_name
+            secondary = _model(
+                _read_csv(run_dir / best_model["modeling_path"]), dictionary, run_dir,
+                best["max_lag"], modeling_path=run_dir / best_model["modeling_path"],
+                output_dir=secondary_dir, primary_output=output_name,
+            )
+            secondary_metrics, secondary_diagnostics = finalize_test(secondary_dir, run_dir / "03_cleaning" / "test.csv")
+            secondary.update({"metrics": secondary_metrics, "diagnostics": secondary_diagnostics, "status": "completed"})
+            _write_json(secondary_dir / "api_report.json", secondary)
+            secondary_models.append(secondary)
+        except (PipelineError, ValueError, KeyError, OSError) as exc:
+            secondary_models.append({"output_col": output_name, "status": "failed", "error": str(exc)})
+    best_model["mimo"] = {
+        "method": "shared-input multi-output ARX model bank",
+        "outputs": [{"output_col": best_model.get("output_col"), "status": "completed", "primary": True,
+                     "family": best_model.get("config", {}).get("family"),
+                     "fitted_inputs": best_model.get("fitted_inputs", []),
+                     "test": best_model.get("metrics", {}).get("test"),
+                     "response": best_model.get("diagnostics", {}).get("test", {})}]
+                   + [{"output_col": item.get("output_col"), "status": item.get("status"),
+                       "family": item.get("config", {}).get("family"),
+                       "fitted_inputs": item.get("fitted_inputs", []),
+                       "test": item.get("metrics", {}).get("test"),
+                       "response": item.get("diagnostics", {}).get("test", {}),
+                       "error": item.get("error")}
+                      for item in secondary_models],
+        "completed_outputs": 1 + sum(item.get("status") == "completed" for item in secondary_models),
+        "requested_outputs": requested_outputs,
+    }
     _write_json(run_dir / best_model["output_dir"] / "api_report.json", best_model)
     public_iterations = [{key: value for key, value in item.items() if key != "model"} for item in iterations]
     report = {
@@ -625,6 +664,14 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
          and bool(simulation.get("metrics")) and not simulation.get("diverged"),
          "evidence": "稳定极点、10步预测和自由仿真必须同时有效"},
     ]
+    requested_model_outputs = standardization.get("scenario", {}).get("model_outputs") or []
+    if len(requested_model_outputs) > 1:
+        mimo = modeling.get("mimo", {})
+        offline_gates.append({
+            "id": "multi_output_identification",
+            "passed": mimo.get("completed_outputs") == len(requested_model_outputs),
+            "evidence": f"completed_outputs={mimo.get('completed_outputs', 0)}/{len(requested_model_outputs)}",
+        })
     soft_sensor_gates = offline_gates + [
         {"id": "external_inputs_used", "passed": modeling.get("config", {}).get("family") == "ARX" and bool(modeling.get("fitted_inputs")),
          "evidence": f"family={modeling.get('config', {}).get('family')}, fitted_inputs={modeling.get('fitted_inputs', [])}"},
@@ -818,9 +865,12 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             _set_stage(snapshot, run_dir, current_stage, "running", "正在对齐时间戳并修复缺失、异常值")
             standardized = _read_csv(run_dir / standardization["artifacts"]["standardized_csv"])
             primary_output = standardization.get("scenario", {}).get("primary_output")
+            model_outputs = standardization.get("scenario", {}).get("model_outputs") or [primary_output]
             modeling_data, segments, cleaning = _clean(
                 standardized, standardization["dictionary"], run_dir, resample_rule, max_lag,
                 primary_output=primary_output,
+                selection_window=standardization.get("scenario", {}).get("selection_window_samples", 30),
+                selection_step=standardization.get("scenario", {}).get("selection_step_samples", 15),
             )
             snapshot["results"]["cleaning"] = cleaning
             snapshot["artifacts"].update(cleaning["artifacts"])
@@ -868,6 +918,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 run_dir,
                 max_lag,
                 primary_output=primary_output,
+                model_outputs=model_outputs,
             )
             cleaning["modeling_row_count"] = optimization["best_training_rows"]
             cleaning["artifacts"]["modeling_csv"] = modeling["modeling_path"]

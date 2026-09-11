@@ -1,0 +1,16 @@
+{
+  "scenario_id": "industrial_dryer",
+  "scenario_name": "工业干燥器",
+  "industry": "流程工业",
+  "process_unit": "连续式热风工业干燥装置",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["工业干燥器", "干燥机", "烘干机", "热风干燥", "dryer", "drying unit"],
+  "sampling_seconds": 10,
+  "timestamp_field": "timestamp",
+  "primary_output": "product_moisture",
+  "model_outputs": ["product_moisture", "product_temperature", "exhaust_humidity"],
+  "selection_window_samples": 18,
+  "selection_step_samples": 6,
+  "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。"
+}

@@ -8,6 +8,27 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
     rng = np.random.default_rng(seed)
     time = pd.date_range("2026-01-01 08:00:00", periods=rows, freq="min")
     x = np.arange(rows)
+    if scenario_id == "industrial_dryer":
+        # Coupled 3x3 dynamic benchmark. This is synthetic acceptance data and is
+        # deliberately labelled as such wherever it is exported.
+        hot_air = 180 + 8 * np.sin(x / 31) + 4 * (x > rows * .28) - 6 * (x > rows * .67) + rng.normal(0, .35, rows)
+        air_flow = 42000 + 2400 * np.sin(x / 43) + 1800 * (x > rows * .45) + rng.normal(0, 90, rows)
+        feed = 38 + 2.6 * np.sin(x / 53) + 2.2 * (x > rows * .58) + rng.normal(0, .12, rows)
+        moisture = np.empty(rows); product_temp = np.empty(rows); exhaust = np.empty(rows)
+        moisture[0], product_temp[0], exhaust[0] = 9.2, 82., 61.
+        for i in range(1, rows):
+            j = max(0, i - 4)
+            moisture[i] = (.91 * moisture[i-1] + .09 * (9.2 - .055*(hot_air[j]-180)
+                           - .000055*(air_flow[j]-42000) + .13*(feed[j]-38)) + rng.normal(0, .025))
+            product_temp[i] = (.88 * product_temp[i-1] + .12 * (82 + .31*(hot_air[j]-180)
+                              + .00008*(air_flow[j]-42000) - .18*(feed[j]-38)) + rng.normal(0, .07))
+            exhaust[i] = (.9 * exhaust[i-1] + .1 * (61 - .12*(hot_air[j]-180)
+                          - .00018*(air_flow[j]-42000) + .55*(feed[j]-38)) + rng.normal(0, .08))
+        return pd.DataFrame({
+            "采集时间": pd.date_range("2026-01-01", periods=rows, freq="10s"),
+            "入口热风温度": hot_air, "热风流量": air_flow, "给料量": feed,
+            "产品水分": moisture, "物料出口温度": product_temp, "尾气湿度": exhaust,
+        })
     if scenario_id == "steel_industry_energy":
         usage = 24 + 10 * np.sin(x / 36) + rng.normal(0, 1.2, rows)
         return pd.DataFrame(

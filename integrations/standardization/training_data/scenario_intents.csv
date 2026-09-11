@@ -107,6 +107,42 @@
 把distillation变量转换成标准格式,distillation_column,化工精馏塔,train
 检查distillation文件缺少哪些必需字段,distillation_column,化工精馏塔,train
 这是distillation运行数据,distillation_column,化工精馏塔,train
+统一工业干燥器历史数据字段,industrial_dryer,工业干燥器,validation
+识别这批工业干燥器DCS测点,industrial_dryer,工业干燥器,train
+判断工业干燥器数据是否满足建模字段要求,industrial_dryer,工业干燥器,train
+把工业干燥器变量转换成标准格式,industrial_dryer,工业干燥器,test
+检查工业干燥器文件缺少哪些必需字段,industrial_dryer,工业干燥器,train
+这是工业干燥器运行数据,industrial_dryer,工业干燥器,validation
+统一干燥机历史数据字段,industrial_dryer,工业干燥器,train
+识别这批干燥机DCS测点,industrial_dryer,工业干燥器,train
+判断干燥机数据是否满足建模字段要求,industrial_dryer,工业干燥器,train
+把干燥机变量转换成标准格式,industrial_dryer,工业干燥器,train
+检查干燥机文件缺少哪些必需字段,industrial_dryer,工业干燥器,train
+这是干燥机运行数据,industrial_dryer,工业干燥器,train
+统一烘干机历史数据字段,industrial_dryer,工业干燥器,test
+识别这批烘干机DCS测点,industrial_dryer,工业干燥器,test
+判断烘干机数据是否满足建模字段要求,industrial_dryer,工业干燥器,train
+把烘干机变量转换成标准格式,industrial_dryer,工业干燥器,train
+检查烘干机文件缺少哪些必需字段,industrial_dryer,工业干燥器,test
+这是烘干机运行数据,industrial_dryer,工业干燥器,train
+统一热风干燥历史数据字段,industrial_dryer,工业干燥器,train
+识别这批热风干燥DCS测点,industrial_dryer,工业干燥器,train
+判断热风干燥数据是否满足建模字段要求,industrial_dryer,工业干燥器,train
+把热风干燥变量转换成标准格式,industrial_dryer,工业干燥器,validation
+检查热风干燥文件缺少哪些必需字段,industrial_dryer,工业干燥器,train
+这是热风干燥运行数据,industrial_dryer,工业干燥器,train
+统一dryer历史数据字段,industrial_dryer,工业干燥器,train
+识别这批dryerDCS测点,industrial_dryer,工业干燥器,train
+判断dryer数据是否满足建模字段要求,industrial_dryer,工业干燥器,test
+把dryer变量转换成标准格式,industrial_dryer,工业干燥器,test
+检查dryer文件缺少哪些必需字段,industrial_dryer,工业干燥器,validation
+这是dryer运行数据,industrial_dryer,工业干燥器,train
+统一drying unit历史数据字段,industrial_dryer,工业干燥器,validation
+识别这批drying unitDCS测点,industrial_dryer,工业干燥器,train
+判断drying unit数据是否满足建模字段要求,industrial_dryer,工业干燥器,test
+把drying unit变量转换成标准格式,industrial_dryer,工业干燥器,train
+检查drying unit文件缺少哪些必需字段,industrial_dryer,工业干燥器,train
+这是drying unit运行数据,industrial_dryer,工业干燥器,train
 统一钢铁用电历史数据字段,steel_industry_energy,钢铁工业能源监测,train
 识别这批钢铁用电DCS测点,steel_industry_energy,钢铁工业能源监测,train
 判断钢铁用电数据是否满足建模字段要求,steel_industry_energy,钢铁工业能源监测,train

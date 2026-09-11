@@ -1,0 +1,8 @@
+standard_name,display_name,description,role,data_type,unit,required,aliases,lower_bound,upper_bound
+timestamp,时间戳,工业时序采样时间,time,datetime,datetime,true,时间|采集时间|记录时间|TIME|DATETIME|TS,,
+hot_air_temperature,热风入口温度,进入干燥器的热风温度,manipulated,float,degC,true,入口热风温度|进风温度|HOT_AIR_TEMP|INLET_AIR_TEMP,0,500
+drying_air_flow,干燥风量,进入干燥器的热风体积流量,manipulated,float,Nm3/h,true,热风流量|进风量|干燥空气流量|DRYING_AIR_FLOW|AIR_FLOW,0,500000
+wet_feed_rate,湿料进料量,进入干燥器的湿物料质量流量,manipulated,float,t/h,true,湿料流量|进料量|给料量|WET_FEED_RATE|FEED_RATE,0,200
+product_moisture,产品含水率,干燥产品出口含水质量百分数,controlled,float,percent,true,出口含水率|产品水分|物料含水率|PRODUCT_MOISTURE|OUTLET_MOISTURE,0,100
+product_temperature,产品出口温度,干燥产品离开设备时的温度,controlled,float,degC,true,物料出口温度|产品温度|PRODUCT_TEMP|OUTLET_PRODUCT_TEMP,0,300
+exhaust_humidity,排风湿度,干燥器尾气相对湿度,controlled,float,percent,true,尾气湿度|出口空气湿度|排气湿度|EXHAUST_HUMIDITY|OUTLET_AIR_HUMIDITY,0,100
