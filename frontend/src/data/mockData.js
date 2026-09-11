@@ -44,14 +44,38 @@ export const mockExperiments = [
   { id: 'RUN-0904-0912', time: '2026-09-04 09:12', dataset: '2#炉历史数据-v2', preprocessing: '30s / 线性插值', algorithm: 'ARX', order: '1-1-1', r2: .804, aic: 246.8, duration: 26.9, status: 'completed', tag: '原始基线', note: '未做动态优选', actual: prediction(0), predicted: prediction(.9, -4.5), residuals: residuals(7.8) },
 ]
 
-export const mockTwin = {
-  metrics: [
-    { id: 'gas', label: '煤气流量', value: 18620, unit: 'Nm³/h', status: 'normal', x: 13, y: 58, trend: [18120, 18280, 18410, 18360, 18520, 18620] },
-    { id: 'pressure', label: '炉膛压力', value: -18, unit: 'Pa', status: 'warning', x: 48, y: 43, trend: [-24, -21, -19, -17, -14, -18] },
-    { id: 'temp', label: '炉温', value: 1248, unit: '℃', status: 'normal', x: 54, y: 27, trend: [1236, 1240, 1245, 1244, 1247, 1248] },
-    { id: 'slabIn', label: '入炉钢坯', value: 842, unit: '℃', status: 'normal', x: 22, y: 76, trend: [836, 838, 839, 841, 843, 842] },
-    { id: 'slabOut', label: '出炉温度', value: 1186, unit: '℃', status: 'normal', x: 83, y: 76, trend: [1172, 1177, 1180, 1183, 1184, 1186] },
-  ],
+// TODO(mock): 三套场景测点目前用于数字孪生演示；后端提供实时 tag 快照后按 role 映射输入与质量输出。
+export const mockTwinByScenario = {
+  blast_furnace: {
+    description: '炼铁高炉传感器、炉料与铁水质量状态',
+    metrics: [
+      { id: 'blast', role: 'input', label: '鼓风流量', value: 3980, unit: 'm³/min', status: 'normal', x: 18, y: 60, trend: [3890, 3918, 3945, 3928, 3962, 3980] },
+      { id: 'topPressure', label: '炉顶压力', value: 1.84, unit: 'kgf/cm²', status: 'normal', x: 49, y: 17, trend: [1.78, 1.8, 1.83, 1.82, 1.85, 1.84] },
+      { id: 'hotBlastTemp', label: '热风温度', value: 1092, unit: '℃', status: 'normal', x: 25, y: 38, trend: [1078, 1081, 1087, 1090, 1089, 1092] },
+      { id: 'burdenRatio', label: '矿焦比', value: 3.27, unit: '', status: 'warning', x: 73, y: 38, trend: [3.18, 3.2, 3.23, 3.3, 3.31, 3.27] },
+      { id: 'silicon', role: 'output', label: '铁水硅含量', value: 0.57, unit: '%', status: 'normal', x: 78, y: 78, trend: [.61, .6, .58, .59, .57, .57] },
+    ],
+  },
+  debutanizer_column: {
+    description: '脱丁烷塔塔板、回流与轻重组分分离状态',
+    metrics: [
+      { id: 'columnTopTemp', label: '塔顶温度', value: 64.2, unit: '℃', status: 'normal', x: 42, y: 18, trend: [63.8, 64, 64.1, 64.4, 64.3, 64.2] },
+      { id: 'columnPressure', label: '塔顶压力', value: 618, unit: 'kPa', status: 'normal', x: 68, y: 20, trend: [612, 614, 616, 619, 617, 618] },
+      { id: 'refluxFlow', role: 'input', label: '回流流量', value: 83.6, unit: 't/h', status: 'normal', x: 78, y: 43, trend: [81.9, 82.3, 82.8, 83.1, 83.8, 83.6] },
+      { id: 'trayTemp', label: '第六塔板温度', value: 82.4, unit: '℃', status: 'normal', x: 42, y: 54, trend: [81.7, 81.9, 82.1, 82.2, 82.5, 82.4] },
+      { id: 'bottomC4', role: 'output', label: '塔底 C4 含量', value: 1.16, unit: '%', status: 'warning', x: 70, y: 79, trend: [1.02, 1.08, 1.11, 1.19, 1.21, 1.16] },
+    ],
+  },
+  industrial_dryer: {
+    description: '回转滚筒、热风系统与产品含水率状态',
+    metrics: [
+      { id: 'wetFeed', label: '湿料进料量', value: 38.2, unit: 't/h', status: 'normal', x: 23, y: 27, trend: [37.1, 37.4, 37.9, 38, 38.4, 38.2] },
+      { id: 'hotAirTemp', role: 'input', label: '入口热风温度', value: 181.4, unit: '℃', status: 'normal', x: 17, y: 60, trend: [176.8, 178.3, 179.6, 180.8, 182.1, 181.4] },
+      { id: 'airFlow', label: '热风流量', value: 42180, unit: 'Nm³/h', status: 'normal', x: 36, y: 75, trend: [41420, 41680, 41910, 42160, 42310, 42180] },
+      { id: 'exhaustHumidity', label: '尾气湿度', value: 60.8, unit: '%RH', status: 'normal', x: 78, y: 25, trend: [59.1, 59.7, 60.2, 60.6, 61, 60.8] },
+      { id: 'productMoisture', role: 'output', label: '产品含水率', value: 8.7, unit: '%', status: 'warning', x: 80, y: 74, trend: [9.4, 9.2, 9, 8.8, 8.6, 8.7] },
+    ],
+  },
 }
 
 export const mockTransferFunction = { numerator: [1], denominator: [1, .5, 1], sampleTime: .1, label: 'G(s) = 1 / (s² + 0.5s + 1)' }
