@@ -19,6 +19,7 @@ const activeAnalysisTab = ref('identification')
 const { latestRun } = useLatestPipelineRun()
 const liveModel = computed(() => latestRun.value?.results?.modeling ?? null)
 const liveMetrics = computed(() => liveModel.value?.metrics?.test ?? null)
+const mimoOutputs = computed(() => liveModel.value?.mimo?.outputs ?? [])
 const optimization = computed(() => latestRun.value?.results?.optimization ?? {})
 const modelComparisons = computed(() => {
   const rows = optimization.value.iterations ?? optimization.value.history ?? []
@@ -149,6 +150,14 @@ async function showFrequencyAnalysis() {
       <article class="metric-card compact-card"><span class="metric-label">候选模型</span><div class="metric-value metric-value-text">{{ modelType }}</div><p>{{ liveModel?.output_col ?? '等待运行' }}</p></article>
     </section>
 
+    <section v-if="mimoOutputs.length > 1" class="panel">
+      <div class="section-heading compact"><div><span class="section-kicker">MIMO RESPONSE EVIDENCE</span><h2>共享输入的多输出 ARX 模型组</h2></div><StatusPill :tone="liveModel?.mimo?.response_ready_outputs === liveModel?.mimo?.requested_outputs?.length ? 'success' : 'warning'">{{ liveModel?.mimo?.response_ready_outputs ?? 0 }}/{{ liveModel?.mimo?.requested_outputs?.length }} 输出响应就绪</StatusPill></div>
+      <div class="table-wrap compact-table-wrap">
+        <table class="data-table"><thead><tr><th>输出</th><th>模型</th><th>外部输入</th><th>测试 R²</th><th>RMSE</th><th>10步 R²</th><th>自由仿真 R²</th><th>状态</th></tr></thead><tbody>
+          <tr v-for="row in mimoOutputs" :key="row.output_col"><td><code>{{ row.output_col }}</code><small v-if="row.primary"> 主输出</small></td><td>{{ row.family ?? '—' }}</td><td>{{ row.fitted_inputs?.length ?? 0 }}</td><td>{{ formatMetric(row.test?.r2) }}</td><td>{{ formatMetric(row.test?.rmse) }}</td><td>{{ formatMetric(row.response?.multi_step?.metrics?.r2) }}</td><td>{{ formatMetric(row.response?.free_simulation?.metrics?.r2) }}</td><td><StatusPill :tone="row.status === 'completed' ? 'success' : 'danger'">{{ row.status === 'completed' ? '完成' : '失败' }}</StatusPill></td></tr>
+        </tbody></table>
+      </div>
+    </section>
     <div class="content-grid content-grid-5-7">
       <section class="panel correlation-panel">
         <div class="section-heading compact"><div><span class="section-kicker">变量相关性热力图</span><h2>共线性结构</h2></div><StatusPill tone="warning">2 对高共线</StatusPill></div>

@@ -41,7 +41,7 @@ const segments = computed(() => {
       duration: `${Math.max(0, (end - start) / 60000).toFixed(1)} min`,
       type: row.level,
       dynamic: Number(row.input_change_score ?? 0),
-      snr: Number(row.output_response_score ?? 0),
+      snr: Number(row.snr_db ?? 0),
       integrity: Number(row.completeness_score ?? 0),
       score: Number(row.segment_score ?? 0),
       reason: `${row.level}；异常健康度 ${Number(row.anomaly_score ?? 0).toFixed(1)}，平滑度 ${Number(row.smoothness_score ?? 0).toFixed(1)}`,

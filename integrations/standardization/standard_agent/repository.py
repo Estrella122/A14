@@ -94,6 +94,7 @@ class ScenarioTemplate:
             "alignment_policy": self.config.get("alignment_policy"),
             "lab_tolerance_hours": self.config.get("lab_tolerance_hours"),
             "source": self.config.get("source"),
+            "data_provenance_required": self.config.get("data_provenance_required", []),
             "notes": self.config.get("notes", ""),
         }
 
@@ -187,6 +188,10 @@ class ScenarioRepository:
         primary_output = template.by_name[template.config["primary_output"]]
         if primary_output.role != "controlled" or not primary_output.required:
             raise ValueError(f"{template.scenario_id} 的主输出必须为 required controlled 字段。")
+        model_outputs = template.config.get("model_outputs", [template.config["primary_output"]])
+        invalid_outputs = [name for name in model_outputs if name not in template.by_name or template.by_name[name].role != "controlled"]
+        if invalid_outputs:
+            raise ValueError(f"{template.scenario_id} 的模型输出必须全部是 controlled 字段：{invalid_outputs}")
         alias_index: dict[str, str] = {}
         for field in template.fields:
             for alias in (field.standard_name, field.display_name, *field.aliases):

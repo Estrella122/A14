@@ -293,7 +293,7 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
             "status": "estimated", "scope": "training_windows_only", "calibrated": False,
             "assumptions": "局部平滑信号与加性白噪声；有色噪声、曲率及量化会影响估计",
             "passed_windows": int((segments["level"] == "优质动态段").sum()),
-            "window_overlap": "30点窗口，15点步长；不是独立激励次数"}
+            "window_overlap": f"{selection_window}点窗口，{selection_step}点步长；重叠窗口不是独立激励次数"}
         report["split"] = split
 
     clean_dir = run_dir / "03_cleaning"
@@ -424,6 +424,7 @@ def _model(
         "output_col": output_col,
         "training_rows": len(modeling),
         "diagnostics": result.get("diagnostics", {}),
+        "response_analysis": result.get("response_analysis", {}),
         "order_search": result.get("order_search", []),
         "fitted_inputs": result.get("fitted_inputs", []),
         "modeling_path": _artifact(run_dir, modeling_path),
@@ -444,6 +445,7 @@ def _model(
             "final_vif_csv": _artifact(run_dir, output_dir / "02_collinearity" / "final_vif_table.csv"),
             "modeling_csv": _artifact(run_dir, modeling_path),
             "diagnostics_json": _artifact(run_dir, output_dir / "03_system_identification" / "diagnostics.json"),
+            "response_analysis_json": _artifact(run_dir, output_dir / "03_system_identification" / "response_analysis.json"),
             "order_search_json": _artifact(run_dir, output_dir / "03_system_identification" / "order_search.json"),
             "fitted_state_json": _artifact(run_dir, output_dir / "03_system_identification" / "fitted_state.json"),
             "metrics_json": _artifact(run_dir, metrics_path),
@@ -470,6 +472,7 @@ def _optimize_real_data(
     run_dir: Path,
     max_lag: int,
     primary_output: str | None = None,
+    model_outputs: list[str] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     exploration_candidates = [
         {"round": 1, "top_k": 5, "max_lag": max_lag, "label": "基线策略"},
@@ -586,6 +589,50 @@ def _optimize_real_data(
     best_model["artifacts"]["test_residuals_csv"] = _artifact(run_dir, run_dir / best_model["output_dir"] / "03_system_identification/test_residual_autocorrelation.csv")
     best_model["metrics"] = metrics
     best_model["diagnostics"] = diagnostics
+    requested_outputs = list(dict.fromkeys(model_outputs or [primary_output]))
+    secondary_models = []
+    for output_name in requested_outputs:
+        if not output_name or output_name == best_model.get("output_col"):
+            continue
+        try:
+            secondary_dir = run_dir / "05_optimization" / "mimo_outputs" / output_name
+            secondary = _model(
+                _read_csv(run_dir / best_model["modeling_path"]), dictionary, run_dir,
+                best["max_lag"], modeling_path=run_dir / best_model["modeling_path"],
+                output_dir=secondary_dir, primary_output=output_name,
+            )
+            secondary_metrics, secondary_diagnostics = finalize_test(secondary_dir, run_dir / "03_cleaning" / "test.csv")
+            secondary.update({"metrics": secondary_metrics, "diagnostics": secondary_diagnostics, "status": "completed"})
+            _write_json(secondary_dir / "api_report.json", secondary)
+            secondary_models.append(secondary)
+        except (PipelineError, ValueError, KeyError, OSError) as exc:
+            secondary_models.append({"output_col": output_name, "status": "failed", "error": str(exc)})
+    best_model["mimo"] = {
+        "method": "shared-input multi-output ARX model bank",
+        "outputs": [{"output_col": best_model.get("output_col"), "status": "completed", "primary": True,
+                     "family": best_model.get("config", {}).get("family"),
+                     "fitted_inputs": best_model.get("fitted_inputs", []),
+                     "test": best_model.get("metrics", {}).get("test"),
+                     "response": best_model.get("diagnostics", {}).get("test", {}),
+                     "response_analysis": best_model.get("response_analysis", {})}]
+                   + [{"output_col": item.get("output_col"), "status": item.get("status"),
+                       "family": item.get("config", {}).get("family"),
+                       "fitted_inputs": item.get("fitted_inputs", []),
+                       "test": item.get("metrics", {}).get("test"),
+                       "response": item.get("diagnostics", {}).get("test", {}),
+                       "response_analysis": item.get("response_analysis", {}),
+                       "error": item.get("error")}
+                      for item in secondary_models],
+        "completed_outputs": 1 + sum(item.get("status") == "completed" for item in secondary_models),
+        "response_ready_outputs": sum(
+            item.get("status") == "completed"
+            and item.get("config", {}).get("family") == "ARX"
+            and bool(item.get("fitted_inputs"))
+            and bool(item.get("response_analysis", {}).get("channels"))
+            for item in [best_model, *secondary_models]
+        ),
+        "requested_outputs": requested_outputs,
+    }
     _write_json(run_dir / best_model["output_dir"] / "api_report.json", best_model)
     public_iterations = [{key: value for key, value in item.items() if key != "model"} for item in iterations]
     report = {
@@ -664,6 +711,17 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
          and bool(simulation.get("metrics")) and not simulation.get("diverged"),
          "evidence": "稳定极点、10步预测和自由仿真必须同时有效"},
     ]
+    requested_model_outputs = standardization.get("scenario", {}).get("model_outputs") or []
+    if len(requested_model_outputs) > 1:
+        mimo = modeling.get("mimo", {})
+        offline_gates.append({
+            "id": "multi_output_identification",
+            "passed": mimo.get("response_ready_outputs") == len(requested_model_outputs),
+            "evidence": (
+                f"completed_outputs={mimo.get('completed_outputs', 0)}/{len(requested_model_outputs)}, "
+                f"arx_response_ready={mimo.get('response_ready_outputs', 0)}/{len(requested_model_outputs)}"
+            ),
+        })
     soft_sensor_gates = offline_gates + [
         {"id": "external_inputs_used", "passed": modeling.get("config", {}).get("family") == "ARX" and bool(modeling.get("fitted_inputs")),
          "evidence": f"family={modeling.get('config', {}).get('family')}, fitted_inputs={modeling.get('fitted_inputs', [])}"},
@@ -863,9 +921,12 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             _set_stage(snapshot, run_dir, current_stage, "running", "正在对齐时间戳并修复缺失、异常值")
             standardized = _read_csv(run_dir / standardization["artifacts"]["standardized_csv"])
             primary_output = standardization.get("scenario", {}).get("primary_output")
+            model_outputs = standardization.get("scenario", {}).get("model_outputs") or [primary_output]
             modeling_data, segments, cleaning = _clean(
                 standardized, standardization["dictionary"], run_dir, resample_rule, effective_max_lag,
                 primary_output=primary_output,
+                selection_window=standardization.get("scenario", {}).get("selection_window_samples", 30),
+                selection_step=standardization.get("scenario", {}).get("selection_step_samples", 15),
             )
             snapshot["results"]["cleaning"] = cleaning
             snapshot["artifacts"].update(cleaning["artifacts"])
@@ -913,6 +974,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 run_dir,
                 effective_max_lag,
                 primary_output=primary_output,
+                model_outputs=model_outputs,
             )
             cleaning["modeling_row_count"] = optimization["best_training_rows"]
             cleaning["artifacts"]["modeling_csv"] = modeling["modeling_path"]

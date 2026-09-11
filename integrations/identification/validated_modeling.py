@@ -63,6 +63,57 @@ def predict(x, coef):
     return np.column_stack([np.ones(len(x)), x.to_numpy()]) @ np.array(coef)
 
 
+def arx_response_analysis(state, horizon=120, frequency_points=96):
+    """Generate per-channel discrete responses directly from a fitted ARX state."""
+    order = int(state['order'])
+    seconds = float(state['seconds'])
+    coefficients = np.asarray(state['coef'], dtype=float)
+    ar = coefficients[1:order + 1]
+    denominator = np.r_[1., -ar]
+    channels = []
+    for input_index, input_name in enumerate(state['inputs']):
+        start = 1 + order + input_index * order
+        input_coef = coefficients[start:start + order]
+        delay = max(1, int(state['delays'][input_name]))
+        impulse_y = np.zeros(horizon, dtype=float)
+        step_y = np.zeros(horizon, dtype=float)
+        for position in range(horizon):
+            ar_impulse = sum(ar[lag - 1] * impulse_y[position - lag] for lag in range(1, order + 1) if position >= lag)
+            ar_step = sum(ar[lag - 1] * step_y[position - lag] for lag in range(1, order + 1) if position >= lag)
+            impulse_input = sum(input_coef[lag] for lag in range(order) if position == delay + lag)
+            step_input = sum(input_coef[lag] for lag in range(order) if position >= delay + lag)
+            impulse_y[position] = ar_impulse + impulse_input
+            step_y[position] = ar_step + step_input
+        frequencies = []
+        for omega in np.linspace(0, np.pi, frequency_points):
+            z = np.exp(-1j * omega)
+            numerator = sum(input_coef[lag] * z ** (delay + lag) for lag in range(order))
+            denominator_value = 1 - sum(ar[lag - 1] * z ** lag for lag in range(1, order + 1))
+            response = numerator / denominator_value if abs(denominator_value) > 1e-12 else complex(np.nan, np.nan)
+            finite = np.isfinite(response.real) and np.isfinite(response.imag)
+            frequencies.append({
+                'hz': omega / (2 * np.pi * seconds),
+                'magnitude_db': 20 * np.log10(max(abs(response), 1e-12)) if finite else None,
+                'phase_degrees': np.degrees(np.angle(response)) if finite else None,
+            })
+        dc_denominator = 1 - float(ar.sum())
+        dc_gain = float(input_coef.sum() / dc_denominator) if abs(dc_denominator) > 1e-12 else None
+        channels.append({
+            'input': input_name, 'output': state['output'], 'delay_samples': delay,
+            'delay_seconds': delay * seconds, 'dc_gain': dc_gain,
+            'numerator': input_coef.tolist(), 'denominator': denominator.tolist(),
+            'impulse': [{'seconds': index * seconds, 'value': value} for index, value in enumerate(impulse_y.tolist())],
+            'step': [{'seconds': index * seconds, 'value': value} for index, value in enumerate(step_y.tolist())],
+            'frequency': frequencies,
+        })
+    return {
+        'method': 'discrete_arx_deviation_response', 'sample_seconds': seconds,
+        'horizon_samples': horizon,
+        'assumptions': '其他外部输入保持零偏差；不包含拟合截距；频率上限为奈奎斯特频率',
+        'channels': channels,
+    }
+
+
 def estimate_training_delays(df, output, inputs, seconds, max_lag):
     rows = []
     for col in inputs:
@@ -223,6 +274,8 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     diagnostics['max_pole_magnitude'] = float(max(np.abs(roots)))
     diagnostics['validation_only'] = True
     save_json(modeldir/'fitted_state.json', state)
+    response_analysis = arx_response_analysis(state)
+    save_json(modeldir/'response_analysis.json', response_analysis)
     save_json(modeldir/'order_search.json', candidates)
     save_json(modeldir/'model_metrics.json', {'train': tm, 'validation': vm})
     save_json(modeldir/'diagnostics.json', diagnostics)
@@ -236,7 +289,7 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
                   family=state['family'], preprocessing_fit='training_only', causal_lags=True, segment_aware=True)
     summary = dict(config=config, selected_inputs_after_collinearity=recommendation['keep'],
                    diagnostics=diagnostics, order_search=candidates, training_rows=len(train),
-                   fitted_inputs=state['inputs'])
+                   fitted_inputs=state['inputs'], response_analysis=response_analysis)
     save_json(out/'pipeline_summary.json', summary)
     return summary
 
