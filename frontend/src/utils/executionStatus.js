@@ -1,0 +1,15 @@
+export const EXECUTION_STATUS = {
+  success: { label: '成功', tone: 'success', icon: 'check' },
+  partial: { label: '已完成，但存在约束未满足', tone: 'warning', icon: 'alert' },
+  blocked: { label: '前置条件不足', tone: 'warning', icon: 'clock' },
+  failed: { label: '执行失败', tone: 'danger', icon: 'alert' },
+  skipped: { label: '未执行', tone: 'neutral', icon: 'clock' },
+  unavailable: { label: '能力不可用', tone: 'neutral', icon: 'clock' },
+  completed: { label: '成功', tone: 'success', icon: 'check' },
+  running: { label: '执行中', tone: 'brand', icon: 'loop' },
+  pending: { label: '等待执行', tone: 'neutral', icon: 'clock' },
+}
+
+export function executionStatus(status) {
+  return EXECUTION_STATUS[status] ?? { label: status || '未执行', tone: 'neutral', icon: 'clock' }
+}

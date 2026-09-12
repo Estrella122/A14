@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
+import { executionStatus } from '../utils/executionStatus'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
@@ -62,7 +63,7 @@ const planNodes = computed(() => {
       name: step.name,
       tool: step.skill_id,
       output: `${step.reason} · 匹配 ${(Number(step.relevance_score ?? 0) * 100).toFixed(0)}%`,
-      status: executionMap[step.skill_id]?.status === 'success' ? 'completed' : step.status,
+      status: executionMap[step.skill_id]?.status ?? step.status,
       icon: skillCategoryIcon[step.category] ?? 'loop',
     }))
   }
@@ -93,8 +94,7 @@ function stepNumber(index) {
 }
 
 function skillActivityText(skill) {
-  if (skill.status === 'unavailable') return '未执行/缺证据'
-  if (skill.status === 'blocked') return '阻断'
+  if (['success', 'partial', 'blocked', 'failed', 'skipped', 'unavailable'].includes(skill.status)) return executionStatus(skill.status).label
   return skill.activity === 'executed' ? '旧版执行记录，未核验' : skill.activity === 'read' ? '取证' : skill.activity === 'planned' ? '规划' : '调用'
 }
 
@@ -269,7 +269,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">
                 <div><AppIcon name="network" :size="13" /><strong v-if="message.skillSummary?.read != null">Skill 证据核验 · 取证 {{ message.skillSummary?.read ?? 0 }} · 规划 {{ message.skillSummary?.planned ?? 0 }} · 缺证据 {{ message.skillSummary?.unavailable ?? 0 }} · 阻断 {{ message.skillSummary?.blocked ?? 0 }}</strong><strong v-else>历史 Skill 记录（未经新版证据核验）</strong><code>{{ message.skillRunId }}</code></div>
-                <span v-for="skill in message.skills" :key="skill.id" :title="skill.id" :class="{ blocked: skill.status === 'blocked' || skill.status === 'unavailable' }"><AppIcon :name="skill.status === 'blocked' || skill.status === 'unavailable' ? 'alert' : 'check'" :size="11" />{{ skillActivityText(skill) }} · {{ skill.name }}</span>
+                <span v-for="skill in message.skills" :key="skill.id" :title="skill.id" :class="`status-${executionStatus(skill.status).tone}`"><AppIcon :name="executionStatus(skill.status).icon" :size="11" />{{ skillActivityText(skill) }} · {{ skill.name }}</span>
               </div>
               <div v-if="message.deliverables?.length" class="message-deliverables">
                 <strong><AppIcon name="download" :size="12" />结果产物</strong>
@@ -342,11 +342,11 @@ onBeforeUnmount(() => clearInterval(runTimer))
           v-for="(node, index) in planNodes"
           :key="node.name"
           class="plan-node"
-          :class="{ 'is-complete': node.status === 'completed' || (!isRunning && node.status !== 'pending'), 'is-current': isRunning && index === currentNode, 'is-waiting': node.status === 'pending' || (isRunning && index > currentNode) }"
+          :class="{ 'is-complete': ['completed', 'success'].includes(node.status), 'is-partial': node.status === 'partial', 'is-blocked': node.status === 'blocked', 'is-failed': node.status === 'failed', 'is-current': isRunning && index === currentNode, 'is-waiting': node.status === 'pending' || node.status === 'skipped' || (isRunning && index > currentNode) }"
         >
           <span class="plan-node-icon"><AppIcon :name="node.icon" /></span>
           <div><span>{{ stepNumber(index) }}</span><strong>{{ node.name }}</strong><code>{{ node.tool }}</code><small>{{ node.output }}</small></div>
-          <span class="plan-node-state"><AppIcon :name="node.status === 'completed' ? 'check' : isRunning && index === currentNode ? 'loop' : 'clock'" :class="{ spinning: isRunning && index === currentNode }" /></span>
+          <span class="plan-node-state" :title="executionStatus(node.status).label"><AppIcon :name="isRunning && index === currentNode ? 'loop' : executionStatus(node.status).icon" :class="{ spinning: isRunning && index === currentNode }" /></span>
         </article>
       </div>
     </section>
@@ -374,7 +374,9 @@ onBeforeUnmount(() => clearInterval(runTimer))
 .message-skill-chain > div strong { font-size: 8px; }
 .message-skill-chain > div code { margin-left: auto; color: #94a3b8; font-size: 7px; }
 .message-skill-chain > span { display: inline-flex; align-items: center; gap: 2px; padding: 3px 6px; border: 1px solid #bfdbfe; border-radius: 999px; color: #1d4ed8; background: #eff6ff; font-size: 7px; }
-.message-skill-chain > span.blocked { border-color: #f5c26b; color: #b45309; background: #fffbeb; }
+.message-skill-chain > span.status-warning { border-color: #f5c26b; color: #b45309; background: #fffbeb; }
+.message-skill-chain > span.status-danger { border-color: #fecaca; color: #b91c1c; background: #fff1f2; }
+.message-skill-chain > span.status-neutral { border-color: #cbd5e1; color: #64748b; background: #f8fafc; }
 .message-deliverables { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
 .message-deliverables strong, .message-deliverables a { display: inline-flex; align-items: center; gap: 3px; font-size: 7px; }
 .message-deliverables strong { color: #475569; }

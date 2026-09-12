@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .artifacts import RuntimeArtifactResolver
+
 
 @dataclass
 class DataContext:
@@ -25,6 +27,7 @@ class DataContext:
     equipment_context: dict[str, Any] = field(default_factory=dict)
     process_context: dict[str, Any] = field(default_factory=dict)
     available_artifacts: list[str] = field(default_factory=list)
+    available_contract_fields: list[str] = field(default_factory=list)
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
@@ -73,6 +76,14 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
         quality = standard.get("data_decision", {}).get("status")
     equipment = {key: scenario.get(key) for key in ("industry", "process_unit") if scenario.get(key)}
     process = {key: scenario.get(key) for key in ("primary_output", "model_outputs", "sampling_seconds") if scenario.get(key) is not None}
+    resolver = RuntimeArtifactResolver(snapshot)
+    optimization_contract = (snapshot.get("runtime_state", {}) or {}).get("optimization_contract") or snapshot.get("optimization_contract") or {}
+    def contract_value_present(value: Any) -> bool:
+        if value is None or isinstance(value, str) and not value.strip():
+            return False
+        if isinstance(value, (list, dict, tuple, set)):
+            return bool(value)
+        return True
     return DataContext(
         run_id=snapshot.get("run_id") or run_id,
         project_context_scene=snapshot.get("project_scene"),
@@ -92,5 +103,6 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
         data_quality=quality,
         equipment_context=equipment,
         process_context=process,
-        available_artifacts=sorted(set(snapshot.get("artifacts", {}).keys()) | {key for key, value in results.items() if value}),
+        available_artifacts=sorted(resolver.available_types()),
+        available_contract_fields=sorted(key for key, value in optimization_contract.items() if contract_value_present(value)),
     )

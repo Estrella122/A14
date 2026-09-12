@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .artifacts import ArtifactType, EXECUTOR_ARTIFACT_CONTRACTS, EXECUTOR_INPUT_CONTRACTS, canonical_artifact_types
+
 
 GROUP_SKILLS = {
     "simulation": ("industrial_simulation_generator",),
@@ -19,11 +21,13 @@ GROUP_SKILLS = {
 SKILL_GROUP = {skill_id: group for group, skill_ids in GROUP_SKILLS.items() for skill_id in skill_ids}
 
 
-def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str]) -> dict[str, Any]:
+def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str], data_context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build the minimal executor DAG. Catalog dependencies remain planning metadata."""
     if task_spec.get("execution_mode") in {"analyze", "explain"}:
         return {"version": "core-executor-dag-v1", "steps": [], "target_groups": []}
     direct = set(direct_skill_ids)
+    data_context = data_context or {}
+    available_artifacts = canonical_artifact_types(data_context.get("available_artifacts") or ())
     response_intents = set(task_spec.get("response_intents") or [])
     requested_outputs = set(task_spec.get("requested_outputs") or [])
     requested_capabilities = set(task_spec.get("requested_capabilities") or [])
@@ -56,31 +60,51 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
         targets.discard("standardization")
 
     # Execution dependencies describe data production, not every Catalog/document dependency.
-    if "cleaning" in targets:
+    auto_dependencies = task_spec.get("constraints", {}).get("allow_upstream_execution", True)
+    if auto_dependencies and "cleaning" in targets and not set(EXECUTOR_ARTIFACT_CONTRACTS["cleaning"]["requires"]) <= available_artifacts:
         targets.add("standardization")
-    if "segmentation" in targets:
+    if auto_dependencies and "segmentation" in targets and not set(EXECUTOR_ARTIFACT_CONTRACTS["segmentation"]["requires"]) <= available_artifacts:
         targets.update(("standardization", "cleaning"))
     if "modeling" in targets:
-        targets.update(("standardization", "cleaning", "review"))
+        if auto_dependencies and not set(EXECUTOR_ARTIFACT_CONTRACTS["modeling"]["requires"]) <= available_artifacts:
+            targets.update(("standardization", "cleaning"))
+        targets.add("review")
+    if auto_dependencies and "optimization" in targets and "modeling" in targets and ArtifactType.SELECTED_SEGMENTS not in available_artifacts:
+        targets.update(("standardization", "cleaning", "segmentation"))
 
     order = ("simulation", "standardization", "cleaning", "segmentation", "modeling", "optimization", "review", "report", "visualization", "experiment", "supervision")
-    dependencies = {
-        "simulation": [], "standardization": [], "cleaning": ["standardization"], "segmentation": ["cleaning"],
-        "modeling": ["segmentation"] if "segmentation" in targets else ["cleaning"],
-        "optimization": ["modeling"] if "modeling" in targets else [],
-        "review": ["optimization"] if "optimization" in targets else ["modeling"],
-        "report": [],
-        "visualization": [], "experiment": [], "supervision": [],
-    }
+    producers = {artifact: group for group in order if group in targets for artifact in EXECUTOR_ARTIFACT_CONTRACTS.get(group, {}).get("produces", ())}
     steps = []
     for group in order:
         if group not in targets:
             continue
+        contract = EXECUTOR_ARTIFACT_CONTRACTS.get(group, {"requires": (), "produces": ()})
+        missing_artifacts = [item for item in contract["requires"] if item not in available_artifacts]
+        dependencies = list(dict.fromkeys(producers[item] for item in missing_artifacts if item in producers and producers[item] != group))
+        if dependencies:
+            dependencies = [max(dependencies, key=order.index)]
+        if group == "review" and "optimization" in targets:
+            dependencies = ["optimization"]
+        missing_unproducible = [item for item in missing_artifacts if item not in producers]
+        required_inputs = EXECUTOR_INPUT_CONTRACTS.get(group, ())
+        available_inputs = set(data_context.get("available_contract_fields") or ())
+        missing_requirements = [item for item in required_inputs if item not in available_inputs]
+        readiness_status = "blocked" if missing_unproducible or missing_requirements else "deferred" if dependencies else "executable"
+        readiness_reason = "前置 artifact 和输入合同已满足" if readiness_status == "executable" else (
+            "等待上游生成 " + "、".join(item for item in missing_artifacts if item in producers)
+            if readiness_status == "deferred" else "缺少 " + "、".join([*missing_unproducible, *missing_requirements]))
         steps.append({
             "id": group,
             "executor": group,
             "skill_ids": list(GROUP_SKILLS[group]),
-            "dependencies": [item for item in dependencies[group] if item in targets],
+            "dependencies": dependencies,
+            "requires_artifacts": list(contract["requires"]),
+            "produces_artifacts": list(contract["produces"]),
+            "artifact_readiness": {item: item in available_artifacts or item in producers for item in contract["requires"]},
+            "missing_artifacts": missing_artifacts,
+            "missing_requirements": missing_requirements,
+            "readiness_status": readiness_status,
+            "readiness_reason": readiness_reason,
             "inputs": {
                 "simulation": ["scenario", "generation_parameters"],
                 "standardization": ["source_csv|dataframe"],

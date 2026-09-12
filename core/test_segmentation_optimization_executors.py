@@ -150,7 +150,7 @@ class OptimizationExecutorTests(SimpleTestCase):
         self.assertFalse(self.execute()[0]["evidence"][0]["synthetic_fallback"])
 
     def test_optimization_artifact_is_returned(self):
-        self.assertEqual(self.execute()[0]["artifacts"], ["result.json"])
+        self.assertEqual(self.execute()[0]["artifacts"][-1]["artifact_type"], "OPTIMIZATION_WINNER")
 
     def test_infeasible_result_is_partial(self):
         self.fake_report["iterations"][0]["feasible"] = False
@@ -199,7 +199,7 @@ class RuntimeClosureTests(SimpleTestCase):
     def test_artifact_resolver_registers_provenance(self):
         state = {}; resolver = RuntimeArtifactResolver({"run_id": "r1"}, state)
         ref = resolver.register("segments_csv", self_path := Path("segments.csv"), "segmentation", "exec-1")
-        self.assertEqual((ref.path, ref.source_execution_id), (str(self_path), "exec-1"))
+        self.assertEqual((Path(ref.path).name, ref.source_execution_id), (str(self_path), "exec-1"))
 
     def test_case_a_dynamic_segment_request_has_no_modeling(self):
         groups = plan_skills("找出这批数据里最适合建模的动态工况段。")["analysis"]["execution_plan"]["core"]["target_groups"]

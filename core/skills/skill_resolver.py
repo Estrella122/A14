@@ -34,6 +34,8 @@ def resolve_skills(
             "precondition_fit": max((row["data_precondition_score"] for row in capability_resolution["candidates"] if row["candidate"] in matched), default=0.0),
             "scene_fit": max((row["scene_fit_score"] for row in capability_resolution["candidates"] if row["candidate"] in matched), default=0.0),
             "dependency_fit": max((row["dependency_readiness_score"] for row in capability_resolution["candidates"] if row["candidate"] in matched), default=0.0),
+            "artifact_readiness_score": max((row.get("artifact_readiness_score", 0.0) for row in capability_resolution["candidates"] if row["candidate"] in matched), default=0.0),
+            "missing_artifacts": sorted({artifact for row in capability_resolution["candidates"] if row["candidate"] in matched for artifact in row.get("missing_artifacts", [])}),
             "evidence": capability_resolution["available_evidence"],
             "rejection_reason": None if selected else "该 Skill 不拥有 resolver 选中的 capability",
         }

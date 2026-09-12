@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .industrial_executor import execute_analysis
+from .artifacts import EXECUTOR_ARTIFACT_CONTRACTS
 from .core_executors import (CleaningExecutor, ExperimentExecutor, ModelingExecutor, OptimizationExecutor,
                              ReportExecutor, ReviewExecutor, SegmentationExecutor, SimulationExecutor, StandardizationExecutor,
                              SupervisionExecutor, VisualizationExecutor)
@@ -39,6 +40,10 @@ EXECUTOR_DESCRIPTORS = {
     "experiment": {"status": "executable", "executor": ExperimentExecutor()},
     "supervision": {"status": "executable", "executor": SupervisionExecutor()},
 }
+for _executor_id, _contract in EXECUTOR_ARTIFACT_CONTRACTS.items():
+    if _executor_id in EXECUTOR_DESCRIPTORS:
+        EXECUTOR_DESCRIPTORS[_executor_id]["requires_artifacts"] = list(_contract["requires"])
+        EXECUTOR_DESCRIPTORS[_executor_id]["produces_artifacts"] = list(_contract["produces"])
 EXECUTORS = {key: value["executor"] for key, value in EXECUTOR_DESCRIPTORS.items() if value["executor"] is not None}
 
 

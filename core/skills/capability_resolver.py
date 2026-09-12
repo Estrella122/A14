@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .artifacts import EXECUTOR_ARTIFACT_CONTRACTS, canonical_artifact_types
 from .task_understanding import understand_task
 
 
@@ -20,6 +21,13 @@ CAPABILITY_DEFINITIONS: dict[str, dict[str, Any]] = {
     "BOTTLENECK_ANALYSIS": {"all": ("process_objective", "process_relationships", "multiple_numeric_fields"), "any": (), "skills": ("engineering_result_interpreter",), "intents": ("find_bottleneck",)},
     "MISSING_DATA_ANALYSIS": {"all": ("readable_data",), "any": (), "skills": ("missing_anomaly_cleaner",), "intents": ("inspect_missing_data", "inspect_data")},
     "ROOT_CAUSE_CANDIDATES": {"all": ("defined_anomaly", "related_variables", "temporal_or_process_relationships"), "any": (), "skills": ("time_delay_estimator_compensator", "engineering_result_interpreter"), "intents": ("find_root_cause",)},
+    "SEGMENTATION": {"all": (), "any": (), "skills": ("high_snr_dynamic_segment_extractor",), "intents": ("selection",),
+                     "required_artifacts": EXECUTOR_ARTIFACT_CONTRACTS["segmentation"]["requires"]},
+    "MODELING": {"all": (), "any": (), "skills": ("system_identification_trainer",), "intents": ("modeling",),
+                 "required_artifacts": EXECUTOR_ARTIFACT_CONTRACTS["modeling"]["requires"]},
+    "OPTIMIZATION": {"all": (), "any": (), "skills": ("closed_loop_preprocessing_optimizer",), "intents": ("optimization",),
+                     "required_artifacts": EXECUTOR_ARTIFACT_CONTRACTS["optimization"]["requires"],
+                     "required_contract_fields": ("objective", "decision_variables", "bounds", "constraints", "search_space", "optimization_policy", "real_data")},
 }
 
 CAPABILITY_TERMS = {
@@ -67,6 +75,7 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
         "root_cause_analysis": "find_root_cause", "data_profiling": "inspect_data",
     }
     intents = {intent_aliases.get(item, item) for item in task["semantic_intents"]}
+    intents.update(task.get("response_intents") or ())
     flags = evidence_flags(context)
     recalled = {cap for sid in recalled_skill_ids for cap in SKILL_TO_CAPABILITIES.get(sid, ())}
     weak_recalled = set()
@@ -78,6 +87,18 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
     candidates = recalled | weak_recalled | lexical
     if task["task_kind"] == "knowledge_explanation":
         candidates = lexical
+    for intent, capability in (("selection", "SEGMENTATION"), ("modeling", "MODELING"), ("optimization", "OPTIMIZATION")):
+        if intent in intents:
+            candidates.add(capability)
+    available_artifacts = canonical_artifact_types(context.get("available_artifacts") or ())
+    available_contract_fields = set(context.get("available_contract_fields") or ())
+    planned_groups = set()
+    if task.get("execution_mode") == "execute" and task.get("constraints", {}).get("allow_upstream_execution", True):
+        if "cleaning" in intents: planned_groups.update(("standardization", "cleaning"))
+        if "selection" in intents: planned_groups.update(("standardization", "cleaning", "segmentation"))
+        if "modeling" in intents: planned_groups.update(("standardization", "cleaning", "segmentation", "modeling"))
+        if "optimization" in intents and "modeling" in intents: planned_groups.add("optimization")
+    planned_artifacts = {artifact for group in planned_groups for artifact in EXECUTOR_ARTIFACT_CONTRACTS.get(group, {}).get("produces", ())}
     traces = []
     for capability in sorted(candidates):
         definition = CAPABILITY_DEFINITIONS[capability]
@@ -86,6 +107,14 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
         hard_ready = all(all_results.values()) and (not any_results or any(any_results.values()))
         unknown_scene_blocked = not context.get("detected_scene") and capability not in GENERIC_UNKNOWN_SAFE
         hard_ready = hard_ready and not unknown_scene_blocked
+        required_artifacts = tuple(definition.get("required_artifacts", ()))
+        artifact_checks = {item: item in available_artifacts for item in required_artifacts}
+        missing_artifacts = [item for item, present in artifact_checks.items() if not present]
+        producible_artifacts = [item for item in missing_artifacts if item in planned_artifacts]
+        unproducible_artifacts = [item for item in missing_artifacts if item not in planned_artifacts]
+        artifact_score = round(sum(artifact_checks.values()) / len(artifact_checks), 3) if artifact_checks else 1.0
+        required_contract = tuple(definition.get("required_contract_fields", ()))
+        missing_contract = [item for item in required_contract if item not in available_contract_fields]
         semantic = max((1.0 if intent in definition["intents"] else 0.0 for intent in intents), default=0.0)
         if capability in lexical: semantic = max(semantic, 0.55)
         quality = context.get("data_quality")
@@ -95,17 +124,34 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
         precondition = sum(checks) / len(checks) if checks else 1.0
         scene_confidence = context.get("scene_confidence")
         scene_fit = max(0.5, min(float(scene_confidence), 1.0)) if isinstance(scene_confidence, (int, float)) else 0.8 if context.get("detected_scene") else 0.5
-        dependency = 1.0 if hard_ready and context.get("available_artifacts") else 0.7 if hard_ready else 0.4
+        dependency = (round(.7 * artifact_score + .3 * (1.0 if hard_ready else 0.0), 3)
+                      if required_artifacts else 1.0 if hard_ready and context.get("available_artifacts") else 0.7 if hard_ready else 0.4)
         lexical_score = 1.0 if capability in lexical else 0.6 if capability in recalled else 0.25 if capability in weak_recalled else 0.0
         final = round(.35*semantic + .20*context_fit + .20*precondition + .10*scene_fit + .10*dependency + .05*lexical_score, 3)
         knowledge = task["task_kind"] == "knowledge_explanation"
-        selected = bool(not knowledge and hard_ready and semantic >= 0.5 and final >= 0.62)
-        status = "reference" if knowledge else "selected" if selected else "blocked" if not hard_ready else "deferred"
+        artifact_ready = not missing_artifacts
+        selected = bool(not knowledge and hard_ready and artifact_ready and not missing_contract and semantic >= 0.5 and final >= 0.62)
+        blocked_by_artifacts = bool(unproducible_artifacts or missing_contract)
+        deferred_by_artifacts = bool(missing_artifacts and not blocked_by_artifacts and producible_artifacts)
+        status = "reference" if knowledge else "selected" if selected else "blocked" if not hard_ready or blocked_by_artifacts else "deferred"
         missing = [name for name, ok in all_results.items() if not ok]
         if any_results and not any(any_results.values()): missing.append("any:" + "|".join(any_results))
         if unknown_scene_blocked: missing.append("known_scene")
-        reason = "知识解释仅加载能力文档，不进入数据分析计划" if knowledge else "语义目标匹配且数据与依赖前置条件满足" if selected else "缺少前置条件：" + "、".join(missing) if missing else "语义或综合评分不足"
-        traces.append({"candidate": capability, "semantic_intent_score": semantic, "context_fit_score": round(context_fit,3), "data_precondition_score": round(precondition,3), "scene_fit_score": scene_fit, "dependency_readiness_score": dependency, "lexical_recall_score": lexical_score, "final_score": final, "preconditions": {**all_results, **any_results}, "selected": selected, "status": status, "reason": reason, "selected_skill_ids": list(definition["skills"]), "requires": {"all": list(definition["all"]), "any": list(definition["any"])}})
+        if knowledge:
+            reason = "知识解释仅加载能力文档，不进入数据分析计划"
+        elif selected:
+            reason = "语义目标匹配，数据、artifact 与合同前置条件满足"
+        elif missing_contract:
+            reason = "缺少显式执行合同：" + "、".join(missing_contract)
+        elif unproducible_artifacts:
+            reason = "缺少且当前 DAG 无法生成 artifact：" + "、".join(unproducible_artifacts)
+        elif deferred_by_artifacts:
+            reason = "等待上游 Executor 生成：" + "、".join(producible_artifacts)
+        elif missing:
+            reason = "缺少前置条件：" + "、".join(missing)
+        else:
+            reason = "语义或综合评分不足"
+        traces.append({"candidate": capability, "semantic_intent_score": semantic, "context_fit_score": round(context_fit,3), "data_precondition_score": round(precondition,3), "scene_fit_score": scene_fit, "dependency_readiness_score": dependency, "lexical_recall_score": lexical_score, "final_score": final, "preconditions": {**all_results, **any_results}, "artifact_readiness": artifact_checks, "artifact_readiness_score": artifact_score, "required_artifacts": list(required_artifacts), "missing_artifacts": missing_artifacts, "producible_artifacts": producible_artifacts, "missing_contract_fields": missing_contract, "selected": selected, "status": status, "reason": reason, "selected_skill_ids": list(definition["skills"]), "requires": {"all": list(definition["all"]), "any": list(definition["any"])}})
     selected = [item["candidate"] for item in traces if item["selected"]]
     resolved_skill_ids = {skill for item in traces if item["selected"] for skill in item["selected_skill_ids"]}
     evidence_skill_ids = set()

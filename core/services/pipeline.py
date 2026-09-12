@@ -72,6 +72,9 @@ def _json_safe(value: Any) -> Any:
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.name == "snapshot.json" and payload.get("run_id") and payload.get("artifacts"):
+        from core.skills.artifacts import snapshot_artifact_registry
+        payload["artifact_registry"] = snapshot_artifact_registry(payload, path.parent)
     path.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -147,6 +150,7 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
     output_path = run_dir / "02_standardization" / "standardized.csv"
     mapping_path = run_dir / "02_standardization" / "mapping_report.csv"
     report_path = run_dir / "02_standardization" / "standardization_report.json"
+    dictionary_path = run_dir / "02_standardization" / "field_dictionary.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     result["standardized_data"].to_csv(output_path, index=False, encoding="utf-8-sig")
     pd.DataFrame(result["mapping"]["mappings"]).to_csv(mapping_path, index=False, encoding="utf-8-sig")
@@ -187,10 +191,12 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         "preview": result["standardized_data"].head(MAX_PREVIEW_ROWS).where(pd.notna(result["standardized_data"]), None).to_dict("records"),
     }
     _write_json(report_path, report)
+    _write_json(dictionary_path, {"fields": result["dictionary"]})
     report["artifacts"] = {
         "standardized_csv": _artifact(run_dir, output_path),
         "mapping_csv": _artifact(run_dir, mapping_path),
         "report_json": _artifact(run_dir, report_path),
+        "field_dictionary_json": _artifact(run_dir, dictionary_path),
     }
     return result["standardized_data"], report
 

@@ -20,6 +20,7 @@ from .skill_loader import discover_skills
 from .skill_resolver import resolve_skills
 from .executor import get_executor
 from .execution_plan import build_execution_plan
+from .artifacts import RuntimeArtifactResolver
 
 
 RUNS_DIR = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "agent_skill_runs"
@@ -229,7 +230,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         task_understanding=task_understanding,
     )
     needs_clarification = bool(task_understanding.get("requires_clarification") or (task_understanding["task_kind"] not in {"knowledge_explanation", "conversation"} and not direct))
-    core_execution_plan = build_execution_plan(task_understanding, [skill.id for skill in SKILLS if skill.id in direct])
+    core_execution_plan = build_execution_plan(task_understanding, [skill.id for skill in SKILLS if skill.id in direct], data_context)
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": needs_clarification,
                      "unresolved_clauses": route["unresolved_clauses"],
@@ -337,6 +338,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
     industrial_result = None
     core_results: list[dict[str, Any]] = []
+    state: dict[str, Any] = {}
     core_result_by_skill: dict[str, dict[str, Any]] = {}
     capability_by_skill: dict[str, list[dict[str, Any]]] = {}
     analysis_plan = plan.get("analysis", {}).get("analysis_plan", {})
@@ -372,22 +374,36 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                     capability_by_skill.setdefault(skill_id, []).append(result)
     core_plan = plan.get("analysis", {}).get("execution_plan", {}).get("core", {})
     if runtime_mode != "legacy" and plan.get("mode") == "execute" and not blocked_reason:
-        state: dict[str, Any] = {}
         parameters = {item.get("name"): item.get("value") for item in plan.get("analysis", {}).get("task_understanding", {}).get("parameters", [])}
         parameters.update(plan.get("parameters", {}))
         if "resample_seconds" in parameters:
             parameters["resample_rule"] = f"{parameters['resample_seconds']}s"
         for node in core_plan.get("steps", []):
             executor = get_executor(node["executor"])
-            if executor is None:
-                result = {"status": "unavailable", "skill_id": node["executor"], "capabilities_executed": [],
-                          "facts": [], "findings": [], "hypotheses": [], "limitations": ["尚无独立 Executor。"],
-                          "metrics": {}, "artifacts": [], "evidence": [], "warnings": [], "execution_trace": [], "duration_ms": 0}
-            elif any(result.get("status") in {"failed", "blocked", "unavailable"} for result in core_results if result.get("skill_id") in node.get("dependencies", [])):
-                result = {"status": "blocked", "skill_id": node["executor"], "capabilities_executed": [],
-                          "facts": [], "findings": [], "hypotheses": [], "limitations": ["前置 Executor 未成功。"],
-                          "metrics": {}, "artifacts": [], "evidence": [], "warnings": [], "execution_trace": [], "duration_ms": 0}
+            def blocked_result(reason, missing_artifacts=None, missing_requirements=None, status="blocked"):
+                return {"status": status, "skill_id": node["executor"], "executor": node["executor"], "reason": reason,
+                        "inputs": [], "outputs": [], "missing_requirements": missing_requirements or [],
+                        "missing_artifacts": missing_artifacts or [], "provenance": {}, "capabilities_executed": [],
+                        "facts": [], "findings": [], "hypotheses": [], "limitations": [reason],
+                        "metrics": {}, "artifacts": [], "evidence": [],
+                        "warnings": ["没有生成或回退到 synthetic data。"] if node["executor"] == "optimization" else [],
+                        "execution_trace": [], "duration_ms": 0}
+            if node.get("readiness_status") == "blocked":
+                result = blocked_result(node.get("readiness_reason", "规划阶段前置条件不足"),
+                                        node.get("missing_artifacts"), node.get("missing_requirements"))
+            elif executor is None:
+                result = blocked_result("当前计划无可用独立 Executor。", status="skipped")
+            elif any(result.get("status") in {"failed", "blocked", "skipped"} for result in core_results if result.get("skill_id") in node.get("dependencies", [])):
+                result = blocked_result("前置 Executor 未成功。")
             else:
+                readiness = RuntimeArtifactResolver(snapshot, state).readiness(node.get("requires_artifacts", []))
+                if readiness["missing_artifacts"]:
+                    result = blocked_result("上游执行完成后仍缺少 artifact：" + "、".join(readiness["missing_artifacts"]),
+                                            readiness["missing_artifacts"])
+                    core_results.append(result)
+                    for selected_skill_id in node["skill_ids"]:
+                        core_result_by_skill[selected_skill_id] = result
+                    continue
                 try:
                     result = executor.execute(node["executor"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
                                               plan.get("analysis", {}).get("data_context", {}),
@@ -397,10 +413,9 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                                                "execution_id": skill_run_id,
                                                "target_groups": core_plan.get("target_groups", [])})
                 except Exception as exc:
-                    result = {"status": "failed", "skill_id": node["executor"], "capabilities_executed": [],
-                              "facts": [], "findings": [], "hypotheses": [], "limitations": [str(exc)],
-                              "metrics": {}, "artifacts": [], "evidence": [], "warnings": [type(exc).__name__],
-                              "execution_trace": [{"step": node["executor"], "status": "failed"}], "duration_ms": 0}
+                    result = blocked_result(str(exc), status="failed")
+                    result["warnings"] = [type(exc).__name__]
+                    result["execution_trace"] = [{"step": node["executor"], "status": "failed"}]
             core_results.append(result)
             for selected_skill_id in node["skill_ids"]:
                 core_result_by_skill[selected_skill_id] = result
@@ -483,6 +498,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         "blocked_reason": blocked_reason,
         "started_at": started, "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "plan": plan, "executions": executions, "skill_execution_result": industrial_result, "core_skill_execution_results": core_results,
+        "artifact_registry": [ref.public() if hasattr(ref, "public") else ref for ref in state.get("artifact_refs", {}).values()] if runtime_mode != "legacy" else snapshot.get("artifact_registry", []),
         "summary": {
             "total": len(executions), "success": sum(item.get("status") == "success" for item in core_results) + (1 if industrial_result else 0),
             "blocked": sum(item.get("status") == "blocked" for item in core_results) + sum(item["status"] == "blocked" for item in executions if item["skill_id"] not in core_result_by_skill),
