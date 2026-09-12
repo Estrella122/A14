@@ -18,6 +18,12 @@ class DataContext:
     mapping_confidence: float | None = None
     numeric_field_count: int = 0
     sample_count: int = 0
+    row_count: int = 0
+    column_count: int = 0
+    numeric_column_count: int = 0
+    estimated_memory: int = 0
+    estimated_memory_bytes: int = 0
+    time_series_length: int = 0
     timestamp: str | None = None
     ordered_data: bool = False
     regular_time_axis: bool = False
@@ -84,6 +90,7 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
         if isinstance(value, (list, dict, tuple, set)):
             return bool(value)
         return True
+    estimated_memory = sample_count * max(len(rows), 1) * 8
     return DataContext(
         run_id=snapshot.get("run_id") or run_id,
         project_context_scene=snapshot.get("project_scene"),
@@ -95,6 +102,12 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
         mapping_confidence=round(sum(confidences) / len(confidences), 3) if confidences else None,
         numeric_field_count=numeric_count,
         sample_count=sample_count,
+        row_count=sample_count,
+        column_count=len(rows),
+        numeric_column_count=numeric_count,
+        estimated_memory=estimated_memory,
+        estimated_memory_bytes=estimated_memory,
+        time_series_length=sample_count if timestamp else 0,
         timestamp=timestamp,
         ordered_data=bool(timestamp and sample_count),
         regular_time_axis=bool(timestamp and scenario.get("sampling_seconds")),

@@ -46,6 +46,13 @@ for _capability, _definition in CAPABILITY_DEFINITIONS.items():
     for _skill in _definition["skills"]:
         SKILL_TO_CAPABILITIES.setdefault(_skill, set()).add(_capability)
 GENERIC_UNKNOWN_SAFE = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "TIME_SERIES_ANALYSIS", "ANOMALY_DETECTION", "CORRELATION_ANALYSIS", "MISSING_DATA_ANALYSIS"}
+COST_LEVELS = {
+    "DATA_PROFILING": "LOW", "DATA_QUALITY_ANALYSIS": "LOW", "MISSING_DATA_ANALYSIS": "LOW",
+    "TREND_ANALYSIS": "MEDIUM", "ENERGY_ANALYSIS": "MEDIUM", "CORRELATION_ANALYSIS": "MEDIUM",
+    "TIME_SERIES_ANALYSIS": "MEDIUM", "ANOMALY_DETECTION": "MEDIUM", "PROCESS_STABILITY": "HIGH",
+    "ROOT_CAUSE_CANDIDATES": "HIGH", "SEGMENTATION": "HIGH", "MODELING": "HIGH", "OPTIMIZATION": "HIGH",
+}
+COST_PENALTY = {"LOW": 0.03, "MEDIUM": 0.1, "HIGH": 0.22}
 
 
 def evidence_flags(context: dict[str, Any]) -> set[str]:
@@ -59,6 +66,7 @@ def evidence_flags(context: dict[str, Any]) -> set[str]:
     semantics = set(context.get("semantic_types") or ())
     trusted_semantics = context.get("mapping_confidence") is None or context.get("mapping_confidence", 0) >= 0.6
     if trusted_semantics and semantics & {"energy", "power", "electricity", "fuel"}: flags.add("confirmed_energy_semantics")
+    if trusted_semantics and context.get("detected_scene") == "steel_industry_energy": flags.add("confirmed_energy_semantics")
     if trusted_semantics and semantics & {"quality", "product_quality", "controlled"}: flags.add("confirmed_quality_semantics")
     if context.get("equipment_context"): flags.update(("equipment_context", "equipment_state_variables"))
     if context.get("process_context"): flags.update(("process_variables", "process_relationships", "process_objective", "operating_state_variables"))
@@ -83,8 +91,10 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
     lexical = set(task.get("requested_capabilities") or task.get("explicit_capabilities") or ())
     for item in lexical_candidates:
         weak_recalled.update(SKILL_TO_CAPABILITIES.get(item.get("skill_id"), ()))
-    if task["task_kind"] in {"data_analysis", "execute_pipeline"} and intents & {"locate_abnormal_behavior", "compare_normal_operation", "prioritize_time_windows", "inspect_variation"}:
+    if task["task_kind"] in {"data_analysis", "execute_pipeline"} and intents & {"locate_abnormal_behavior", "compare_normal_operation", "prioritize_time_windows"}:
         recalled.update(("DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "ANOMALY_DETECTION"))
+    elif task["task_kind"] in {"data_analysis", "execute_pipeline"} and "inspect_variation" in intents:
+        recalled.update(("DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS"))
     candidates = recalled | weak_recalled | lexical
     if task["task_kind"] == "knowledge_explanation":
         candidates = lexical
@@ -152,11 +162,29 @@ def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled
             reason = "缺少前置条件：" + "、".join(missing)
         else:
             reason = "语义或综合评分不足"
-        traces.append({"candidate": capability, "semantic_intent_score": semantic, "context_fit_score": round(context_fit,3), "data_precondition_score": round(precondition,3), "scene_fit_score": scene_fit, "dependency_readiness_score": dependency, "lexical_recall_score": lexical_score, "final_score": final, "preconditions": {**all_results, **any_results}, "artifact_readiness": artifact_checks, "artifact_readiness_score": artifact_score, "required_artifacts": list(required_artifacts), "missing_artifacts": missing_artifacts, "producible_artifacts": producible_artifacts, "missing_contract_fields": missing_contract, "selected": selected, "status": status, "reason": reason, "selected_skill_ids": list(definition["skills"]), "requires": {"all": list(definition["all"]), "any": list(definition["any"])}})
+        cost = COST_LEVELS.get(capability, "MEDIUM")
+        expected_value = round(max(0.0, min(1.0, .55 * semantic + .25 * context_fit + .20 * dependency)), 3)
+        traces.append({"candidate": capability, "semantic_intent_score": semantic, "context_fit_score": round(context_fit,3), "data_precondition_score": round(precondition,3), "scene_fit_score": scene_fit, "dependency_readiness_score": dependency, "lexical_recall_score": lexical_score, "final_score": final, "estimated_cost": cost, "expected_value": expected_value, "planning_value": round(expected_value - COST_PENALTY[cost], 3), "preconditions": {**all_results, **any_results}, "artifact_readiness": artifact_checks, "artifact_readiness_score": artifact_score, "required_artifacts": list(required_artifacts), "missing_artifacts": missing_artifacts, "producible_artifacts": producible_artifacts, "missing_contract_fields": missing_contract, "selected": selected, "status": status, "reason": reason, "selected_skill_ids": list(definition["skills"]), "requires": {"all": list(definition["all"]), "any": list(definition["any"])}})
+    objective_text = str(task.get("objective") or "")
+    deep_analysis_requested = bool(task.get("constraints", {}).get("deep_analysis")) or any(term in objective_text for term in ("完整深度分析", "全面深度分析", "所有能力", "full deep analysis"))
+    budget = ({"max_capabilities": 10, "max_high_cost_capabilities": 4, "max_runtime_seconds": 60}
+              if deep_analysis_requested else
+              {"max_capabilities": 6, "max_high_cost_capabilities": 1, "max_runtime_seconds": 15})
+    budget["mode"] = "extended" if deep_analysis_requested else "fast"
+    selected_traces = sorted((item for item in traces if item["selected"]), key=lambda item: (item["planning_value"], item["final_score"]), reverse=True)
+    kept = []
+    high_cost = 0
+    for item in selected_traces:
+        over_budget = len(kept) >= budget["max_capabilities"] or (item["estimated_cost"] == "HIGH" and high_cost >= budget["max_high_cost_capabilities"])
+        if over_budget:
+            item.update(selected=False, status="deferred", reason="已满足基础分析预算，转入按需深度分析")
+            continue
+        kept.append(item)
+        high_cost += int(item["estimated_cost"] == "HIGH")
     selected = [item["candidate"] for item in traces if item["selected"]]
     resolved_skill_ids = {skill for item in traces if item["selected"] for skill in item["selected_skill_ids"]}
     evidence_skill_ids = set()
     if task["task_kind"] == "data_analysis" and context.get("available_artifacts"):
         evidence_skill_ids = set(recalled_skill_ids)
         resolved_skill_ids.update(evidence_skill_ids)
-    return {"selected": selected, "documentation": [item["candidate"] for item in traces if item["status"] == "reference"], "candidates": traces, "available_evidence": sorted(flags), "resolved_skill_ids": sorted(resolved_skill_ids), "evidence_skill_ids": sorted(evidence_skill_ids)}
+    return {"selected": selected, "documentation": [item["candidate"] for item in traces if item["status"] == "reference"], "candidates": traces, "analysis_budget": budget, "available_evidence": sorted(flags), "resolved_skill_ids": sorted(resolved_skill_ids), "evidence_skill_ids": sorted(evidence_skill_ids)}

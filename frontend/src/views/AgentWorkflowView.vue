@@ -10,7 +10,7 @@ import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
 import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
 import { getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun } from '../api/agent'
-import { announcePipelineUpdate, artifactUrl, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
+import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildRuntimeObservability } from '../utils/runtimeObservability'
@@ -38,6 +38,7 @@ const activeLiveRun = ref(savedChat?.activeLiveRun ?? null)
 const chatThread = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
+const basicAnalysisReady = ref(false)
 const responseState = ref(savedChat?.responseState ?? null)
 const runtimeHistory = ref(savedChat?.runtimeHistory ?? {})
 const recentRuns = ref([])
@@ -51,6 +52,7 @@ const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
 const { latestRun } = useLatestPipelineRun()
 let pollController
+let disposed = false
 const activeRun = computed(() => selectedRun.value ?? latestRun.value)
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
@@ -186,6 +188,33 @@ async function executeLiveMessage(userText, runId, prefix = '') {
   return result
 }
 
+async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const snapshot = await getPipelineRun(runId)
+    latestRun.value = snapshot
+    selectedRun.value = snapshot
+    announcePipelineUpdate(snapshot)
+    if (predicate(snapshot)) return snapshot
+    await new Promise((resolve) => window.setTimeout(resolve, 700))
+  }
+  throw new Error(`基础分析在 ${Math.round(timeoutMs / 1000)} 秒内未返回`)
+}
+
+async function monitorExtendedAnalysis(runId) {
+  try {
+    const snapshot = await waitForPipeline(runId, (item) => ['completed', 'failed', 'needs_review'].includes(item.status), 10 * 60 * 1000)
+    if (disposed) return
+    if (snapshot.status === 'completed') {
+      messages.value.push({ id: Date.now(), role: 'agent', text: '深度分析已在后台完成：系统辨识、候选寻优、评审与报告产物现已可用。', runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    } else if (snapshot.status === 'failed') {
+      messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析失败：${snapshot.error?.message ?? '未知错误'}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    }
+  } catch (error) {
+    if (!disposed) messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析状态：${error.message}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+  }
+}
+
 async function runWorkflow() {
   if (!prompt.value.trim() || isRunning.value) return
   const userText = prompt.value.trim()
@@ -228,27 +257,32 @@ async function handleCsv(event) {
   event.target.value = ''
   if (!file || uploading.value) return
   uploading.value = true
+  basicAnalysisReady.value = false
   isRunning.value = true
   const uploadMessage = { id: Date.now(), role: 'user', text: `上传并分析CSV：${file.name}`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
   messages.value.push(uploadMessage)
   await scrollToLatest()
   try {
-    const snapshot = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
+    const created = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag, asyncAnalysis: true })
     // A successfully created CSV run starts a fresh evidence conversation.
     // Failed uploads keep the previous conversation so troubleshooting context is not lost.
     prompt.value = ''
     messages.value = [uploadMessage]
     responseState.value = null
     liveLogs.value = []
-    latestRun.value = snapshot
-    selectedRun.value = snapshot
-    announcePipelineUpdate(snapshot)
-    const result = await executeLiveMessage('总结刚刚上传的CSV，说明数据质量、模型效果、评审结论和报告产物', snapshot.run_id, `已接收 ${file.name}，并完成全部子Agent调度。`)
+    latestRun.value = created
+    selectedRun.value = created
+    announcePipelineUpdate(created)
+    const snapshot = await waitForPipeline(created.run_id, (item) => Boolean(item.results?.cleaning) || ['failed', 'needs_review'].includes(item.status))
+    if (snapshot.status === 'failed') throw new Error(snapshot.error?.message ?? '流水线基础分析失败')
+    basicAnalysisReady.value = true
+    const result = await executeLiveMessage('快速分析当前上传数据的数据概况、数据质量、能源表现和变化趋势', snapshot.run_id, `已接收 ${file.name}。基础分析已完成；深度建模与寻优正在后台继续。`)
     liveLogs.value = [
       ...(result.logs ?? []),
       ...snapshot.stages.map((stage) => ({ time: stage.finished_at ?? snapshot.updated_at, level: stage.status === 'completed' ? 'TOOL' : 'WARN', text: `${stage.label}：${stage.message}` })),
     ].slice(0, 18)
-    emit('notify', { tone: 'success', title: 'CSV全流程分析完成', message: `任务 ${snapshot.run_id} 已生成分析报告和全部中间产物。` })
+    emit('notify', { tone: 'success', title: 'CSV基础分析已完成', message: `任务 ${snapshot.run_id} 已返回首版结果，深度分析在后台继续。` })
+    void monitorExtendedAnalysis(snapshot.run_id)
   } catch (error) {
     messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'CSV分析失败', message: error.message })
@@ -289,7 +323,7 @@ onMounted(async () => {
   }
   scrollToLatest()
 })
-onBeforeUnmount(() => pollController?.abort())
+onBeforeUnmount(() => { disposed = true; pollController?.abort() })
 
 function switchRun(event) {
   const run = recentRuns.value.find((item) => item.run_id === event.target.value)
@@ -307,7 +341,8 @@ function switchRun(event) {
       <template #actions>
         <label class="run-switcher"><span>最近运行</span><select :value="activeRun?.run_id ?? ''" aria-label="切换最近运行" @change="switchRun"><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
         <input ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
-        <button class="btn btn-primary" type="button" :disabled="uploading" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" />{{ uploading ? '子Agent执行中' : '上传CSV并全流程运行' }}</button>
+        <button class="btn btn-primary" type="button" :disabled="uploading" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" />{{ uploading ? '正在生成基础分析' : '上传CSV并分析' }}</button>
+        <StatusPill v-if="basicAnalysisReady && activeRun?.status === 'running'" tone="brand" dot>基础结果可用 · 深度分析进行中</StatusPill>
         <StatusPill tone="success" dot>证据 Agent 在线</StatusPill>
         <StatusPill tone="neutral"><AppIcon name="shield" :size="14" /> 本地安全执行</StatusPill>
       </template>

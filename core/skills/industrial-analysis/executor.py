@@ -24,9 +24,12 @@ def _confidence(context: dict[str, Any], sample_count: int) -> float:
     return round(max(0.2, min(0.98, base * min(1.0, sample_count / 100))), 3)
 
 
-def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[str, Any], policy: dict[str, Any]) -> dict[str, Any]:
+def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[str, Any], policy: dict[str, Any], shared: dict[str, Any] | None = None) -> dict[str, Any]:
     started = perf_counter()
-    numeric = _numeric(frame)
+    shared = shared if shared is not None else {}
+    numeric = shared.get("numeric")
+    if numeric is None:
+        numeric = shared["numeric"] = _numeric(frame)
     confidence = _confidence(context, len(frame))
     facts: list[dict[str, Any]] = []
     findings: list[dict[str, Any]] = []
@@ -39,7 +42,9 @@ def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[st
         metrics = {"row_count": len(frame), "column_count": len(frame.columns), "numeric_field_count": len(numeric.columns)}
         facts.append(_conclusion(f"数据包含 {len(frame)} 行、{len(frame.columns)} 列，其中 {len(numeric.columns)} 个数值字段。", confidence, evidence))
     elif capability_id in {"DATA_QUALITY_ANALYSIS", "MISSING_DATA_ANALYSIS"}:
-        rates = frame.isna().mean().sort_values(ascending=False)
+        rates = shared.get("missing_rates")
+        if rates is None:
+            rates = shared["missing_rates"] = frame.isna().mean().sort_values(ascending=False)
         worst = str(rates.index[0]) if len(rates) else None
         worst_rate = float(rates.iloc[0]) if len(rates) else 0.0
         metrics = {"overall_missing_rate": float(frame.isna().sum().sum() / max(1, frame.size)), "worst_field": worst, "worst_missing_rate": worst_rate}
@@ -79,7 +84,10 @@ def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[st
         metrics = {"coefficient_of_variation": cv, "half_window_drift": drift, "least_stable_field": unstable}
         findings.append(_conclusion(f"相对波动最大的字段为 {unstable or '无可分析字段'}。", confidence, evidence + ([f"cv:{cv[unstable]:.6g}"] if unstable else [])))
     elif capability_id == "CORRELATION_ANALYSIS":
-        correlation = numeric.corr().abs()
+        usable = numeric.loc[:, numeric.nunique(dropna=True) > 1]
+        correlation = shared.get("correlation")
+        if correlation is None:
+            correlation = shared["correlation"] = usable.corr().abs()
         pairs = []
         for i, left in enumerate(correlation.columns):
             for right in correlation.columns[i + 1:]:
@@ -108,10 +116,21 @@ def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[st
 def execute_analysis(task_spec: dict[str, Any], analysis_plan: dict[str, Any], data_context: dict[str, Any], *, data: pd.DataFrame | None = None, data_path: str | Path | None = None, runtime_context: dict[str, Any] | None = None) -> dict[str, Any]:
     runtime_context = runtime_context or {}
     policy = {**(runtime_context.get("evidence_policy") or {}), **(runtime_context.get("execution_policy") or {})}
-    frame = data.copy() if data is not None else pd.read_csv(data_path)
+    load_started = perf_counter()
+    frame = data if data is not None else pd.read_csv(data_path)
+    load_ms = round((perf_counter() - load_started) * 1000, 3)
+    prepare_started = perf_counter()
+    shared = {"numeric": _numeric(frame)}
+    prepare_ms = round((perf_counter() - prepare_started) * 1000, 3)
     executions = []
+    budget = (analysis_plan.get("analysis_budget") or {})
+    max_runtime_seconds = float(budget.get("max_runtime_seconds", 15))
+    analysis_started = perf_counter()
     for item in analysis_plan.get("selected_capabilities", []):
-        executions.append(execute_capability(item["capability"], frame, data_context, policy))
+        if perf_counter() - analysis_started >= max_runtime_seconds:
+            executions.append({"status": "skipped", "capability_id": item["capability"], "outputs": {"facts": [], "findings": [], "hypotheses": [], "limitations": []}, "metrics": {}, "artifacts": [], "evidence": [], "warnings": ["analysis_budget_exceeded"], "limitations": [], "execution_trace": [], "duration_ms": 0, "timeout_reason": f"analysis budget {max_runtime_seconds:g}s exceeded"})
+            continue
+        executions.append(execute_capability(item["capability"], frame, data_context, policy, shared))
     result = {
         "analysis_plan": analysis_plan,
         "facts": [row for execution in executions for row in execution["outputs"]["facts"]],
@@ -120,6 +139,8 @@ def execute_analysis(task_spec: dict[str, Any], analysis_plan: dict[str, Any], d
         "limitations": [row for execution in executions for row in execution["outputs"]["limitations"]],
         "capability_executions": executions,
         "task_spec": task_spec,
+        "timing_trace": {"csv_load_ms": load_ms, "shared_feature_preparation_ms": prepare_ms, "capabilities_ms": {item["capability_id"]: item["duration_ms"] for item in executions}, "total_ms": round((perf_counter() - analysis_started) * 1000, 3)},
+        "cache": {"shared_numeric_matrix": True, "shared_missing_rates": "missing_rates" in shared, "shared_correlation_matrix": "correlation" in shared},
     }
     output_dir = runtime_context.get("output_dir")
     if output_dir:

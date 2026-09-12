@@ -159,6 +159,25 @@ class ContextAwareCapabilityResolutionTests(SimpleTestCase):
         self.assertEqual("thermal_power_boiler_long_tail", context["detected_scene"])
         self.assertEqual(2, context["numeric_field_count"])
         self.assertTrue(context["regular_time_axis"])
+        self.assertEqual(200, context["row_count"])
+        self.assertEqual(3, context["column_count"])
+        self.assertEqual(2, context["numeric_column_count"])
+        self.assertEqual(context["estimated_memory"], context["estimated_memory_bytes"])
+        self.assertGreater(context["estimated_memory_bytes"], 0)
+
+    def test_resolution_exposes_cost_budget_and_planning_timing(self):
+        plan = plan_skills("这批数据波动是不是有问题", snapshot=self.context_snapshot())
+        resolution = plan["analysis"]["capability_resolution"]
+        self.assertEqual(1, resolution["analysis_budget"]["max_high_cost_capabilities"])
+        self.assertTrue(all(item["estimated_cost"] in {"LOW", "MEDIUM", "HIGH"} for item in resolution["candidates"]))
+        self.assertIn("task_understanding_ms", plan["analysis"]["timing_trace"])
+        self.assertIn("total_ms", plan["analysis"]["timing_trace"])
+
+    def test_explicit_full_deep_analysis_raises_budget(self):
+        plan = plan_skills("请做完整深度分析，找异常并检查过程稳定性", snapshot=self.context_snapshot())
+        budget = plan["analysis"]["capability_resolution"]["analysis_budget"]
+        self.assertEqual("extended", budget["mode"])
+        self.assertGreater(budget["max_high_cost_capabilities"], 1)
 
     def test_mapping_quality_and_dependency_readiness_are_scored(self):
         low = build_data_context(self.context_snapshot(mapping_confidence=.4)).public()

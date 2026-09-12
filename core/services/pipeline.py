@@ -11,7 +11,8 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterator
+from time import perf_counter
+from typing import Any, Callable, Iterator
 from uuid import uuid4
 
 import pandas as pd
@@ -75,7 +76,9 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     if path.name == "snapshot.json" and payload.get("run_id") and payload.get("artifacts"):
         from core.skills.artifacts import snapshot_artifact_registry
         payload["artifact_registry"] = snapshot_artifact_registry(payload, path.parent)
-    path.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
+    temporary.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def _read_json(path: Path, default: Any = None) -> Any:
@@ -95,7 +98,7 @@ def _read_csv(path: Path) -> pd.DataFrame:
 
 
 def _set_stage(snapshot: dict[str, Any], run_dir: Path, key: str, status: str, message: str = "") -> None:
-    now = datetime.now().astimezone().isoformat(timespec="seconds")
+    now = datetime.now().astimezone().isoformat(timespec="milliseconds")
     for stage in snapshot["stages"]:
         if stage["key"] == key:
             stage["status"] = status
@@ -104,9 +107,12 @@ def _set_stage(snapshot: dict[str, Any], run_dir: Path, key: str, status: str, m
                 stage["started_at"] = now
             if status in {"completed", "failed", "skipped"}:
                 stage["finished_at"] = now
+                if stage.get("started_at"):
+                    stage["elapsed_ms"] = max(0, round((datetime.fromisoformat(now) - datetime.fromisoformat(stage["started_at"])).total_seconds() * 1000))
             break
     snapshot["current_stage"] = key
     snapshot["updated_at"] = now
+    snapshot["timing_trace"] = {stage["key"]: stage.get("elapsed_ms") for stage in snapshot["stages"] if stage.get("elapsed_ms") is not None}
     _write_json(run_dir / "snapshot.json", snapshot)
 
 
@@ -119,7 +125,11 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
     with _module_path(module_dir):
         from standard_agent import ScenarioRepository, StandardizationAgent
 
+        parse_started = perf_counter()
+        parse_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         frame = _read_csv(source_path)
+        csv_parse_ms = round((perf_counter() - parse_started) * 1000, 3)
+        parse_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         max_rows = int(settings.PROCESSPILOT_MAX_CSV_ROWS)
         max_columns = int(settings.PROCESSPILOT_MAX_CSV_COLUMNS)
         if len(frame) > max_rows:
@@ -186,6 +196,11 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
                 "template_path": str(template_path),
                 "required_features_source": f"{template_path.parent / 'fields.csv'}#required=true",
                 "required_features": modeling_required_features,
+            },
+            "performance": {"csv_parse_ms": csv_parse_ms, **result.get("performance_trace", {})},
+            "performance_spans": {
+                "csv_parse": {"start_time": parse_started_at, "end_time": parse_finished_at, "elapsed_ms": csv_parse_ms},
+                **result.get("performance_spans", {}),
             },
         },
         "preview": result["standardized_data"].head(MAX_PREVIEW_ROWS).where(pd.notna(result["standardized_data"]), None).to_dict("records"),
@@ -946,7 +961,7 @@ run_review_stage = _review
 run_report_stage = _analysis_report
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -971,9 +986,13 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             "stages": [{"key": key, "label": label, "status": "pending", "message": ""} for key, label in STAGES],
             "artifacts": {"source_csv": "01_input/source.csv"},
             "results": {},
+            "performance_trace": {key: value for key, value in (ingest_timing or {}).items() if key != "spans"},
+            "performance_spans": dict((ingest_timing or {}).get("spans", {})),
         }
         _write_json(run_dir / "snapshot.json", snapshot)
         _write_json(LATEST_PATH, {"run_id": run_id})
+        if on_created:
+            on_created(snapshot)
 
         def finish_requested_stage(stage: str) -> bool:
             if stop_after != stage:
@@ -998,6 +1017,8 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 standardization["scenario"]["requested_max_lag"] = max_lag
             snapshot["results"]["standardization"] = standardization
             snapshot["runtime_trace"] = standardization.get("runtime_trace", {})
+            snapshot["performance_trace"].update(standardization.get("runtime_trace", {}).get("performance", {}))
+            snapshot["performance_spans"].update(standardization.get("runtime_trace", {}).get("performance_spans", {}))
             snapshot["artifacts"].update(standardization["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
             if finish_requested_stage("standardization"):

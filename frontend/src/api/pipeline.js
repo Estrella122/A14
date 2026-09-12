@@ -9,8 +9,14 @@ export async function uploadPipelineFile(file, options = {}) {
   form.append('resample_rule', options.resampleRule ?? '10s')
   form.append('max_lag', String(options.maxLag ?? 60))
   form.append('overrides', JSON.stringify(options.overrides ?? {}))
+  if (options.asyncAnalysis) form.append('async_analysis', 'true')
   const response = await secureFetch('/pipeline/runs/', { method: 'POST', body: form })
   const payload = await parseApiResponse(response)
+  return payload.data
+}
+
+export async function getPipelineRun(runId, { signal } = {}) {
+  const payload = await apiRequest(`/pipeline/runs/${encodeURIComponent(runId)}/`, { signal })
   return payload.data
 }
 

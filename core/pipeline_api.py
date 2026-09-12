@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import tempfile
 import json
+import threading
+from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 
 from django.http import FileResponse, JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -44,6 +47,19 @@ def _response(payload, status=200):
     return response
 
 
+def _run_pipeline_async(temporary: Path, options: dict, ready: threading.Event, state: dict) -> None:
+    def created(snapshot):
+        state["run_id"] = snapshot["run_id"]
+        ready.set()
+    try:
+        run_pipeline(temporary, on_created=created, **options)
+    except Exception as exc:
+        state["error"] = str(exc)
+        ready.set()
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def pipeline_collection(request):
     if request.method == "OPTIONS":
@@ -66,13 +82,16 @@ def pipeline_collection(request):
 
     temporary = None
     try:
+        upload_started = perf_counter()
+        upload_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         handle = tempfile.NamedTemporaryFile(prefix="processpilot_", suffix=".csv", delete=False)
         temporary = Path(handle.name)
         with handle:
             for chunk in upload.chunks():
                 handle.write(chunk)
-        snapshot = run_pipeline(
-            temporary,
+        upload_ms = round((perf_counter() - upload_started) * 1000, 3)
+        upload_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        options = dict(
             original_name=upload.name,
             scenario_id=request.POST.get("scenario_id", "auto"),
             project_scene=request.POST.get("project_scene", ""),
@@ -80,7 +99,19 @@ def pipeline_collection(request):
             resample_rule=request.POST.get("resample_rule", "10s"),
             max_lag=int(request.POST.get("max_lag", "60")),
             overrides=_mapping_overrides(request.POST.get("overrides")),
+            ingest_timing={"csv_upload_ms": upload_ms, "spans": {"csv_upload": {"start_time": upload_started_at, "end_time": upload_finished_at, "elapsed_ms": upload_ms}}},
         )
+        if request.POST.get("async_analysis", "").lower() in {"1", "true", "yes"}:
+            ready = threading.Event()
+            state = {}
+            threading.Thread(target=_run_pipeline_async, args=(temporary, options, ready, state), daemon=True, name="pipeline-upload").start()
+            if not ready.wait(10):
+                return _response({"ok": False, "message": "流水线任务创建超时。"}, status=503)
+            if not state.get("run_id"):
+                return _response({"ok": False, "message": state.get("error") or "流水线任务创建失败。"}, status=422)
+            snapshot = get_run(state["run_id"])
+            return _response({"ok": True, "data": snapshot}, status=202)
+        snapshot = run_pipeline(temporary, **options)
         return _response({"ok": True, "data": snapshot}, status=201)
     except (PipelineError, ValueError) as exc:
         if temporary and temporary.exists():

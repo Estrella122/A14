@@ -458,6 +458,19 @@ class LivePipelineApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['ok'])
 
+    @patch('core.pipeline_api.get_run')
+    @patch('core.pipeline_api.run_pipeline')
+    def test_pipeline_async_upload_returns_created_snapshot(self, mocked_run, mocked_get):
+        def complete(_path, on_created=None, **_options):
+            on_created({'run_id': 'run_async'})
+            return {'run_id': 'run_async', 'status': 'completed'}
+        mocked_run.side_effect = complete
+        mocked_get.return_value = {'run_id': 'run_async', 'status': 'running', 'current_stage': 'standardization'}
+        upload = SimpleUploadedFile('data.csv', b'timestamp,x\n2026-01-01,1\n', content_type='text/csv')
+        response = self.client.post('/api/pipeline/runs/', {'file': upload, 'async_analysis': 'true'})
+        self.assertEqual(202, response.status_code, response.content)
+        self.assertEqual('run_async', response.json()['data']['run_id'])
+
     @patch('core.pipeline_api.rerun_pipeline')
     def test_visual_workflow_executes_real_canonical_pipeline(self, mocked_rerun):
         mocked_rerun.return_value = {

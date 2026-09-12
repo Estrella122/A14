@@ -102,6 +102,8 @@ class AgentSkillRuntimeArchitectureTests(SimpleTestCase):
             contract = result["skill_execution_result"]
             for key in ("analysis_plan", "facts", "findings", "hypotheses", "limitations"):
                 self.assertIn(key, contract)
+            self.assertTrue(contract["cache"]["shared_numeric_matrix"])
+            self.assertIn("capabilities_ms", contract["timing_trace"])
             self.assertTrue(Path(contract["artifact"]).is_file())
 
     @override_settings(AGENT_RUNTIME_MODE="legacy")

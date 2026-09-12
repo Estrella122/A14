@@ -6,7 +6,9 @@ import math
 import re
 import threading
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import pandas as pd
@@ -546,6 +548,8 @@ class StandardizationAgent:
         include_unmapped: bool = False,
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        standardization_started = perf_counter()
+        standardization_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         if frame.empty:
             raise ValueError("CSV 数据为空。")
         duplicate_columns = [str(name) for name, count in Counter(map(str, frame.columns)).items() if count > 1]
@@ -558,8 +562,12 @@ class StandardizationAgent:
             frame=frame,
             context=context,
         )
+        scene_recognition_ms = round((perf_counter() - standardization_started) * 1000, 3)
+        scene_recognition_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         selected_id = detection["selected"]["scenario_id"] if scenario_id == "auto" else scenario_id
         template = self.repository.get(selected_id)
+        mapping_started = perf_counter()
+        mapping_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         mapping = self.map_columns(list(frame.columns), selected_id, frame=frame)
         overrides = overrides or {}
         for item in mapping["mappings"]:
@@ -670,6 +678,9 @@ class StandardizationAgent:
                 "message": f"场景数据契约存在 {schema_validation['failure_count']} 项失败，需复核后再交付",
             })
         data_decision = self._data_decision(mapping, detection, validation, schema_validation)
+        total_ms = round((perf_counter() - standardization_started) * 1000, 3)
+        field_standardization_ms = round((perf_counter() - mapping_started) * 1000, 3)
+        standardization_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         return {
             "scenario": template.summary(),
             "detection": detection,
@@ -682,6 +693,16 @@ class StandardizationAgent:
             "data_decision": data_decision,
             "standardized_data": result,
             "dictionary": [field.as_dict() for field in template.fields],
+            "performance_trace": {
+                "scene_recognition_ms": scene_recognition_ms,
+                "field_standardization_ms": field_standardization_ms,
+                "standardization_total_ms": total_ms,
+            },
+            "performance_spans": {
+                "scene_recognition": {"start_time": standardization_started_at, "end_time": scene_recognition_finished_at, "elapsed_ms": scene_recognition_ms},
+                "field_standardization": {"start_time": mapping_started_at, "end_time": standardization_finished_at, "elapsed_ms": field_standardization_ms},
+                "standardization": {"start_time": standardization_started_at, "end_time": standardization_finished_at, "elapsed_ms": total_ms},
+            },
         }
 
     def _resolve_duplicates(self, mappings: list[dict[str, Any]]) -> None:

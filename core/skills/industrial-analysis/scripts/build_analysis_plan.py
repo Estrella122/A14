@@ -64,6 +64,7 @@ def build_analysis_plan(
         "task_kind": task.get("task_kind"),
         "data_quality": context.get("data_quality", "unknown"),
         "selected_capabilities": selected,
+        "analysis_budget": (capability_resolution or {}).get("analysis_budget", {"max_capabilities": 6, "max_high_cost_capabilities": 1, "max_runtime_seconds": 15}),
         "skipped_capabilities": skipped,
         "blocked_capabilities": blocked,
         "documentation_capabilities": documentation,

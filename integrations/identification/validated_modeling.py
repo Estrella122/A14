@@ -121,14 +121,25 @@ def arx_response_analysis(state, horizon=120, frequency_points=96):
 
 
 def estimate_training_delays(df, output, inputs, seconds, max_lag):
+    """Estimate segment-safe Pearson lags without rebuilding pandas frames per lag."""
     rows = []
+    group_ids = groups(df, seconds).to_numpy()
+    output_values = pd.to_numeric(df[output], errors='coerce').to_numpy(dtype=float)
     for col in inputs:
+        input_values = pd.to_numeric(df[col], errors='coerce').to_numpy(dtype=float)
         candidates = []
         for lag in range(max_lag + 1):
-            pair = pd.concat([shifted(df, col, lag, seconds), df[output]], axis=1).dropna()
-            if len(pair) >= 20 and pair.iloc[:, 0].std() > 1e-12 and pair.iloc[:, 1].std() > 1e-12:
-                corr = pair.iloc[:, 0].corr(pair.iloc[:, 1])
-                if np.isfinite(corr): candidates.append((abs(corr), lag, corr, len(pair)))
+            if lag:
+                same_segment = group_ids[lag:] == group_ids[:-lag]
+                x_values = input_values[:-lag][same_segment]
+                y_values = output_values[lag:][same_segment]
+            else:
+                x_values, y_values = input_values, output_values
+            finite = np.isfinite(x_values) & np.isfinite(y_values)
+            x_valid, y_valid = x_values[finite], y_values[finite]
+            if len(x_valid) >= 20 and np.std(x_valid, ddof=1) > 1e-12 and np.std(y_valid, ddof=1) > 1e-12:
+                corr = float(np.corrcoef(x_valid, y_valid)[0, 1])
+                if np.isfinite(corr): candidates.append((abs(corr), lag, corr, len(x_valid)))
         if not candidates: raise ValueError(f'{col} 无有效因果时滞证据')
         _, lag, corr, n = max(candidates, key=lambda v: v[0])
         rows.append(dict(input=col, output=output, delay_samples=lag, correlation=corr,
@@ -192,32 +203,53 @@ def evaluation(df, state, guard, split, detailed=True):
         return metrics, diagnostics, prediction, acf
     # Rolling 10-step prediction: measured y only before each forecast origin.
     horizon = 10
-    forecasts, truths, holds = [], [], []
-    input_features = list(x.columns)
-    for end in indices:
-        origin = end - horizon + 1
-        if origin < state['order'] or age.iloc[end] < guard + horizon: continue
-        history = y.to_numpy(copy=True)
-        for pos in range(origin, end + 1):
-            row = x.iloc[pos].to_numpy(copy=True)
-            for j in range(state['order']): row[j] = history[pos-j-1]
-            history[pos] = np.dot(np.r_[1., row], state['coef'])
-        if np.isfinite(history[end]):
-            forecasts.append(history[end]); truths.append(y.iloc[end]); holds.append(y.iloc[origin-1])
-    diagnostics['multi_step'] = {'horizon_samples': horizon, 'future_inputs': 'observed historical inputs (conditional evaluation)',
-        'metrics': regression_metrics(truths, forecasts, len(state['coef'])) if truths else None,
-        'persistence': regression_metrics(truths, holds, 1) if truths else None}
-    # Conditional free simulation: no measured output feedback after initialization.
-    simulated = y.to_numpy(copy=True)
-    for pos in range(len(df)):
-        if age.iloc[pos] < guard: continue
-        row = x.iloc[pos].to_numpy(copy=True)
-        for j in range(state['order']): row[j] = simulated[pos-j-1]
+    order = state['order']
+    coef = np.asarray(state['coef'], dtype=float)
+    x_values = x.to_numpy(dtype=float, copy=True)
+    y_values = y.to_numpy(dtype=float, copy=True)
+    age_values = age.to_numpy(dtype=int, copy=False)
+    end_positions = indices.to_numpy(dtype=int, copy=False)
+    origins = end_positions - horizon + 1
+    eligible = (origins >= order) & (age_values[end_positions] >= guard + horizon)
+    end_positions, origins = end_positions[eligible], origins[eligible]
+
+    # Every endpoint has its own ten-sample forecast window.  Evaluate all
+    # endpoints together so the only Python loop is the fixed forecast horizon.
+    forecast_paths = np.full((len(end_positions), horizon), np.nan, dtype=float)
+    for step in range(horizon):
+        positions = origins + step
+        rows = x_values[positions].copy()
+        for lag_index in range(order):
+            lag = lag_index + 1
+            simulated_step = step - lag
+            if simulated_step >= 0:
+                rows[:, lag_index] = forecast_paths[:, simulated_step]
+            else:
+                rows[:, lag_index] = y_values[positions - lag]
         with np.errstate(over='ignore', invalid='ignore'):
-            simulated[pos] = np.dot(np.r_[1., row], state['coef'])
-    simulation_finite = np.isfinite(simulated[indices]).all() and np.max(np.abs(simulated[indices])) < 1e12
+            forecast_paths[:, step] = coef[0] + rows @ coef[1:]
+    forecasts = forecast_paths[:, -1]
+    finite_forecasts = np.isfinite(forecasts)
+    forecasts = forecasts[finite_forecasts]
+    valid_ends = end_positions[finite_forecasts]
+    valid_origins = origins[finite_forecasts]
+    truths = y_values[valid_ends]
+    holds = y_values[valid_origins - 1]
+    diagnostics['multi_step'] = {'horizon_samples': horizon, 'future_inputs': 'observed historical inputs (conditional evaluation)',
+        'metrics': regression_metrics(truths, forecasts, len(state['coef'])) if len(truths) else None,
+        'persistence': regression_metrics(truths, holds, 1) if len(truths) else None}
+    # Conditional free simulation: no measured output feedback after initialization.
+    simulated = y_values.copy()
+    for pos in range(len(df)):
+        if age_values[pos] < guard: continue
+        row = x_values[pos].copy()
+        for j in range(order): row[j] = simulated[pos-j-1]
+        with np.errstate(over='ignore', invalid='ignore'):
+            simulated[pos] = coef[0] + np.dot(row, coef[1:])
+    evaluation_positions = indices.to_numpy(dtype=int, copy=False)
+    simulation_finite = np.isfinite(simulated[evaluation_positions]).all() and np.max(np.abs(simulated[evaluation_positions])) < 1e12
     diagnostics['free_simulation'] = {'conditional_on_observed_inputs': True, 'diverged': not bool(simulation_finite),
-        'metrics': regression_metrics(actual, simulated[indices], len(state['coef'])) if simulation_finite else None}
+        'metrics': regression_metrics(actual, simulated[evaluation_positions], len(state['coef'])) if simulation_finite else None}
     acf = residual_acf(df, indices, residual, seconds)
     diagnostics['residual'] = {'acf_max_abs': float(acf.autocorrelation.abs().max()) if len(acf) else None,
                                'heuristic_95pct_bound': 1.96 / np.sqrt(len(residual)),

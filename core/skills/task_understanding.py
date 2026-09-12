@@ -161,6 +161,7 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             execution_mode=execution_mode, negations=negations,
             constraints={"use_existing_model": bool(re.search(r"已有模型|现有模型", normalized)),
                          "use_existing_artifacts": bool(re.search(r"已有|现有|当前结果", normalized)),
+                         "deep_analysis": bool(re.search(r"完整深度分析|全面深度分析|所有能力|full deep analysis", normalized)),
                          "selection_only": bool(re.search(r"适合建模.{0,8}(?:动态|工况|数据)?段", normalized)
                                                 and not re.search(r"重新建模|训练模型|建立模型", normalized))},
             requires_clarification=requires_clarification,

@@ -173,11 +173,22 @@ def _with_dependencies(selected: set[str]) -> list[str]:
 
 
 def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    plan_started = perf_counter()
+    timing_trace: dict[str, float] = {}
+    checkpoint = plan_started
+    def mark(name: str) -> None:
+        nonlocal checkpoint
+        now = perf_counter()
+        timing_trace[name] = round((now - checkpoint) * 1000, 3)
+        checkpoint = now
+
     text = str(message or "").strip()
     if not text:
         raise ValueError("规划指令不能为空。")
     analysis = _request_analysis(text)
+    mark("request_analysis_ms")
     task_understanding = understand_task(text, conversation_context)
+    mark("task_understanding_ms")
     try:
         route = select(text, analysis, EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -185,14 +196,18 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                  "denied": set(), "needs_clarification": True, "unresolved_clauses": [text],
                  "source": "model_unavailable", "full_pipeline_requested": False,
                  "negative_clauses": [], "error": type(exc).__name__}
+    mark("candidate_recall_ms")
     recalled_skill_ids, relevance_scores = route["direct"], route["scores"]
     lexical_candidates = [candidate for decision in route["decisions"] for candidate in decision["candidates"]]
     if snapshot is None and run_id:
         from core.services.pipeline import get_run
         snapshot = get_run(run_id)
     data_context = build_data_context(snapshot, run_id).public()
+    mark("data_context_ms")
     discovered_skills, _discovery_metrics = discover_skills(default_skill_roots())
+    mark("skill_discovery_ms")
     skill_resolution = resolve_skills(task_understanding, data_context, discovered_skills, recalled_skill_ids, lexical_candidates)
+    mark("capability_resolution_ms")
     capability_resolution = skill_resolution["capability_resolution"]
     capability_skill_ids = set(capability_resolution["resolved_skill_ids"])
     # The trained router is the user's direct business intent. Capability
@@ -221,6 +236,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         selected_skill_name=skill_resolution["selected_skills"][0] if skill_resolution["selected_skills"] else None,
         task_kind=task_understanding["task_kind"],
     )
+    mark("skill_document_loading_ms")
     analysis_plan = build_analysis_plan(
         text,
         list(direct),
@@ -229,8 +245,11 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         capability_resolution=capability_resolution,
         task_understanding=task_understanding,
     )
+    mark("workflow_planning_ms")
     needs_clarification = bool(task_understanding.get("requires_clarification") or (task_understanding["task_kind"] not in {"knowledge_explanation", "conversation"} and not direct))
     core_execution_plan = build_execution_plan(task_understanding, [skill.id for skill in SKILLS if skill.id in direct], data_context)
+    mark("execution_plan_ms")
+    timing_trace["total_ms"] = round((perf_counter() - plan_started) * 1000, 3)
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": needs_clarification,
                      "unresolved_clauses": route["unresolved_clauses"],
@@ -250,6 +269,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                          "core": core_execution_plan,
                      },
                      "skill_runtime": skill_runtime,
+                     "timing_trace": timing_trace,
                      "agent_context": {
                          "base_agent_context": "ProcessPilot Agent Runtime",
                          "loaded_skill_context": skill_runtime["context"],
