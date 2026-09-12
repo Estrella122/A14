@@ -2,10 +2,10 @@
   "algorithm": "char_tfidf_multinomial_logistic_regression",
   "training": {
     "seed": 42,
-    "C": 20.0,
-    "train_count": 1200,
+    "C": 10.0,
+    "train_count": 1246,
     "validation_count": 75,
-    "train_sha256": "f1503c99824cf9f5d8bcb70076646dc9f19acba23c6f8057837cb9d74fa119c9",
+    "train_sha256": "97f4f0502cd2edd1198057694710b0eb9d2d57c33a300eb3268fb6862dba7373",
     "validation_sha256": "e1569190bfe2d0b3d1adb349d7667ebe295ae392c903c5935563d6b87d259c03",
     "data_source": "assistant_authored_synthetic",
     "test_used_for_training": false
@@ -13,151 +13,61 @@
   "hyperparameter_trials": [
     {
       "C": 2.0,
-      "validation_top1_accuracy": 0.92,
-      "validation_macro_f1": 0.9180952380952381,
-      "gated_macro_f1": 0.8920952380952382
+      "validation_top1_accuracy": 0.9333333333333333,
+      "validation_macro_f1": 0.9329523809523809,
+      "gated_macro_f1": 0.9606666666666667
     },
     {
       "C": 5.0,
-      "validation_top1_accuracy": 0.92,
-      "validation_macro_f1": 0.9180952380952381,
-      "gated_macro_f1": 0.8920952380952382
+      "validation_top1_accuracy": 0.9466666666666667,
+      "validation_macro_f1": 0.9466666666666665,
+      "gated_macro_f1": 0.9596190476190475
     },
     {
       "C": 10.0,
-      "validation_top1_accuracy": 0.92,
-      "validation_macro_f1": 0.9180952380952381,
-      "gated_macro_f1": 0.9043809523809524
+      "validation_top1_accuracy": 0.9466666666666667,
+      "validation_macro_f1": 0.9466666666666665,
+      "gated_macro_f1": 0.9733333333333333
     },
     {
       "C": 20.0,
-      "validation_top1_accuracy": 0.92,
-      "validation_macro_f1": 0.9180952380952381,
-      "gated_macro_f1": 0.9043809523809524
+      "validation_top1_accuracy": 0.9466666666666667,
+      "validation_macro_f1": 0.9466666666666665,
+      "gated_macro_f1": 0.9733333333333333
     }
   ],
   "thresholds": {
     "probability": 0.12,
-    "margin": 0.03,
+    "margin": 0.01,
     "coverage": 0.2
   },
-  "validation_accuracy_after_rejection": 0.9066666666666666,
-  "validation_macro_f1_after_rejection": 0.9043809523809524,
+  "validation_accuracy_after_rejection": 0.9733333333333334,
+  "validation_macro_f1_after_rejection": 0.9733333333333333,
   "validation_errors": [
     {
-      "text": "判断CSV对应哪类工业设备",
-      "expected": "dataset_scenario_profiler",
-      "predicted": "csv_asset_manager",
+      "text": "检查拟合后的残差分布",
+      "expected": "model_diagnostics_evaluator",
+      "predicted": "engineering_visualization_builder",
       "detail": {
-        "skill_id": "csv_asset_manager",
-        "top_label": "csv_asset_manager",
-        "score": 0.320787,
-        "margin": 0.121595,
-        "coverage": 0.5,
+        "skill_id": "engineering_visualization_builder",
+        "top_label": "engineering_visualization_builder",
+        "score": 0.264851,
+        "margin": 0.065093,
+        "coverage": 0.555556,
         "accepted": true,
         "reason": "accepted",
         "candidates": [
           {
-            "skill_id": "csv_asset_manager",
-            "score": 0.320787
+            "skill_id": "engineering_visualization_builder",
+            "score": 0.264851
           },
           {
-            "skill_id": "dataset_scenario_profiler",
-            "score": 0.199192
-          },
-          {
-            "skill_id": "final_artifact_exporter",
-            "score": 0.079299
-          }
-        ],
-        "model_version": "a14-router-1.0",
-        "score_type": "softmax_probability_uncalibrated"
-      }
-    },
-    {
-      "text": "用插值修补采集空档",
-      "expected": "missing_anomaly_cleaner",
-      "predicted": "__none__",
-      "detail": {
-        "skill_id": "missing_anomaly_cleaner",
-        "top_label": "missing_anomaly_cleaner",
-        "score": 0.118693,
-        "margin": 0.071997,
-        "coverage": 0.125,
-        "accepted": true,
-        "reason": "accepted",
-        "candidates": [
-          {
-            "skill_id": "missing_anomaly_cleaner",
-            "score": 0.118693
-          },
-          {
-            "skill_id": "__none__",
-            "score": 0.046695
-          },
-          {
-            "skill_id": "closed_loop_preprocessing_optimizer",
-            "score": 0.039798
-          }
-        ],
-        "model_version": "a14-router-1.0",
-        "score_type": "softmax_probability_uncalibrated"
-      }
-    },
-    {
-      "text": "测量控制量到输出的纯延迟",
-      "expected": "time_delay_estimator_compensator",
-      "predicted": "arx_structure_order_selector",
-      "detail": {
-        "skill_id": "arx_structure_order_selector",
-        "top_label": "arx_structure_order_selector",
-        "score": 0.186791,
-        "margin": 0.057081,
-        "coverage": 0.363636,
-        "accepted": true,
-        "reason": "accepted",
-        "candidates": [
-          {
-            "skill_id": "arx_structure_order_selector",
-            "score": 0.186791
-          },
-          {
-            "skill_id": "time_delay_estimator_compensator",
-            "score": 0.12971
-          },
-          {
-            "skill_id": "signal_noise_ratio_estimator",
-            "score": 0.049665
-          }
-        ],
-        "model_version": "a14-router-1.0",
-        "score_type": "softmax_probability_uncalibrated"
-      }
-    },
-    {
-      "text": "建立这个过程的动态预测器",
-      "expected": "system_identification_trainer",
-      "predicted": "high_snr_dynamic_segment_extractor",
-      "detail": {
-        "skill_id": "high_snr_dynamic_segment_extractor",
-        "top_label": "high_snr_dynamic_segment_extractor",
-        "score": 0.283852,
-        "margin": 0.136015,
-        "coverage": 0.636364,
-        "accepted": true,
-        "reason": "accepted",
-        "candidates": [
-          {
-            "skill_id": "high_snr_dynamic_segment_extractor",
-            "score": 0.283852
+            "skill_id": "model_diagnostics_evaluator",
+            "score": 0.199757
           },
           {
             "skill_id": "system_identification_trainer",
-            "score": 0.147837
-          },
-          {
-            "skill_id": "__none__",
-            "score": 0.052209
+            "score": 0.044951
           }
         ],
         "model_version": "a14-router-1.0",
@@ -171,83 +81,23 @@
       "detail": {
         "skill_id": "model_diagnostics_evaluator",
         "top_label": "model_diagnostics_evaluator",
-        "score": 0.805593,
-        "margin": 0.748637,
+        "score": 0.570489,
+        "margin": 0.287429,
         "coverage": 0.75,
         "accepted": true,
         "reason": "accepted",
         "candidates": [
           {
             "skill_id": "model_diagnostics_evaluator",
-            "score": 0.805593
+            "score": 0.570489
           },
           {
             "skill_id": "engineering_visualization_builder",
-            "score": 0.056956
+            "score": 0.28306
           },
           {
             "skill_id": "system_identification_trainer",
-            "score": 0.007414
-          }
-        ],
-        "model_version": "a14-router-1.0",
-        "score_type": "softmax_probability_uncalibrated"
-      }
-    },
-    {
-      "text": "编写本次系统辨识技术报告",
-      "expected": "expert_report_writer",
-      "predicted": "system_identification_trainer",
-      "detail": {
-        "skill_id": "system_identification_trainer",
-        "top_label": "system_identification_trainer",
-        "score": 0.728819,
-        "margin": 0.622215,
-        "coverage": 0.636364,
-        "accepted": true,
-        "reason": "accepted",
-        "candidates": [
-          {
-            "skill_id": "system_identification_trainer",
-            "score": 0.728819
-          },
-          {
-            "skill_id": "expert_report_writer",
-            "score": 0.106604
-          },
-          {
-            "skill_id": "final_artifact_exporter",
-            "score": 0.008899
-          }
-        ],
-        "model_version": "a14-router-1.0",
-        "score_type": "softmax_probability_uncalibrated"
-      }
-    },
-    {
-      "text": "检查交付物哈希是否一致",
-      "expected": "evidence_audit_reproducer",
-      "predicted": "semantic_field_unit_standardizer",
-      "detail": {
-        "skill_id": "semantic_field_unit_standardizer",
-        "top_label": "semantic_field_unit_standardizer",
-        "score": 0.235393,
-        "margin": 0.098771,
-        "coverage": 0.8,
-        "accepted": true,
-        "reason": "accepted",
-        "candidates": [
-          {
-            "skill_id": "semantic_field_unit_standardizer",
-            "score": 0.235393
-          },
-          {
-            "skill_id": "evidence_audit_reproducer",
-            "score": 0.136622
-          },
-          {
-            "skill_id": "model_diagnostics_evaluator",
-            "score": 0.050501
+            "score": 0.009244
           }
         ],
         "model_version": "a14-router-1.0",
@@ -256,5 +106,5 @@
     }
   ],
   "inference_parity": "passed within 2e-6",
-  "model_sha256": "ef97a74352b2b63953096e6632cb760ba210ea454de6da9397012912dd9cf4dd"
+  "model_sha256": "8eee4bd11c52ee3ad3004f223e54a435eb27e0a7623ce1dbb587ed99750b1987"
 }

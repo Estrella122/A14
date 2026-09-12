@@ -16,15 +16,21 @@ export function useEChart(elementRef, optionRef) {
     chart.setOption(optionRef.value ?? {}, { notMerge: true, lazyUpdate: true })
   }
 
+  function observeElement() {
+    observer?.disconnect()
+    if (elementRef.value) observer?.observe(elementRef.value)
+  }
+
   onMounted(async () => {
     await nextTick()
     render()
     observer = new ResizeObserver(() => chart?.resize())
-    if (elementRef.value) observer.observe(elementRef.value)
+    observeElement()
     window.addEventListener('processpilot:charts-visible', render)
   })
 
   watch(optionRef, () => nextTick(render), { deep: true })
+  watch(elementRef, () => nextTick(() => { observeElement(); render() }))
   onBeforeUnmount(() => {
     observer?.disconnect()
     window.removeEventListener('processpilot:charts-visible', render)

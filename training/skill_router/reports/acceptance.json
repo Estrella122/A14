@@ -2,21 +2,21 @@
   "test_source": "assistant_authored_synthetic_holdout",
   "production_accuracy_claim": false,
   "split_integrity": "passed: disjoint normalized text and seed groups; wrappers only within train",
-  "model_sha256": "ef97a74352b2b63953096e6632cb760ba210ea454de6da9397012912dd9cf4dd",
+  "model_sha256": "8eee4bd11c52ee3ad3004f223e54a435eb27e0a7623ce1dbb587ed99750b1987",
   "test_sha256": "c3210ed4e9dcadc406203f121cb5dd4fabd3d26d6411499d4a371ad566f32b54",
   "baseline": {
     "case_count": 100,
     "exact_skill_set_accuracy": 0.36,
     "top1_accuracy": 0.49,
-    "micro_precision": 0.38764044943820225,
+    "micro_precision": 0.3770491803278688,
     "micro_recall": 0.71875,
-    "micro_f1": 0.5036496350364964,
-    "macro_f1": 0.5562135241301908,
-    "in_scope_coverage": 0.9791666666666666,
-    "accepted_exact_accuracy": 0.3723404255319149,
+    "micro_f1": 0.4946236559139785,
+    "macro_f1": 0.5578278971238742,
+    "in_scope_coverage": 0.9895833333333334,
+    "accepted_exact_accuracy": 0.3684210526315789,
     "out_of_scope_rejection": 0.25,
-    "mean_direct_skill_count": 1.78,
-    "mean_latency_ms": 0.029952511249575764,
+    "mean_direct_skill_count": 1.83,
+    "mean_latency_ms": 0.025322065921500325,
     "per_skill": [
       {
         "skill_id": "csv_asset_manager",
@@ -39,10 +39,10 @@
       {
         "skill_id": "dataset_scenario_profiler",
         "support": 4,
-        "precision": 0.6666666666666666,
+        "precision": 1.0,
         "recall": 0.5,
-        "f1": 0.5714285714285714,
-        "false_positives": 1,
+        "f1": 0.6666666666666666,
+        "false_positives": 0,
         "false_negatives": 2
       },
       {
@@ -183,10 +183,10 @@
       {
         "skill_id": "engineering_result_interpreter",
         "support": 4,
-        "precision": 0.19047619047619047,
+        "precision": 0.17391304347826086,
         "recall": 1.0,
-        "f1": 0.32,
-        "false_positives": 17,
+        "f1": 0.2962962962962963,
+        "false_positives": 19,
         "false_negatives": 0
       },
       {
@@ -201,10 +201,10 @@
       {
         "skill_id": "expert_report_writer",
         "support": 4,
-        "precision": 0.17391304347826086,
+        "precision": 0.16,
         "recall": 1.0,
-        "f1": 0.2962962962962963,
-        "false_positives": 19,
+        "f1": 0.27586206896551724,
+        "false_positives": 21,
         "false_negatives": 0
       },
       {
@@ -228,27 +228,27 @@
       {
         "skill_id": "evidence_audit_reproducer",
         "support": 4,
-        "precision": 0.12903225806451613,
+        "precision": 0.12121212121212122,
         "recall": 1.0,
-        "f1": 0.22857142857142856,
-        "false_positives": 27,
+        "f1": 0.21621621621621623,
+        "false_positives": 29,
         "false_negatives": 0
       }
     ]
   },
   "trained_router": {
     "case_count": 100,
-    "exact_skill_set_accuracy": 0.89,
-    "top1_accuracy": 0.92,
-    "micro_precision": 0.89,
-    "micro_recall": 0.9270833333333334,
-    "micro_f1": 0.9081632653061225,
-    "macro_f1": 0.9085978835978836,
-    "in_scope_coverage": 0.9895833333333334,
-    "accepted_exact_accuracy": 0.8947368421052632,
+    "exact_skill_set_accuracy": 0.97,
+    "top1_accuracy": 0.99,
+    "micro_precision": 0.9696969696969697,
+    "micro_recall": 1.0,
+    "micro_f1": 0.9846153846153847,
+    "macro_f1": 0.987037037037037,
+    "in_scope_coverage": 1.0,
+    "accepted_exact_accuracy": 0.96875,
     "out_of_scope_rejection": 1.0,
-    "mean_direct_skill_count": 1,
-    "mean_latency_ms": 0.19725000020116568,
+    "mean_direct_skill_count": 0.99,
+    "mean_latency_ms": 0.3174824931193143,
     "per_skill": [
       {
         "skill_id": "csv_asset_manager",
@@ -280,10 +280,10 @@
       {
         "skill_id": "semantic_field_unit_standardizer",
         "support": 4,
-        "precision": 0.8,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8888888888888888,
-        "false_positives": 1,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
@@ -299,18 +299,18 @@
         "skill_id": "missing_anomaly_cleaner",
         "support": 4,
         "precision": 1.0,
-        "recall": 0.75,
-        "f1": 0.8571428571428571,
+        "recall": 1.0,
+        "f1": 1.0,
         "false_positives": 0,
-        "false_negatives": 1
+        "false_negatives": 0
       },
       {
         "skill_id": "steady_transient_state_detector",
         "support": 4,
-        "precision": 0.8,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8888888888888888,
-        "false_positives": 1,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
@@ -370,46 +370,46 @@
       {
         "skill_id": "arx_structure_order_selector",
         "support": 4,
-        "precision": 0.6,
-        "recall": 0.75,
-        "f1": 0.6666666666666666,
-        "false_positives": 2,
-        "false_negatives": 1
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.8888888888888888,
+        "false_positives": 1,
+        "false_negatives": 0
       },
       {
         "skill_id": "system_identification_trainer",
         "support": 4,
         "precision": 1.0,
-        "recall": 0.75,
-        "f1": 0.8571428571428571,
+        "recall": 1.0,
+        "f1": 1.0,
         "false_positives": 0,
-        "false_negatives": 1
+        "false_negatives": 0
       },
       {
         "skill_id": "multi_model_benchmark",
         "support": 4,
-        "precision": 0.6666666666666666,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8,
-        "false_positives": 2,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
         "skill_id": "model_diagnostics_evaluator",
         "support": 4,
-        "precision": 0.8,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8888888888888888,
-        "false_positives": 1,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
         "skill_id": "closed_loop_preprocessing_optimizer",
         "support": 4,
-        "precision": 0.8,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8888888888888888,
-        "false_positives": 1,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
@@ -425,37 +425,37 @@
         "skill_id": "engineering_visualization_builder",
         "support": 4,
         "precision": 1.0,
-        "recall": 0.5,
-        "f1": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 1.0,
         "false_positives": 0,
-        "false_negatives": 2
+        "false_negatives": 0
       },
       {
         "skill_id": "expert_report_writer",
         "support": 4,
-        "precision": 0.8,
+        "precision": 1.0,
         "recall": 1.0,
-        "f1": 0.8888888888888888,
-        "false_positives": 1,
+        "f1": 1.0,
+        "false_positives": 0,
         "false_negatives": 0
       },
       {
         "skill_id": "final_artifact_exporter",
         "support": 4,
         "precision": 1.0,
-        "recall": 0.75,
-        "f1": 0.8571428571428571,
+        "recall": 1.0,
+        "f1": 1.0,
         "false_positives": 0,
-        "false_negatives": 1
+        "false_negatives": 0
       },
       {
         "skill_id": "experiment_tracker_comparator",
         "support": 4,
         "precision": 1.0,
-        "recall": 0.75,
-        "f1": 0.8571428571428571,
+        "recall": 1.0,
+        "f1": 1.0,
         "false_positives": 0,
-        "false_negatives": 1
+        "false_negatives": 0
       },
       {
         "skill_id": "evidence_audit_reproducer",
@@ -468,7 +468,7 @@
       }
     ]
   },
-  "raw_model_top1_accuracy": 0.91,
+  "raw_model_top1_accuracy": 0.96,
   "baseline_top1_definition": "Highest old keyword score; ties follow original catalog order because the original router exposes no unique top-1.",
   "routing_metric_definition": "Direct business skill IDs only; dependency and orchestration steps excluded from both sides.",
   "limitations": [
@@ -477,59 +477,6 @@
     "Do not tune on this test set; add a fresh held-out set after future changes."
   ],
   "errors": [
-    {
-      "id": "test-clean-00-0",
-      "text": "温度测点里有一串空白和突刺，修补一下",
-      "expected": [
-        "missing_anomaly_cleaner"
-      ],
-      "baseline": {
-        "selected": [
-          "engineering_result_interpreter",
-          "evidence_audit_reproducer",
-          "expert_report_writer"
-        ],
-        "top1": "engineering_result_interpreter",
-        "mode": "analyze",
-        "latency_ms": 0.036375015042722225
-      },
-      "trained_router": {
-        "selected": [],
-        "top1": null,
-        "mode": "analyze",
-        "needs_clarification": true,
-        "source": "trained_linear_router",
-        "latency_ms": 0.26591698406264186
-      },
-      "raw_model_top1": "__none__"
-    },
-    {
-      "id": "test-lag-00-0",
-      "text": "输入阶跃之后输出晚了多久才变化，估计时滞",
-      "expected": [
-        "time_delay_estimator_compensator"
-      ],
-      "baseline": {
-        "selected": [
-          "time_delay_estimator_compensator"
-        ],
-        "top1": "time_delay_estimator_compensator",
-        "mode": "analyze",
-        "latency_ms": 0.023208995116874576
-      },
-      "trained_router": {
-        "selected": [
-          "steady_transient_state_detector",
-          "time_delay_estimator_compensator"
-        ],
-        "top1": "time_delay_estimator_compensator",
-        "mode": "execute",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.23416601470671594
-      },
-      "raw_model_top1": "time_delay_estimator_compensator"
-    },
     {
       "id": "test-dataset-02-0",
       "text": "验证数据分区是否混入未来信息",
@@ -543,7 +490,7 @@
         ],
         "top1": "modeling_dataset_assembler",
         "mode": "analyze",
-        "latency_ms": 0.022416003048419952
+        "latency_ms": 0.018874998204410076
       },
       "trained_router": {
         "selected": [
@@ -554,62 +501,9 @@
         "mode": "analyze",
         "needs_clarification": false,
         "source": "expert_evidence_contract",
-        "latency_ms": 0.14662501052953303
+        "latency_ms": 0.300041981972754
       },
       "raw_model_top1": "modeling_dataset_assembler"
-    },
-    {
-      "id": "test-order-02-0",
-      "text": "选择延迟项nk和候选结构",
-      "expected": [
-        "arx_structure_order_selector"
-      ],
-      "baseline": {
-        "selected": [
-          "time_delay_estimator_compensator"
-        ],
-        "top1": "time_delay_estimator_compensator",
-        "mode": "analyze",
-        "latency_ms": 0.0448749924544245
-      },
-      "trained_router": {
-        "selected": [
-          "multi_model_benchmark"
-        ],
-        "top1": "multi_model_benchmark",
-        "mode": "execute",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.2969169872812927
-      },
-      "raw_model_top1": "multi_model_benchmark"
-    },
-    {
-      "id": "test-model-01-0",
-      "text": "重新训练过程的ARX预测器",
-      "expected": [
-        "system_identification_trainer"
-      ],
-      "baseline": {
-        "selected": [
-          "arx_structure_order_selector",
-          "system_identification_trainer"
-        ],
-        "top1": "arx_structure_order_selector",
-        "mode": "analyze",
-        "latency_ms": 0.034791999496519566
-      },
-      "trained_router": {
-        "selected": [
-          "arx_structure_order_selector"
-        ],
-        "top1": "arx_structure_order_selector",
-        "mode": "analyze",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.18045800970867276
-      },
-      "raw_model_top1": "arx_structure_order_selector"
     },
     {
       "id": "test-diagnostic-02-0",
@@ -625,19 +519,18 @@
         ],
         "top1": "arx_structure_order_selector",
         "mode": "analyze",
-        "latency_ms": 0.024874985683709383
+        "latency_ms": 0.022792024537920952
       },
       "trained_router": {
         "selected": [
-          "semantic_field_unit_standardizer",
           "arx_structure_order_selector",
           "model_diagnostics_evaluator"
         ],
-        "top1": "semantic_field_unit_standardizer",
+        "top1": "arx_structure_order_selector",
         "mode": "analyze",
         "needs_clarification": false,
         "source": "expert_evidence_contract",
-        "latency_ms": 0.23408400011248887
+        "latency_ms": 0.27012499049305916
       },
       "raw_model_top1": "model_diagnostics_evaluator"
     },
@@ -654,7 +547,7 @@
         ],
         "top1": "engineering_result_interpreter",
         "mode": "analyze",
-        "latency_ms": 0.027790985768660903
+        "latency_ms": 0.02554105594754219
       },
       "trained_router": {
         "selected": [
@@ -665,115 +558,9 @@
         "mode": "analyze",
         "needs_clarification": false,
         "source": "expert_evidence_contract",
-        "latency_ms": 0.16183301340788603
+        "latency_ms": 0.26512506883591413
       },
       "raw_model_top1": "engineering_result_interpreter"
-    },
-    {
-      "id": "test-visual-02-0",
-      "text": "画预测残差的直方分布",
-      "expected": [
-        "engineering_visualization_builder"
-      ],
-      "baseline": {
-        "selected": [
-          "model_diagnostics_evaluator"
-        ],
-        "top1": "model_diagnostics_evaluator",
-        "mode": "analyze",
-        "latency_ms": 0.021374988136813045
-      },
-      "trained_router": {
-        "selected": [
-          "model_diagnostics_evaluator"
-        ],
-        "top1": "model_diagnostics_evaluator",
-        "mode": "execute",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.13116601621732116
-      },
-      "raw_model_top1": "model_diagnostics_evaluator"
-    },
-    {
-      "id": "test-visual-03-0",
-      "text": "把闭环寻优每轮得分可视化",
-      "expected": [
-        "engineering_visualization_builder"
-      ],
-      "baseline": {
-        "selected": [
-          "closed_loop_preprocessing_optimizer"
-        ],
-        "top1": "closed_loop_preprocessing_optimizer",
-        "mode": "analyze",
-        "latency_ms": 0.02166701597161591
-      },
-      "trained_router": {
-        "selected": [
-          "closed_loop_preprocessing_optimizer"
-        ],
-        "top1": "closed_loop_preprocessing_optimizer",
-        "mode": "analyze",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.1415420265402645
-      },
-      "raw_model_top1": "closed_loop_preprocessing_optimizer"
-    },
-    {
-      "id": "test-export-00-0",
-      "text": "把已经做好的报告下载给我",
-      "expected": [
-        "final_artifact_exporter"
-      ],
-      "baseline": {
-        "selected": [
-          "evidence_audit_reproducer",
-          "expert_report_writer",
-          "final_artifact_exporter"
-        ],
-        "top1": "expert_report_writer",
-        "mode": "analyze",
-        "latency_ms": 0.022541993530467153
-      },
-      "trained_router": {
-        "selected": [
-          "expert_report_writer"
-        ],
-        "top1": "expert_report_writer",
-        "mode": "analyze",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.13758300337940454
-      },
-      "raw_model_top1": "expert_report_writer"
-    },
-    {
-      "id": "test-experiment-03-0",
-      "text": "比较不同批次实验的效果记录",
-      "expected": [
-        "experiment_tracker_comparator"
-      ],
-      "baseline": {
-        "selected": [
-          "experiment_tracker_comparator"
-        ],
-        "top1": "experiment_tracker_comparator",
-        "mode": "analyze",
-        "latency_ms": 0.03875000402331352
-      },
-      "trained_router": {
-        "selected": [
-          "multi_model_benchmark"
-        ],
-        "top1": "multi_model_benchmark",
-        "mode": "analyze",
-        "needs_clarification": false,
-        "source": "trained_linear_router",
-        "latency_ms": 0.18012500368058681
-      },
-      "raw_model_top1": "multi_model_benchmark"
     }
   ]
 }

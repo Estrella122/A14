@@ -1,11 +1,15 @@
 import copy
 import json
+import os
+import time
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from .models import OptimizationRun, OptimizationStudy
 from .services.optimization import (
@@ -15,6 +19,7 @@ from .services.optimization import (
     normalize_candidate,
 )
 from .services.agent_chat import chat
+from .runtime_retention import prune_runtime
 from .services.expert_qa import coverage_summary
 from .skills import list_skills, plan_skills
 
@@ -46,6 +51,17 @@ class IntegrationBridgeTests(SimpleTestCase):
 
 
 class AgentChatTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.skill_runs = TemporaryDirectory()
+        self.skill_runs_patch = patch('core.skills.runtime.RUNS_DIR', Path(self.skill_runs.name))
+        self.skill_runs_patch.start()
+
+    def tearDown(self):
+        self.skill_runs_patch.stop()
+        self.skill_runs.cleanup()
+        super().tearDown()
+
     def snapshot(self):
         return {
             'run_id': 'run_test',
@@ -414,6 +430,14 @@ class AgentChatTests(SimpleTestCase):
 
 
 class LivePipelineApiTests(SimpleTestCase):
+    @patch('core.pipeline_api.list_runs', return_value=[{'score': float('nan')}])
+    def test_pipeline_response_replaces_non_finite_numbers_with_null(self, mocked_list):
+        response = self.client.get('/api/pipeline/runs/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()['data'][0]['score'])
+        self.assertNotIn(b'NaN', response.content)
+
     @patch('core.pipeline_api.list_runs', return_value=[{'run_id': 'run_new'}, {'run_id': 'run_old'}])
     def test_pipeline_collection_lists_history_for_experiment_tracking(self, mocked_list):
         response = self.client.get('/api/pipeline/runs/?limit=20')
@@ -433,6 +457,106 @@ class LivePipelineApiTests(SimpleTestCase):
         response = self.client.post('/api/pipeline/runs/', {'file': upload})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['ok'])
+
+    @patch('core.pipeline_api.rerun_pipeline')
+    def test_visual_workflow_executes_real_canonical_pipeline(self, mocked_rerun):
+        mocked_rerun.return_value = {
+            'run_id': 'run_new',
+            'stages': [
+                {'key': 'standardization', 'status': 'completed'},
+                {'key': 'cleaning', 'status': 'completed'},
+                {'key': 'selection', 'status': 'completed'},
+                {'key': 'modeling', 'status': 'completed'},
+                {'key': 'optimization', 'status': 'skipped'},
+                {'key': 'review', 'status': 'skipped'},
+                {'key': 'report', 'status': 'skipped'},
+            ],
+        }
+        body = {
+            'run_id': 'run_old',
+            'nodes': [
+                {'id': 'source', 'type': 'source', 'config': {}},
+                {'id': 'clean', 'type': 'cleaning', 'config': {'resample': '30s'}},
+                {'id': 'lag', 'type': 'lag', 'config': {'maxLag': 45}},
+                {'id': 'model', 'type': 'identification', 'config': {}},
+            ],
+            'edges': [
+                {'from': 'source', 'to': 'clean'},
+                {'from': 'clean', 'to': 'lag'},
+                {'from': 'lag', 'to': 'model'},
+            ],
+        }
+        response = self.client.post('/api/pipeline/workflows/execute/', data=json.dumps(body), content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        payload = response.json()['data']
+        self.assertEqual(payload['workflow']['mode'], 'canonical_backend_execution')
+        self.assertEqual(payload['workflow']['executed_through'], 'modeling')
+        mocked_rerun.assert_called_once_with('run_old', resample_rule='30s', max_lag=45, stop_after='modeling')
+
+    @patch('core.pipeline_api.rerun_pipeline')
+    def test_visual_workflow_rejects_cycle_without_execution(self, mocked_rerun):
+        body = {
+            'run_id': 'run_old',
+            'nodes': [{'id': 'source', 'type': 'source'}, {'id': 'clean', 'type': 'cleaning'}],
+            'edges': [{'from': 'source', 'to': 'clean'}, {'from': 'clean', 'to': 'source'}],
+        }
+        response = self.client.post('/api/pipeline/workflows/execute/', data=json.dumps(body), content_type='application/json')
+        self.assertEqual(response.status_code, 422)
+        mocked_rerun.assert_not_called()
+
+
+class SecurityApiTests(TestCase):
+    def test_unsafe_api_requires_csrf_token(self):
+        client = Client(enforce_csrf_checks=True)
+        denied = client.post('/api/agent/plans/', data=json.dumps({'message': '分析数据'}), content_type='application/json')
+        self.assertEqual(denied.status_code, 403)
+        session = client.get('/api/security/session/')
+        token = session.cookies['csrftoken'].value
+        accepted = client.post(
+            '/api/agent/plans/', data=json.dumps({'message': '分析数据'}),
+            content_type='application/json', HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(accepted.status_code, 201, accepted.content)
+
+    @override_settings(PROCESSPILOT_REQUIRE_AUTH=True)
+    def test_production_api_requires_authenticated_session(self):
+        client = Client()
+        denied = client.get('/api/agent/skills/')
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(denied.json()['code'], 'authentication_required')
+        user = get_user_model().objects.create_user(username='engineer', password='safe-test-password')
+        client.force_login(user)
+        accepted = client.get('/api/agent/skills/')
+        self.assertEqual(accepted.status_code, 200)
+
+
+class RuntimeRetentionTests(SimpleTestCase):
+    def test_retention_is_dry_run_by_default_and_preserves_latest(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runs = root / 'runtime' / 'pipeline_runs'
+            skills = root / 'runtime' / 'agent_skill_runs'
+            runs.mkdir(parents=True)
+            skills.mkdir(parents=True)
+            for name in ('old', 'latest'):
+                folder = runs / name
+                folder.mkdir()
+                (folder / 'snapshot.json').write_text('{}')
+            (runs / 'latest.json').write_text(json.dumps({'run_id': 'latest'}))
+            old_skill = skills / 'skillrun_old.json'
+            old_skill.write_text('{}')
+            old_timestamp = time.time() - 40 * 86400
+            os.utime(runs / 'old', (old_timestamp, old_timestamp))
+            os.utime(old_skill, (old_timestamp, old_timestamp))
+
+            preview = prune_runtime(root, keep=1, days=30)
+            self.assertEqual(preview['mode'], 'dry-run')
+            self.assertTrue((runs / 'old').exists())
+            applied = prune_runtime(root, keep=1, days=30, apply=True)
+            self.assertEqual(applied['candidate_count'], 2)
+            self.assertFalse((runs / 'old').exists())
+            self.assertFalse(old_skill.exists())
+            self.assertTrue((runs / 'latest').exists())
 
 class OptimizationServiceTests(SimpleTestCase):
     def test_benchmark_evaluation_is_reproducible(self):
@@ -545,6 +669,32 @@ class OptimizationApiTests(TestCase):
             if snapshot['status'] in ('completed', 'accepted'):
                 return snapshot
         self.fail(f'寻优任务 {study_id} 在 {max_calls} 次调用后仍未结束')
+
+    @patch('core.optimization_api.get_run')
+    def test_uploaded_csv_pipeline_result_can_be_registered(self, mocked_get_run):
+        mocked_get_run.return_value = {
+            'run_id': 'real_run', 'original_name': 'plant.csv',
+            'results': {
+                'cleaning': {'selected_segment_count': 6, 'config': {'dynamic_threshold': .3}, 'split': {'seconds': 10}},
+                'modeling': {'config': {'family': 'ARX'}},
+                'optimization': {
+                    'best_round': 2,
+                    'stopping': {'stop_reason': '真实搜索完成'},
+                    'iterations': [
+                        {'round': 1, 'status': 'completed', 'r2': .70, 'rmse': .2, 'coverage': .72, 'score': 78, 'top_k': 5, 'max_lag': 30},
+                        {'round': 2, 'status': 'completed', 'r2': .76, 'rmse': .18, 'coverage': .75, 'score': 84, 'top_k': 8, 'max_lag': 40},
+                    ],
+                },
+            },
+        }
+        response = self.create_study(dataset_mode='uploaded_csv', pipeline_run_id='real_run')
+        self.assertEqual(response.status_code, 201, response.content)
+        data = response.json()['data']
+        self.assertEqual(data['pipeline_run_id'], 'real_run')
+        self.assertEqual(data['dataset_mode'], 'uploaded_csv')
+        self.assertEqual(data['evaluation_profile']['trust_level'], 'offline_real_data')
+        self.assertEqual(data['best_iteration']['round'], 2)
+        self.assertEqual(len(data['iterations']), 2)
 
     @staticmethod
     def reproducible_projection(snapshot):

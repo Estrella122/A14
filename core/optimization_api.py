@@ -9,11 +9,11 @@ from decimal import Decimal
 from django.db import IntegrityError, OperationalError, transaction
 from django.http import HttpResponse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .api import api_response, parse_json_body
 from .models import OptimizationRun, OptimizationStudy
+from .services.pipeline import get_run
 from .services.optimization import (
     DEFAULT_CONSTRAINTS,
     DEFAULT_INITIAL_CANDIDATE,
@@ -110,7 +110,8 @@ def study_to_dict(study, include_iterations=True):
         best = iteration_to_dict(best_run)
     project_prefix = ''.join(character for character in study.project_code.split('-')[0].upper() if character.isalnum())[:4] or 'APC'
     strategy_version = f'OPT-{project_prefix}-S{study.pk:03d}-R{study.best_run.round_number:02d}' if study.best_run_id else None
-    dataset_snapshot = benchmark_snapshot_id(study.project_code, study.random_seed)
+    pipeline_run_id = (study.initial_candidate or {}).get('_pipeline_run_id') if study.dataset_mode == 'uploaded_csv' else None
+    dataset_snapshot = pipeline_run_id or benchmark_snapshot_id(study.project_code, study.random_seed)
     benchmark_profile = _benchmark_profile(study.project_code)
     completed = study.status in ('completed', 'accepted')
     return {
@@ -119,20 +120,21 @@ def study_to_dict(study, include_iterations=True):
         'project_code': study.project_code,
         'project_name': study.project_name,
         'dataset_mode': study.dataset_mode,
-        'dataset_source': benchmark_profile['dataset_source'],
+        'dataset_source': (study.initial_candidate or {}).get('_dataset_source', '上传 CSV 流水线') if pipeline_run_id else benchmark_profile['dataset_source'],
+        'pipeline_run_id': pipeline_run_id,
         'input_artifact': {
             'artifact_type': study.dataset_mode,
             'snapshot_id': dataset_snapshot,
             'project_code': study.project_code,
-            'sampling_period_seconds': 10,
+            'sampling_period_seconds': (study.initial_candidate or {}).get('_sampling_period_seconds', 10),
             'variable_roles': benchmark_profile['variable_roles'],
-            'evaluator': 'ARX(1,1) · 18-step-free-run-v2',
+            'evaluator': '真实 CSV · 冻结验证集候选搜索' if pipeline_run_id else 'ARX(1,1) · 18-step-free-run-v2',
         },
         'evaluation_profile': {
             'dataset_snapshot': dataset_snapshot,
-            'validation_method': '分段时序留出 · 18 步自由运行',
-            'trust_level': 'simulation_validated',
-            'trust_label': '仿真验证级',
+            'validation_method': '真实 CSV · 时间顺序 60/20/20 冻结分区' if pipeline_run_id else '分段时序留出 · 18 步自由运行',
+            'trust_level': 'offline_real_data' if pipeline_run_id else 'simulation_validated',
+            'trust_label': '真实数据离线验证级' if pipeline_run_id else '仿真验证级',
             'production_ready': False,
             'production_gate': '接入现场 CSV 并通过多时段、多批次复验后，才可进入生产审批。',
         },
@@ -183,7 +185,6 @@ def _get_study(study_id):
     return OptimizationStudy.objects.select_related('best_run', 'accepted_run').get(pk=study_id)
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST', 'OPTIONS'])
 def study_collection(request):
     if request.method == 'OPTIONS':
@@ -217,8 +218,61 @@ def study_collection(request):
         if len(project_name) > 200:
             raise ValueError('project_name 最多 200 个字符')
         dataset_mode = payload.get('dataset_mode', 'synthetic_benchmark')
-        if dataset_mode != 'synthetic_benchmark':
-            raise ValueError('当前闭环仅支持 synthetic_benchmark；CSV 数据适配将在数据资产接入后启用')
+        if dataset_mode not in ('synthetic_benchmark', 'uploaded_csv'):
+            raise ValueError('dataset_mode 仅支持 synthetic_benchmark 或 uploaded_csv')
+        if dataset_mode == 'uploaded_csv':
+            pipeline_run_id = str(payload.get('pipeline_run_id', '')).strip()
+            snapshot = get_run(pipeline_run_id)
+            optimization = snapshot.get('results', {}).get('optimization', {}) if snapshot else {}
+            iterations = [item for item in optimization.get('iterations', []) if item.get('status') == 'completed']
+            if not snapshot or not iterations:
+                raise ValueError('pipeline_run_id 不存在或尚无真实寻优结果')
+            cleaning = snapshot.get('results', {}).get('cleaning', {})
+            modeling = snapshot.get('results', {}).get('modeling', {})
+            constraints = normalize_constraints(payload.get('constraints') or DEFAULT_CONSTRAINTS)
+            with transaction.atomic():
+                study = OptimizationStudy.objects.create(
+                    project_code=project_code, project_name=project_name, dataset_mode=dataset_mode,
+                    status='completed', total_rounds=len(iterations), current_round=len(iterations),
+                    run_mode='pipeline_import', min_rounds=min(8, len(iterations)),
+                    early_stopping_patience=3, min_improvement=0.2,
+                    search_space={}, objective_weights=payload.get('objective_weights') or {'fit': .68, 'coverage': .15, 'cost': .17},
+                    constraints=constraints,
+                    initial_candidate={
+                        '_pipeline_run_id': pipeline_run_id,
+                        '_dataset_source': f"上传 CSV · {snapshot.get('original_name', 'source.csv')}",
+                        '_sampling_period_seconds': cleaning.get('split', {}).get('seconds'),
+                    },
+                    random_seed=0, started_at=timezone.now(), finished_at=timezone.now(),
+                    stop_reason=optimization.get('stopping', {}).get('stop_reason', '真实 CSV 流水线寻优已完成'),
+                    early_stopped=bool(optimization.get('stopping', {}).get('early_stopped')),
+                )
+                created = []
+                for item in iterations:
+                    r2, rmse, coverage = float(item.get('r2') or 0), float(item.get('rmse') or 0), float(item.get('coverage') or 0)
+                    params = {'top_k': item.get('top_k'), 'lag_max_seconds': item.get('max_lag')}
+                    checks = {
+                        'fit': {'actual': r2, 'target': constraints['target_fit'], 'passed': r2 >= constraints['target_fit']},
+                        'coverage': {'actual': coverage, 'target': constraints['min_coverage'], 'passed': coverage >= constraints['min_coverage']},
+                        'rmse': {'actual': rmse, 'target': constraints['max_rmse'], 'passed': rmse <= constraints['max_rmse']},
+                        'segments': {'actual': cleaning.get('selected_segment_count', 0), 'target': constraints['min_valid_segments'], 'passed': cleaning.get('selected_segment_count', 0) >= constraints['min_valid_segments']},
+                    }
+                    failures = [key for key, check in checks.items() if not check['passed']]
+                    run = OptimizationRun.objects.create(
+                        study=study, round_number=int(item['round']), dynamic_segment_threshold=cleaning.get('config', {}).get('dynamic_threshold', 0),
+                        outlier_threshold=str(cleaning.get('config', {}).get('outlier_sigma', '因果规则')),
+                        collinearity_threshold=0.95, lag_search_range=f"0-{item.get('max_lag', 0)} samples",
+                        min_segment_length=str(cleaning.get('config', {}).get('min_segment_minutes', '自动')),
+                        model_r2=r2, model_fit=r2, rmse=rmse, coverage_ratio=coverage, cost_score=0,
+                        overall_score=float(item.get('score') or 0), review_result='最高分待复核' if int(item['round']) == int(optimization.get('best_round', -1)) else '候选保留',
+                        candidate_parameters={'params': params, 'diagnostics': {'pipeline_run_id': pipeline_run_id, 'model_family': modeling.get('config', {}).get('family')}, 'constraint_checks': checks, 'constraint_failures': failures, 'candidate_source': 'pipeline_import'},
+                        is_best=int(item['round']) == int(optimization.get('best_round', -1)), duration_ms=0,
+                    )
+                    created.append(run)
+                best = next((run for run in created if run.is_best), max(created, key=lambda run: float(run.overall_score)))
+                study.best_run = best
+                study.save(update_fields=['best_run', 'updated_at'])
+            return api_response({'ok': True, 'message': '真实 CSV 寻优结果已登记', 'data': study_to_dict(study)}, status=201)
         total_rounds = int(payload.get('total_rounds', 12))
         if total_rounds < 2 or total_rounds > 16:
             raise ValueError('total_rounds 必须在 2 到 16 之间')
@@ -338,7 +392,6 @@ def _delta_vs_previous(previous_run, result):
     }
 
 
-@csrf_exempt
 @require_http_methods(['POST', 'OPTIONS'])
 def study_step(request, study_id):
     if request.method == 'OPTIONS':
@@ -521,7 +574,6 @@ def study_step(request, study_id):
         return api_response({'ok': False, 'message': f'本轮计算失败：{exc}'}, status=500)
 
 
-@csrf_exempt
 @require_http_methods(['POST', 'OPTIONS'])
 def study_accept(request, study_id):
     if request.method == 'OPTIONS':

@@ -1,9 +1,11 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
-import { defaultPipelineGraph, pipelineNodeTypes } from '../data/mockData'
+import { defaultPipelineGraph, pipelineNodeTypes } from '../data/pipelineDefinitions'
+import { announcePipelineUpdate, executePipelineWorkflow } from '../api/pipeline'
+import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const emit = defineEmits(['notify', 'navigate'])
 const canvas = ref(null)
@@ -19,6 +21,11 @@ const error = ref('')
 const progress = ref(0)
 let movingId = ''
 let runTimer
+const { latestRun } = useLatestPipelineRun()
+const executionMode = ref('等待真实任务')
+watch(latestRun, (run) => {
+  if (!running.value) executionMode.value = run?.run_id ? `已加载 ${run.run_id}` : '等待真实任务'
+}, { immediate: true })
 
 const typeMap = Object.fromEntries(pipelineNodeTypes.map((item) => [item.type, item]))
 const selectedNode = computed(() => nodes.value.find((node) => node.id === selectedId.value) ?? null)
@@ -161,21 +168,26 @@ async function runPipeline() {
   if (!nodes.value.length) { error.value = '画布为空，请添加至少一个节点。'; return }
   let order
   try { order = topologicalOrder() } catch (runError) { error.value = runError.message; return }
+  if (!latestRun.value?.run_id) { error.value = '当前没有真实 CSV 任务，请先在 Agent 中枢上传数据。'; return }
   running.value = true
-  progress.value = 0
+  progress.value = 5
+  executionMode.value = '后端真实执行'
   nodes.value.forEach((node) => { node.status = 'idle' })
-  // TODO(mock): 后端提供 POST /api/pipeline/workflows/execute 后，用 SSE/WebSocket 节点事件替换此演示执行器。
-  for (let index = 0; index < order.length; index += 1) {
-    const node = nodes.value.find((item) => item.id === order[index])
-    node.status = 'running'
-    selectedId.value = node.id
-    await new Promise((resolve) => { runTimer = window.setTimeout(resolve, 420 + index * 25) })
-    node.status = 'success'
-    progress.value = Math.round((index + 1) / order.length * 100)
+  order.forEach((id) => { const node = nodes.value.find((item) => item.id === id); if (node) node.status = 'running' })
+  try {
+    const result = await executePipelineWorkflow(latestRun.value.run_id, nodes.value, edges.value)
+    const statusById = Object.fromEntries((result.workflow?.nodes ?? []).map((item) => [item.id, item.status]))
+    nodes.value.forEach((node) => { node.status = statusById[node.id] === 'completed' ? 'success' : statusById[node.id] === 'failed' ? 'failed' : 'idle' })
+    progress.value = 100
+    announcePipelineUpdate(result.run)
+    emit('notify', { tone: 'success', title: '真实流水线运行完成', message: `后端已执行至 ${result.workflow?.executed_through ?? '目标阶段'}，并自动补齐必要依赖。` })
+  } catch (runError) {
+    nodes.value.forEach((node) => { if (node.status === 'running') node.status = 'idle' })
+    error.value = runError.message
+    executionMode.value = '执行失败'
+  } finally {
+    running.value = false
   }
-  running.value = false
-  emit('notify', { tone: 'success', title: '流水线运行完成', message: `${order.length} 个节点已按拓扑顺序执行。` })
-  window.setTimeout(() => emit('navigate', nodes.value.some((node) => node.type === 'report') ? '/report-export/' : '/identification-modeling/'), 550)
 }
 
 function handleGlobalSave() { saveTemplate() }
@@ -196,6 +208,7 @@ onBeforeUnmount(() => { window.clearTimeout(runTimer); window.removeEventListene
 
     <div v-if="error" class="builder-error"><AppIcon name="alert" /><span>{{ error }}</span><button type="button" @click="error = ''">关闭</button></div>
     <div v-if="loading" class="builder-loading"><AppIcon name="loop" class="spinning" />正在加载本地流水线模板…</div>
+    <div v-else-if="!latestRun" class="builder-notice"><AppIcon name="alert" /><span>编排器只执行真实 CSV 任务；请先上传数据。画布编辑和模板保存仍可使用。</span><button type="button" @click="emit('navigate', '/agent-review/')">去上传</button></div>
 
     <div v-else class="builder-shell">
       <aside class="node-library panel">
@@ -221,7 +234,7 @@ onBeforeUnmount(() => { window.clearTimeout(runTimer); window.removeEventListene
           </article>
           <div v-if="!nodes.length" class="canvas-empty"><span><AppIcon name="network" :size="32" /></span><strong>把左侧算法节点拖到这里</strong><p>也可以恢复标准闭环模板快速开始。</p><button class="btn btn-primary" type="button" @click="restoreDefault">恢复标准闭环</button></div>
         </div>
-        <div class="canvas-status"><span>{{ nodes.length }} 节点 · {{ edges.length }} 连线</span><span v-if="connectingFrom">正在选择目标输入端口…</span><strong v-if="running">当前执行：{{ typeMap[selectedNode?.type]?.label }} · {{ progress }}%</strong><span v-else>双击连线可删除</span></div>
+        <div class="canvas-status"><span>{{ nodes.length }} 节点 · {{ edges.length }} 连线</span><span v-if="connectingFrom">正在选择目标输入端口…</span><strong v-if="running">{{ executionMode }} · {{ progress }}%</strong><span v-else>{{ executionMode }} · 双击连线可删除</span></div>
       </section>
 
       <aside class="property-panel panel">
@@ -248,6 +261,7 @@ onBeforeUnmount(() => { window.clearTimeout(runTimer); window.removeEventListene
 .pipeline-builder-view { min-width: 0; }
 .page-heading select { min-height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
 .builder-error, .builder-loading { display: flex; align-items: center; gap: 9px; padding: 12px 15px; border: 1px solid #fecaca; border-radius: 9px; color: #a61b1b; background: #fff7f7; }
+.builder-notice { display: flex; align-items: center; gap: 9px; padding: 12px 15px; border: 1px solid #f3d59a; border-radius: 9px; color: #8b5d0b; background: #fffaf0; }.builder-notice button { margin-left: auto; color: inherit; border: 0; background: transparent; font-weight: 700; }
 .builder-error button { margin-left: auto; border: 0; color: inherit; background: transparent; }
 .builder-loading { border-color: #bfdbfe; color: #1d4ed8; background: #eff6ff; }
 .builder-shell { display: grid; grid-template-columns: 210px minmax(620px, 1fr) 240px; gap: 12px; min-height: 690px; }

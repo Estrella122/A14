@@ -5,13 +5,25 @@ import json
 from pathlib import Path
 
 from django.http import FileResponse, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .services.pipeline import PipelineError, get_run, list_runs, rerun_pipeline, resolve_artifact, run_pipeline
+from .services.pipeline import PipelineError, _json_safe, get_run, list_runs, rerun_pipeline, resolve_artifact, run_pipeline
 
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+
+WORKFLOW_STAGE_BY_NODE = {
+    "source": "standardization",
+    "cleaning": "cleaning",
+    "selection": "selection",
+    "lag": "modeling",
+    "collinearity": "modeling",
+    "identification": "modeling",
+    "evaluation": "modeling",
+    "optimization": "optimization",
+    "report": "report",
+}
+WORKFLOW_STAGE_ORDER = ["standardization", "cleaning", "selection", "modeling", "optimization", "review", "report"]
 
 
 def _mapping_overrides(value) -> dict[str, str]:
@@ -24,12 +36,14 @@ def _mapping_overrides(value) -> dict[str, str]:
 
 
 def _response(payload, status=200):
-    response = JsonResponse(payload, status=status, json_dumps_params={"ensure_ascii": False})
-    response["Access-Control-Allow-Origin"] = "*"
+    response = JsonResponse(
+        _json_safe(payload),
+        status=status,
+        json_dumps_params={"ensure_ascii": False, "allow_nan": False},
+    )
     return response
 
 
-@csrf_exempt
 @require_http_methods(["GET", "POST", "OPTIONS"])
 def pipeline_collection(request):
     if request.method == "OPTIONS":
@@ -90,7 +104,6 @@ def pipeline_detail(request, run_id):
     return _response({"ok": True, "data": snapshot})
 
 
-@csrf_exempt
 @require_POST
 def pipeline_rerun(request, run_id):
     try:
@@ -105,6 +118,78 @@ def pipeline_rerun(request, run_id):
         return _response({"ok": True, "data": snapshot}, status=201)
     except (PipelineError, ValueError, json.JSONDecodeError) as exc:
         return _response({"ok": False, "message": str(exc), "data": get_run()}, status=422)
+
+
+@require_POST
+def pipeline_workflow_execute(request):
+    """Validate a visual graph and execute it through the real canonical pipeline."""
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+        run_id = str(payload.get("run_id", "")).strip()
+        nodes = payload.get("nodes") or []
+        edges = payload.get("edges") or []
+        if not run_id:
+            raise ValueError("请先上传 CSV，再执行可视化流水线。")
+        if not isinstance(nodes, list) or not nodes:
+            raise ValueError("流水线至少需要一个节点。")
+        if not isinstance(edges, list):
+            raise ValueError("流水线连线格式无效。")
+
+        node_by_id = {}
+        for node in nodes:
+            if not isinstance(node, dict) or not isinstance(node.get("id"), str):
+                raise ValueError("流水线节点格式无效。")
+            node_type = node.get("type")
+            if node_type not in WORKFLOW_STAGE_BY_NODE:
+                raise ValueError(f"暂不支持节点类型：{node_type}")
+            if node["id"] in node_by_id:
+                raise ValueError("流水线节点 ID 不能重复。")
+            node_by_id[node["id"]] = node
+        if not any(node.get("type") == "source" for node in nodes):
+            raise ValueError("真实执行必须包含数据源节点。")
+
+        indegree = {node_id: 0 for node_id in node_by_id}
+        outgoing = {node_id: [] for node_id in node_by_id}
+        for edge in edges:
+            source, target = edge.get("from"), edge.get("to")
+            if source not in node_by_id or target not in node_by_id or source == target:
+                raise ValueError("流水线包含无效连线。")
+            source_stage = WORKFLOW_STAGE_ORDER.index(WORKFLOW_STAGE_BY_NODE[node_by_id[source]["type"]])
+            target_stage = WORKFLOW_STAGE_ORDER.index(WORKFLOW_STAGE_BY_NODE[node_by_id[target]["type"]])
+            if source_stage > target_stage:
+                raise ValueError("真实流水线不支持逆向阶段连线。")
+            indegree[target] += 1
+            outgoing[source].append(target)
+        queue = [node_id for node_id, degree in indegree.items() if degree == 0]
+        visited = []
+        while queue:
+            node_id = queue.pop(0)
+            visited.append(node_id)
+            for target in outgoing[node_id]:
+                indegree[target] -= 1
+                if indegree[target] == 0:
+                    queue.append(target)
+        if len(visited) != len(nodes):
+            raise ValueError("流水线存在循环连线。")
+
+        requested_stages = [WORKFLOW_STAGE_BY_NODE[node["type"]] for node in nodes]
+        stop_after = max(requested_stages, key=WORKFLOW_STAGE_ORDER.index)
+        cleaning_node = next((node for node in nodes if node.get("type") == "cleaning"), {})
+        lag_node = next((node for node in nodes if node.get("type") == "lag"), {})
+        resample_rule = str((cleaning_node.get("config") or {}).get("resample", "10s"))
+        max_lag = int((lag_node.get("config") or {}).get("maxLag", 60))
+        snapshot = rerun_pipeline(run_id, resample_rule=resample_rule, max_lag=max_lag, stop_after=stop_after)
+        stage_status = {stage["key"]: stage["status"] for stage in snapshot.get("stages", [])}
+        workflow = {
+            "mode": "canonical_backend_execution",
+            "requested_node_count": len(nodes),
+            "executed_through": stop_after,
+            "included_dependencies": [stage for stage in WORKFLOW_STAGE_ORDER if WORKFLOW_STAGE_ORDER.index(stage) <= WORKFLOW_STAGE_ORDER.index(stop_after)],
+            "nodes": [{"id": node["id"], "type": node["type"], "status": stage_status.get(WORKFLOW_STAGE_BY_NODE[node["type"]], "skipped")} for node in nodes],
+        }
+        return _response({"ok": True, "data": {"run": snapshot, "workflow": workflow}}, status=201)
+    except (PipelineError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        return _response({"ok": False, "message": str(exc)}, status=422)
 
 
 @require_GET

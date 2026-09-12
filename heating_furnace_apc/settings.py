@@ -25,6 +25,7 @@ SECRET_KEY = os.getenv('PROCESSPILOT_SECRET_KEY', 'processpilot-local-developmen
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('PROCESSPILOT_DEBUG', '1').strip().lower() in {'1', 'true', 'yes', 'on'}
+PROCESSPILOT_REQUIRE_AUTH = os.getenv('PROCESSPILOT_REQUIRE_AUTH', '0' if DEBUG else '1').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 ALLOWED_HOSTS = [item.strip() for item in os.getenv(
     'PROCESSPILOT_ALLOWED_HOSTS',
@@ -34,8 +35,9 @@ ALLOWED_HOSTS = [item.strip() for item in os.getenv(
 
 # Application definition
 
-INSTALLED_APPS = [
+INSTALLED_APPS = ([
     'simpleui',
+] if os.getenv('PROCESSPILOT_SIMPLEUI', '1' if DEBUG else '0').strip().lower() in {'1', 'true', 'yes', 'on'} else []) + [
     'core',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -51,6 +53,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.security.ApiAuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -137,6 +140,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Production transport and cookie settings. TLS may terminate at a trusted proxy.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = os.getenv('PROCESSPILOT_SECURE_SSL_REDIRECT', '0' if DEBUG else '1').strip().lower() in {'1', 'true', 'yes', 'on'}
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SECURE_HSTS_SECONDS = int(os.getenv('PROCESSPILOT_HSTS_SECONDS', '0' if DEBUG else '31536000'))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_UPLOAD_MEMORY_BYTES', str(5 * 1024 * 1024)))
+FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_FILE_UPLOAD_MEMORY_BYTES', str(2_621_440)))
 
 
 SIMPLEUI_HOME_INFO = False

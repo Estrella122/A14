@@ -70,7 +70,7 @@ class CausalModelingTests(SimpleTestCase):
                 before = state.read_bytes()
                 before_metrics = json.loads((out/'03_system_identification/model_metrics.json').read_text())
                 self.assertNotIn('test', before_metrics)
-                self.assertEqual(len(summary['order_search']), 6)
+                self.assertEqual(len(summary['order_search']), 12)
                 metrics, diagnostics = vm.finalize_test(out, root/'test.csv')
                 self.assertEqual(state.read_bytes(), before)
                 self.assertEqual(metrics['validation'], before_metrics['validation'])
@@ -138,6 +138,12 @@ class CausalModelingTests(SimpleTestCase):
             result = pipeline._review({'data_decision':{'status':'ready'}}, {'overall_score':95}, model, Path(tmp))
         self.assertFalse(result['passed'])
         self.assertTrue(any('自由仿真' in item for item in result['blockers']))
+        dynamic_gate = next(
+            gate for gate in result['deployment_readiness']['offline_model']['gates']
+            if gate['id'] == 'dynamic_validity'
+        )
+        self.assertFalse(dynamic_gate['passed'])
+        self.assertIn('free_simulation_r2=-0.2', dynamic_gate['evidence'])
 
     def test_explicit_unsupported_parameter_does_not_silently_rerun(self):
         from core.services.agent_chat import chat

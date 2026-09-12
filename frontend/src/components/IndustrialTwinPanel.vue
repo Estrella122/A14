@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
-import { mockTwinByScenario } from '../data/mockData'
 import { useEChart } from '../composables/useEChart'
 
 const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null } })
@@ -12,19 +11,23 @@ const scenarioId = computed(() => props.project.scenarioId || 'blast_furnace')
 const isBlastFurnace = computed(() => scenarioId.value === 'blast_furnace')
 const isDebutanizer = computed(() => scenarioId.value === 'debutanizer_column')
 const isDryer = computed(() => scenarioId.value === 'industrial_dryer')
-const twinDefinition = computed(() => mockTwinByScenario[scenarioId.value] ?? mockTwinByScenario.blast_furnace)
+const sceneLayouts = {
+  blast_furnace: { description: '炼铁高炉设备拓扑与当前任务关键变量', input: [18, 60], output: [78, 78] },
+  debutanizer_column: { description: '脱丁烷塔设备拓扑与当前任务关键变量', input: [78, 43], output: [70, 79] },
+  industrial_dryer: { description: '工业干燥器设备拓扑与当前任务关键变量', input: [17, 60], output: [80, 74] },
+}
+const twinDefinition = computed(() => sceneLayouts[scenarioId.value] ?? sceneLayouts.blast_furnace)
 const sceneDescription = computed(() => twinDefinition.value.description)
 const preview = computed(() => props.latestRun?.results?.cleaning?.timeseries_preview?.points ?? [])
 const metrics = computed(() => {
-  // TODO(mock): 后端增加实时测点快照后，以 tag/value/status/trend 直接替换当前任务末点与演示趋势的合成逻辑。
+  if (!props.latestRun || !preview.value.length) return []
   const last = preview.value.at(-1)
-  return twinDefinition.value.metrics.map((item) => {
-    if (item.role === 'input' && Number.isFinite(Number(last?.input))) return { ...item, label: props.project.mv, value: Number(last.input).toFixed(2), unit: props.project.mvUnit, trend: preview.value.slice(-24).map((point) => Number(point.input)) }
-    if (item.role === 'output' && Number.isFinite(Number(last?.output))) return { ...item, label: props.project.target, value: Number(last.output).toFixed(3), unit: props.project.targetUnit, trend: preview.value.slice(-24).map((point) => Number(point.output)) }
-    return item
-  })
+  const rows = []
+  if (Number.isFinite(Number(last?.input))) rows.push({ id: 'runtime-input', role: 'input', label: props.project.mv, value: Number(last.input).toFixed(2), unit: props.project.mvUnit, status: 'normal', x: twinDefinition.value.input[0], y: twinDefinition.value.input[1], trend: preview.value.slice(-24).map((point) => Number(point.input)).filter(Number.isFinite) })
+  if (Number.isFinite(Number(last?.output))) rows.push({ id: 'runtime-output', role: 'output', label: props.project.target, value: Number(last.output).toFixed(3), unit: props.project.targetUnit, status: 'normal', x: twinDefinition.value.output[0], y: twinDefinition.value.output[1], trend: preview.value.slice(-24).map((point) => Number(point.output)).filter(Number.isFinite) })
+  return rows
 })
-watch(scenarioId, () => { selectedId.value = twinDefinition.value.metrics[0]?.id ?? '' }, { immediate: true })
+watch([scenarioId, metrics], () => { selectedId.value = metrics.value[0]?.id ?? '' }, { immediate: true })
 const selected = computed(() => metrics.value.find((item) => item.id === selectedId.value) ?? null)
 const sparklineOption = computed(() => ({
   animationDuration: 450,
@@ -39,7 +42,7 @@ useEChart(sparkline, sparklineOption)
 
 <template>
   <section class="twin-panel">
-    <div class="twin-heading"><div><span class="section-kicker">Industrial Digital Twin</span><h2>工业场景数字孪生</h2><p>{{ sceneDescription }}</p></div><div><StatusPill :tone="latestRun ? 'success' : 'warning'" dot>{{ latestRun ? '任务数据映射' : '演示数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
+    <div class="twin-heading"><div><span class="section-kicker">Industrial Process Topology</span><h2>工业场景设备拓扑</h2><p>{{ sceneDescription }}；设备图为结构示意，数值仅来自真实任务。</p></div><div><StatusPill :tone="metrics.length ? 'success' : 'neutral'" dot>{{ metrics.length ? '真实任务测点' : '等待真实数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
     <div class="twin-stage">
       <svg v-if="isBlastFurnace" viewBox="0 0 1000 420" role="img" aria-label="钢铁高炉数字孪生设备示意图">
         <defs><linearGradient id="blastShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17375b"/><stop offset="1" stop-color="#0a1e35"/></linearGradient></defs>
@@ -74,6 +77,7 @@ useEChart(sparkline, sparklineOption)
       <svg v-else viewBox="0 0 1000 420" role="img" aria-label="通用流程工业设备占位图"><g class="twin-grid"><path d="M0 70H1000M0 140H1000M0 210H1000M0 280H1000M0 350H1000"/></g><rect class="generic-vessel" x="370" y="52" width="260" height="315" rx="125"/><path class="furnace-zone" d="M370 150H630M370 250H630"/><path class="flow-line" d="M80 210H370M630 210H920"/><text x="425" y="215">通用反应设备</text></svg>
 
       <button v-for="item in metrics" :key="item.id" class="twin-sensor" :class="{ 'is-warning': item.status === 'warning', 'is-active': selectedId === item.id }" :style="{ left: `${item.x}%`, top: `${item.y}%` }" type="button" @click="selectedId = item.id"><i></i><span>{{ item.label }}</span><strong>{{ item.value }} <small>{{ item.unit }}</small></strong></button>
+      <div v-if="!metrics.length" class="twin-empty">暂无真实测点快照；上传 CSV 后显示关键输入与输出。</div>
       <div class="twin-legend"><span><i class="normal"></i>正常测点</span><span><i class="warning"></i>需要关注</span><span><b></b>物料流向</span></div>
       <aside v-if="selected" class="sensor-popover"><div><span>MEASUREMENT TREND</span><button type="button" aria-label="关闭测点趋势" @click="selectedId = ''">×</button></div><strong>{{ selected.label }}</strong><p>{{ selected.value }} <small>{{ selected.unit }}</small><StatusPill :tone="selected.status === 'warning' ? 'warning' : 'success'">{{ selected.status === 'warning' ? '偏离稳态带' : '运行正常' }}</StatusPill></p><div ref="sparkline" class="sensor-sparkline"></div></aside>
     </div>
@@ -89,6 +93,7 @@ useEChart(sparkline, sparklineOption)
 .twin-sensor { position: absolute; z-index: 3; display: grid; min-width: 110px; padding: 7px 9px 7px 17px; color: #d9e9f8; text-align: left; border: 1px solid rgba(65,160,216,.32); border-radius: 7px; background: rgba(5,20,34,.78); backdrop-filter: blur(8px); transform: translate(-50%, -50%); }.twin-sensor i { position: absolute; left: -5px; top: 50%; width: 10px; height: 10px; border: 2px solid #082138; border-radius: 50%; background: #34d399; box-shadow: 0 0 9px #34d399; transform: translateY(-50%); }.twin-sensor span { color: #7899b8; font-size: 8px; }.twin-sensor strong { margin-top: 3px; font: 700 12px monospace; }.twin-sensor small { color: #6f8ca8; font-size: 7px; }.twin-sensor.is-warning i { background: #fb7185; box-shadow: 0 0 9px #fb7185; animation: alarm 1.1s ease-in-out infinite; }.twin-sensor.is-warning strong { color: #fda4af; }.twin-sensor.is-active { border-color: #56b8ef; box-shadow: 0 0 0 2px rgba(56,189,248,.12); }
 .sensor-popover { position: absolute; z-index: 5; top: 18px; right: 18px; width: 245px; padding: 13px; border: 1px solid rgba(75,163,216,.4); border-radius: 10px; background: rgba(5,19,33,.92); box-shadow: 0 14px 30px rgba(0,0,0,.28); backdrop-filter: blur(12px); }.sensor-popover > div:first-child { display: flex; justify-content: space-between; color: #4e789e; font: 8px monospace; }.sensor-popover button { color: #7595b5; border: 0; background: transparent; }.sensor-popover > strong { display: block; margin-top: 7px; font-size: 12px; }.sensor-popover > p { display: flex; align-items: center; gap: 8px; margin-top: 4px; font: 700 17px monospace; }.sensor-popover p small { color: #7595b5; font-size: 9px; }.sensor-popover .status-pill { margin-left: auto; font-family: inherit; }.sensor-sparkline { height: 82px; margin-top: 5px; }
 .twin-legend { position: absolute; left: 20px; bottom: 12px; display: flex; gap: 15px; color: #6889a8; font-size: 8px; }.twin-legend span { display: flex; align-items: center; gap: 5px; }.twin-legend i { width: 7px; height: 7px; border-radius: 50%; }.twin-legend i.normal { background: #34d399; }.twin-legend i.warning { background: #fb7185; }.twin-legend b { width: 21px; border-top: 1px dashed #48b7ed; }
+.twin-empty { position: absolute; left: 50%; bottom: 38px; padding: 9px 13px; color: #87a6c4; font-size: 10px; border: 1px dashed rgba(96, 165, 250, .35); border-radius: 8px; background: rgba(5, 20, 34, .82); transform: translateX(-50%); }
 @keyframes flow { to { stroke-dashoffset: -34; } } @keyframes alarm { 50% { opacity: .42; transform: translateY(-50%) scale(1.45); } } @keyframes drumHum { 50% { transform: translateY(-1.5px); } } @keyframes fanPulse { 50% { opacity: .62; transform: scale(.92); } }
 @media (max-width: 760px) { .twin-stage { overflow-x: auto; }.sensor-popover { position: sticky; left: 12px; bottom: 12px; margin: -110px 12px 12px auto; }.twin-heading > div:last-child > span:last-child { display: none; } }
 </style>

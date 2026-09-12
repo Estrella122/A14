@@ -1,4 +1,4 @@
-import { apiBaseUrl, apiRequest } from './client'
+import { apiBaseUrl, apiRequest, secureFetch } from './client'
 
 export async function uploadPipelineFile(file, options = {}) {
   const form = new FormData()
@@ -9,7 +9,7 @@ export async function uploadPipelineFile(file, options = {}) {
   form.append('resample_rule', options.resampleRule ?? '10s')
   form.append('max_lag', String(options.maxLag ?? 60))
   form.append('overrides', JSON.stringify(options.overrides ?? {}))
-  const response = await fetch(`${apiBaseUrl}/pipeline/runs/`, { method: 'POST', body: form })
+  const response = await secureFetch('/pipeline/runs/', { method: 'POST', body: form })
   const payload = await response.json()
   if (!response.ok || payload?.ok === false) throw new Error(payload?.message || `运行失败（HTTP ${response.status}）`)
   return payload.data
@@ -35,6 +35,18 @@ export async function rerunPipeline(runId, options = {}) {
       max_lag: options.maxLag ?? 60,
       scenario_id: options.scenarioId,
       overrides: options.overrides,
+    },
+  })
+  return payload.data
+}
+
+export async function executePipelineWorkflow(runId, nodes, edges) {
+  const payload = await apiRequest('/pipeline/workflows/execute/', {
+    method: 'POST',
+    body: {
+      run_id: runId,
+      nodes: nodes.map(({ id, type, config }) => ({ id, type, config })),
+      edges: edges.map(({ from, to }) => ({ from, to })),
     },
   })
   return payload.data

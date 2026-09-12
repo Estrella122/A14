@@ -188,8 +188,12 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
     data_context = build_data_context(snapshot, run_id).public()
     capability_resolution = resolve_capabilities(task_understanding, data_context, recalled_skill_ids, lexical_candidates)
     capability_skill_ids = set(capability_resolution["resolved_skill_ids"])
+    # The trained router is the user's direct business intent. Capability
+    # resolution may block data-dependent analysis when no run snapshot exists,
+    # but it must not erase the skill the Agent learned to call.
+    routed_business_skills = set(recalled_skill_ids) if task_understanding["task_kind"] != "knowledge_explanation" else set()
     operational = set(recalled_skill_ids) if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} else set()
-    direct = capability_skill_ids | operational
+    direct = capability_skill_ids | routed_business_skills | operational
     execution_mode = "execute" if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} and route["mode"] == "execute" else "analyze"
     detected_scene_id = data_context.get("detected_scene")
     if not detected_scene_id:

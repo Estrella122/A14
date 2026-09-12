@@ -5,14 +5,14 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { listPipelineRuns } from '../api/pipeline'
 import { useEChart } from '../composables/useEChart'
-import { mockExperimentsByScenario } from '../data/mockData'
+import { normalizeExperimentRun } from '../utils/experimentRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify'])
 const experiments = ref([])
 const loading = ref(true)
 const error = ref('')
-const source = ref('mock')
+const source = ref('loading')
 const selectedIds = ref([])
 const comparisonOpen = ref(false)
 const algorithmFilter = ref('all')
@@ -22,16 +22,14 @@ const fitChart = ref(null)
 const predictionChart = ref(null)
 const residualChart = ref(null)
 let controller
-const scenarioMocks = computed(() => mockExperimentsByScenario[props.project.scenarioId] ?? mockExperimentsByScenario.blast_furnace)
 
 const annotations = (() => { try { return JSON.parse(window.localStorage.getItem('processpilot-experiment-annotations') || '{}') } catch { return {} } })()
-function withAnnotations(row) { return { ...row, tag: annotations[row.id]?.tag ?? row.tag ?? '', note: annotations[row.id]?.note ?? row.note ?? '' } }
 
 const algorithms = computed(() => [...new Set(experiments.value.map((item) => item.algorithm).filter(Boolean))])
 const datasets = computed(() => [...new Set(experiments.value.map((item) => item.dataset).filter(Boolean))])
-const filteredRows = computed(() => experiments.value.filter((item) => (algorithmFilter.value === 'all' || item.algorithm === algorithmFilter.value) && (datasetFilter.value === 'all' || item.dataset === datasetFilter.value)).slice().sort((left, right) => sortBy.value === 'r2' ? right.r2 - left.r2 : String(right.time).localeCompare(String(left.time))))
+const filteredRows = computed(() => experiments.value.filter((item) => (algorithmFilter.value === 'all' || item.algorithm === algorithmFilter.value) && (datasetFilter.value === 'all' || item.dataset === datasetFilter.value)).slice().sort((left, right) => sortBy.value === 'r2' ? (right.r2 ?? -Infinity) - (left.r2 ?? -Infinity) : String(right.time).localeCompare(String(left.time))))
 const comparisonRows = computed(() => selectedIds.value.map((id) => experiments.value.find((item) => item.id === id)).filter(Boolean))
-const canCompare = computed(() => selectedIds.value.length >= 2 && selectedIds.value.length <= 4)
+const canCompare = computed(() => selectedIds.value.length >= 2 && selectedIds.value.length <= 4 && comparisonRows.value.every((item) => item.r2 != null && item.actual.length && item.predicted.length))
 
 const colors = ['#2563eb', '#0f9f72', '#f59e0b', '#8b5cf6']
 const chartText = { color: '#64748b', fontSize: 10 }
@@ -78,23 +76,7 @@ useEChart(predictionChart, predictionOption)
 useEChart(residualChart, residualOption)
 
 function normalizeRun(run, index) {
-  const fallback = scenarioMocks.value[index % scenarioMocks.value.length]
-  const result = run.results ?? {}
-  const model = result.modeling ?? {}
-  const metrics = model.metrics?.test ?? {}
-  return withAnnotations({
-    ...fallback,
-    id: run.run_id ?? run.id ?? fallback.id,
-    time: run.updated_at ? new Date(run.updated_at).toLocaleString('zh-CN', { hour12: false }) : fallback.time,
-    dataset: run.original_name ?? run.dataset ?? fallback.dataset,
-    preprocessing: `${result.cleaning?.config?.resample_rule ?? '5s'} / Hampel`,
-    algorithm: model.model_type ?? 'ARX',
-    order: model.order ?? fallback.order,
-    r2: Number(metrics.r2 ?? fallback.r2),
-    aic: Number(metrics.aic ?? fallback.aic),
-    duration: Number(run.duration_seconds ?? fallback.duration),
-    status: run.status ?? 'completed',
-  })
+  return normalizeExperimentRun(run, index, annotations)
 }
 
 async function loadRuns() {
@@ -105,15 +87,18 @@ async function loadRuns() {
   try {
     const payload = await listPipelineRuns({ signal: controller.signal, scenarioId: props.project.scenarioId })
     const rows = Array.isArray(payload) ? payload : payload?.results ?? payload?.runs ?? []
-    if (!rows.length) throw new Error('后端尚无历史运行记录')
+    if (!rows.length) {
+      experiments.value = []
+      source.value = 'empty'
+      return
+    }
     experiments.value = rows.map(normalizeRun)
     source.value = 'api'
   } catch (requestError) {
     if (requestError.name === 'AbortError') return
-    // TODO(mock): 历史列表接口失败或无记录时保留此分支，作为离线演示降级。
-    experiments.value = scenarioMocks.value.map(withAnnotations)
-    source.value = 'mock'
-    error.value = `${requestError.message}，已切换为演示实验记录`
+    experiments.value = []
+    source.value = 'error'
+    error.value = `真实历史记录读取失败：${requestError.message}`
   } finally { loading.value = false }
 }
 
@@ -142,7 +127,7 @@ onBeforeUnmount(() => controller?.abort())
 <template>
   <div class="view-stack experiment-view">
     <PageHeader eyebrow="Experiment Tracking & Model Registry" title="实验追踪与版本对比" description="统一记录每次数据预处理、辨识与闭环寻优结果，在相同评价口径下定位真正可复现的最佳模型。">
-      <template #actions><StatusPill :tone="source === 'api' ? 'success' : 'warning'" dot>{{ source === 'api' ? '后端历史记录' : '离线演示数据' }}</StatusPill><button class="btn btn-primary" type="button" :disabled="!canCompare" @click="openComparison"><AppIcon name="model" />对比选中项（{{ selectedIds.length }}）</button></template>
+      <template #actions><StatusPill :tone="source === 'api' ? 'success' : source === 'error' ? 'warning' : 'neutral'" dot>{{ source === 'api' ? '后端真实记录' : source === 'error' ? '读取失败' : source === 'empty' ? '暂无运行记录' : '读取中' }}</StatusPill><button class="btn btn-primary" type="button" :disabled="!canCompare" @click="openComparison"><AppIcon name="model" />对比选中项（{{ selectedIds.length }}）</button></template>
     </PageHeader>
 
     <div v-if="error" class="experiment-notice"><AppIcon name="alert" :size="15" />{{ error }}<button type="button" @click="loadRuns"><AppIcon name="loop" :size="13" />重试</button></div>
@@ -150,9 +135,9 @@ onBeforeUnmount(() => controller?.abort())
       <div class="section-heading compact"><div><span class="section-kicker">Run Registry</span><h2>历史运行记录</h2></div><div class="experiment-filters"><select v-model="datasetFilter"><option value="all">全部数据集</option><option v-for="item in datasets" :key="item">{{ item }}</option></select><select v-model="algorithmFilter"><option value="all">全部算法</option><option v-for="item in algorithms" :key="item">{{ item }}</option></select><select v-model="sortBy"><option value="time">按时间排序</option><option value="r2">按拟合度排序</option></select></div></div>
       <div v-if="loading" class="experiment-loading"><AppIcon name="loop" class="spinning" />正在读取历史实验…</div>
       <div v-else-if="filteredRows.length" class="table-wrap"><table class="data-table experiment-table"><thead><tr><th>选择</th><th>运行 ID / 时间</th><th>数据集</th><th>预处理参数</th><th>算法 / 阶次</th><th>R²</th><th>AIC</th><th>耗时</th><th>状态</th><th>标签与备注</th></tr></thead><tbody>
-        <tr v-for="row in filteredRows" :key="row.id" :class="{ 'is-selected-row': selectedIds.includes(row.id) }"><td><input type="checkbox" :checked="selectedIds.includes(row.id)" :aria-label="`选择 ${row.id}`" @change="toggleSelection(row.id)" /></td><td><code>{{ row.id }}</code><small>{{ row.time }}</small></td><td>{{ row.dataset }}</td><td><code>{{ row.preprocessing }}</code></td><td><strong>{{ row.algorithm }}</strong><small>{{ row.order }}</small></td><td><strong class="experiment-r2">{{ row.r2.toFixed(3) }}</strong></td><td>{{ row.aic.toFixed(1) }}</td><td>{{ row.duration.toFixed(1) }} s</td><td><StatusPill :tone="row.status === 'completed' ? 'success' : 'warning'">{{ row.status === 'completed' ? '已完成' : row.status }}</StatusPill></td><td><div class="annotation-cell"><select v-model="row.tag"><option value="">无标签</option><option>最佳结果</option><option>基线</option><option>候选</option><option>尝试1</option><option>尝试2</option></select><input v-model="row.note" type="text" placeholder="添加备注" /></div></td></tr>
+        <tr v-for="row in filteredRows" :key="row.id" :class="{ 'is-selected-row': selectedIds.includes(row.id) }"><td><input type="checkbox" :checked="selectedIds.includes(row.id)" :aria-label="`选择 ${row.id}`" @change="toggleSelection(row.id)" /></td><td><code>{{ row.id }}</code><small>{{ row.time }}</small></td><td>{{ row.dataset }}</td><td><code>{{ row.preprocessing }}</code></td><td><strong>{{ row.algorithm }}</strong><small>{{ row.order }}</small></td><td><strong class="experiment-r2">{{ row.r2 == null ? '—' : row.r2.toFixed(3) }}</strong></td><td>{{ row.aic == null ? '—' : row.aic.toFixed(1) }}</td><td>{{ row.duration.toFixed(1) }} s</td><td><StatusPill :tone="row.status === 'completed' ? 'success' : 'warning'">{{ row.status === 'completed' ? '已完成' : row.status }}</StatusPill></td><td><div class="annotation-cell"><select v-model="row.tag"><option value="">无标签</option><option>最佳结果</option><option>基线</option><option>候选</option><option>尝试1</option><option>尝试2</option></select><input v-model="row.note" type="text" placeholder="添加备注" /></div></td></tr>
       </tbody></table></div>
-      <div v-else class="empty-state">当前筛选条件下没有实验记录。</div>
+      <div v-else class="empty-state">{{ source === 'empty' ? '当前场景尚无真实实验记录，请先上传并运行 CSV。' : '当前筛选条件下没有实验记录。' }}</div>
     </section>
 
     <section v-show="comparisonOpen" class="experiment-comparison view-stack">
@@ -161,7 +146,7 @@ onBeforeUnmount(() => controller?.abort())
         <tr :class="{ different: isDifferent('preprocessing') }"><td>预处理</td><td v-for="row in comparisonRows" :key="row.id">{{ row.preprocessing }}</td></tr>
         <tr :class="{ different: isDifferent('algorithm') }"><td>辨识算法</td><td v-for="row in comparisonRows" :key="row.id">{{ row.algorithm }}</td></tr>
         <tr :class="{ different: isDifferent('order') }"><td>模型阶次</td><td v-for="row in comparisonRows" :key="row.id">{{ row.order }}</td></tr>
-        <tr class="different"><td>R²</td><td v-for="row in comparisonRows" :key="row.id"><strong>{{ row.r2.toFixed(3) }}</strong></td></tr><tr class="different"><td>AIC</td><td v-for="row in comparisonRows" :key="row.id">{{ row.aic.toFixed(1) }}</td></tr>
+        <tr class="different"><td>R²</td><td v-for="row in comparisonRows" :key="row.id"><strong>{{ row.r2 == null ? '—' : row.r2.toFixed(3) }}</strong></td></tr><tr class="different"><td>AIC</td><td v-for="row in comparisonRows" :key="row.id">{{ row.aic == null ? '—' : row.aic.toFixed(1) }}</td></tr>
       </tbody></table></div></section>
       <div class="comparison-chart-grid"><section class="panel"><div class="section-heading compact"><div><span class="section-kicker">Goodness of Fit</span><h2>拟合度 R²</h2></div></div><div ref="fitChart" class="experiment-chart"></div></section><section class="panel"><div class="section-heading compact"><div><span class="section-kicker">Residual Diagnostics</span><h2>残差分布箱线图</h2></div></div><div ref="residualChart" class="experiment-chart"></div></section></div>
       <section class="panel"><div class="section-heading compact"><div><span class="section-kicker">Multi-run Prediction</span><h2>预测值 vs 实测值</h2></div><StatusPill tone="brand">{{ comparisonRows.length }} 个版本叠加</StatusPill></div><div ref="predictionChart" class="prediction-chart"></div></section>

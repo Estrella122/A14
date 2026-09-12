@@ -115,7 +115,7 @@ def load_skill_context(
 
     errors = list(discovery["errors"])
     unknown = (scene or "").lower() in {"unknown", "unknown_scene"}
-    safe_unknown = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "CORRELATION_ANALYSIS", "ANOMALY_DETECTION", "MISSING_DATA_ANALYSIS"}
+    safe_unknown = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "TIME_SERIES_ANALYSIS", "CORRELATION_ANALYSIS", "ANOMALY_DETECTION", "MISSING_DATA_ANALYSIS"}
     if unknown:
         requested &= safe_unknown
     capabilities = _load_declared(selected_skill, "capabilities", sorted(requested), errors)

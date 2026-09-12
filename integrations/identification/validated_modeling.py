@@ -46,16 +46,22 @@ def features(df, output, inputs, delays, order, seconds):
     return x
 
 
-def fit(x, y):
+def fit(x, y, alpha=0.0):
     valid = x.notna().all(axis=1) & y.notna()
     x, y = x.loc[valid], y.loc[valid]
     if len(x) < max(20, 2 * (x.shape[1] + 1)):
         raise ValueError('连续有效训练样本不足以辨识当前阶次')
     mean, scale = x.mean(), x.std(ddof=0).replace(0, 1)
     z = (x - mean) / scale
-    coef, _, rank, _ = np.linalg.lstsq(np.column_stack([np.ones(len(z)), z]), y, rcond=None)
-    raw = coef[1:] / scale.to_numpy()
-    raw = np.r_[coef[0] - np.dot(raw, mean), raw]
+    matrix = z.to_numpy()
+    centered_y = y.to_numpy() - float(y.mean())
+    if alpha > 0:
+        coef_z = np.linalg.solve(matrix.T @ matrix + float(alpha) * np.eye(matrix.shape[1]), matrix.T @ centered_y)
+    else:
+        coef_z, *_ = np.linalg.lstsq(matrix, centered_y, rcond=None)
+    raw = coef_z / scale.to_numpy()
+    raw = np.r_[float(y.mean()) - np.dot(raw, mean), raw]
+    rank = np.linalg.matrix_rank(matrix)
     return raw, valid, int(rank)
 
 
@@ -252,22 +258,35 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     save_json(lagdir/'delay_summary.json', delays.to_dict('records'))
     candidates, fitted = [], []
     # Real order and model-family search, all on the same validation targets.
-    for family, variables in [('ARX', selected), ('AR', [])]:
+    for family, variables, alphas in [('ARX', selected, (0., 1., 10.)), ('AR', [], (0.,))]:
         for order in (1, 2, 3):
-            try:
-                x = features(train, output_col, variables, delay_map, order, seconds)
-                coef, valid, rank = fit(x, train[output_col])
-                state = dict(output=output_col, seconds=seconds, inputs=variables, delays=delay_map,
-                             order=order, coef=coef.tolist(), family=family, evaluation_inputs=input_cols)
-                m, d, p, acf = evaluation(validation, state, guard, 'validation', detailed=False)
-                tm = regression_metrics(train.loc[valid, output_col], predict(x.loc[valid], coef), len(coef))
-                candidates.append(dict(family=family, order=order, status='completed', validation=m, train=tm, rank=rank))
-                fitted.append((m['rmse'], state, tm, m, d, p, acf, list(x.columns)))
-            except ValueError as exc:
-                candidates.append(dict(family=family, order=order, status='failed', error=str(exc)))
+            for alpha in alphas:
+                try:
+                    x = features(train, output_col, variables, delay_map, order, seconds)
+                    coef, valid, rank = fit(x, train[output_col], alpha=alpha)
+                    state = dict(output=output_col, seconds=seconds, inputs=variables, delays=delay_map,
+                                 order=order, coef=coef.tolist(), family=family, regularization_alpha=alpha,
+                                 evaluation_inputs=input_cols)
+                    m, d, p, acf = evaluation(validation, state, guard, 'validation', detailed=True)
+                    tm = regression_metrics(train.loc[valid, output_col], predict(x.loc[valid], coef), len(coef))
+                    roots = np.roots(np.r_[1, -np.array(coef[1:order + 1])])
+                    stable = bool(np.all(np.abs(roots) < 1))
+                    simulation_valid = bool(d.get('free_simulation', {}).get('metrics')) and not d.get('free_simulation', {}).get('diverged')
+                    eligible = stable and simulation_valid
+                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
+                                           status='completed', eligible=eligible, stable_ar_poles=stable,
+                                           validation_free_simulation_valid=simulation_valid,
+                                           max_pole_magnitude=float(max(np.abs(roots))), validation=m, train=tm, rank=rank))
+                    if eligible:
+                        fitted.append((m['rmse'], state, tm, m, d, p, acf, list(x.columns)))
+                except ValueError as exc:
+                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
+                                           status='failed', error=str(exc)))
     save_json(modeldir/'order_search.json', candidates)
     if not fitted: raise ValueError('所有结构候选均失败：' + '; '.join(sorted({c.get('error', '') for c in candidates})))
-    _, state, tm, vm, diagnostics, prediction, acf, names = min(fitted, key=lambda v: v[0])
+    # Prefer the validation BIC so a marginal one-step RMSE gain cannot promote a
+    # very high-dimensional ARX model over a simpler, better-supported baseline.
+    _, state, tm, vm, diagnostics, prediction, acf, names = min(fitted, key=lambda v: v[3]['bic'])
     vm, diagnostics, prediction, acf = evaluation(validation, state, guard, 'validation')
     roots = np.roots(np.r_[1, -np.array(state['coef'][1:state['order']+1])])
     diagnostics['stable_ar_poles'] = bool(np.all(np.abs(roots) < 1))
@@ -286,10 +305,25 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     config = dict(protocol='chronological_60_20_20_v2', max_lag=max_lag, requested_max_lag=int(requested_max_lag),
                   output_order=state['order'], input_order=state['order'], input_delay=1,
                   train_ratio=0.6, validation_ratio=0.2, test_ratio=0.2, guard_samples=guard,
-                  family=state['family'], preprocessing_fit='training_only', causal_lags=True, segment_aware=True)
-    summary = dict(config=config, selected_inputs_after_collinearity=recommendation['keep'],
+                  family=state['family'], regularization='ridge' if state.get('regularization_alpha', 0) else 'none',
+                  regularization_alpha=state.get('regularization_alpha', 0), preprocessing_fit='training_only',
+                  causal_lags=True, segment_aware=True)
+    family_comparison = {}
+    for family in ('ARX', 'AR'):
+        completed = [row for row in candidates if row.get('family') == family and row.get('status') == 'completed' and row.get('eligible')]
+        if completed:
+            best_family = min(completed, key=lambda row: row['validation']['rmse'])
+            family_comparison[family] = {
+                'validation_rmse': best_family['validation']['rmse'],
+                'validation_r2': best_family['validation']['r2'],
+                'order': best_family['order'],
+                'regularization_alpha': best_family.get('regularization_alpha', 0),
+            }
+    summary = dict(config=config, selection_criterion='minimum_validation_bic_with_stability_and_simulation_gate',
+                   selected_inputs_after_collinearity=recommendation['keep'],
                    diagnostics=diagnostics, order_search=candidates, training_rows=len(train),
-                   fitted_inputs=state['inputs'], response_analysis=response_analysis)
+                   fitted_inputs=state['inputs'], response_analysis=response_analysis,
+                   family_comparison=family_comparison)
     save_json(out/'pipeline_summary.json', summary)
     return summary
 

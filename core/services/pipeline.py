@@ -454,6 +454,7 @@ def _model(
         "training_rows": len(modeling),
         "diagnostics": result.get("diagnostics", {}),
         "response_analysis": result.get("response_analysis", {}),
+        "family_comparison": result.get("family_comparison", {}),
         "order_search": result.get("order_search", []),
         "fitted_inputs": result.get("fitted_inputs", []),
         "modeling_path": _artifact(run_dir, modeling_path),
@@ -590,7 +591,11 @@ def _optimize_real_data(
             feasible = float(best_so_far.get("r2") or 0) >= 0 and float(best_so_far.get("coverage") or 0) >= 0.05
             if round_number >= min_rounds and feasible and no_improvement_rounds >= patience:
                 early_stopped = True
-                stop_reason = f"最优候选通过可行性门槛，连续{no_improvement_rounds}轮综合分改善低于{min_improvement}分"
+                stop_reason = (
+                    f"最优候选满足搜索早停的最低可计算性门槛（R²≥0、覆盖率≥5%），"
+                    f"连续{no_improvement_rounds}轮综合分改善低于{min_improvement}分；"
+                    "是否通过工程硬约束以评审结果为准"
+                )
                 break
 
     completed = [item for item in iterations if item["status"] == "completed"]
@@ -730,15 +735,30 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
     residual = test_diag.get("residual", {})
     acf = residual.get("acf_max_abs")
     acf_bound = residual.get("heuristic_95pct_bound")
+    multi_rmse = multi.get("metrics", {}).get("rmse")
+    multi_baseline_rmse = multi.get("persistence", {}).get("rmse")
+    simulation_r2 = simulation.get("metrics", {}).get("r2")
+    dynamic_valid = (
+        diagnostics.get("stable_ar_poles") is True
+        and multi_rmse is not None
+        and multi_baseline_rmse is not None
+        and multi_rmse < multi_baseline_rmse
+        and simulation_r2 is not None
+        and simulation_r2 >= 0
+        and not simulation.get("diverged")
+    )
     offline_gates = [
         {"id": "field_contract", "passed": decision != "reject" and required_coverage >= 1,
          "evidence": f"required_coverage={required_coverage:.1%}, decision={decision}"},
         {"id": "data_quality", "passed": quality >= 60, "evidence": f"quality_score={quality:.2f}"},
         {"id": "independent_test", "passed": r2 >= 0 and improvement is not None and improvement >= 1,
          "evidence": f"test_r2={r2:.4f}, persistence_improvement_pct={improvement}"},
-        {"id": "dynamic_validity", "passed": diagnostics.get("stable_ar_poles") is True and bool(multi.get("metrics"))
-         and bool(simulation.get("metrics")) and not simulation.get("diverged"),
-         "evidence": "稳定极点、10步预测和自由仿真必须同时有效"},
+        {"id": "dynamic_validity", "passed": dynamic_valid,
+         "evidence": (
+             "stable_ar_poles=" + str(diagnostics.get("stable_ar_poles"))
+             + f", multi_step_rmse={multi_rmse}, persistence_rmse={multi_baseline_rmse}"
+             + f", free_simulation_r2={simulation_r2}, diverged={simulation.get('diverged')}"
+         )},
     ]
     requested_model_outputs = standardization.get("scenario", {}).get("model_outputs") or []
     if len(requested_model_outputs) > 1:

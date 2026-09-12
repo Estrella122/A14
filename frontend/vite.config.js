@@ -14,6 +14,17 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // Keep the chart runtime cached, but split its independently loaded
+          // subsystems so no single lazy chunk dominates first navigation.
+          if (id.includes('/zrender/')) return 'chart-renderer'
+          if (id.includes('/echarts/lib/chart/')) return 'chart-series'
+          if (id.includes('/echarts/lib/component/')) return 'chart-components'
+          if (id.includes('/echarts/lib/')) return 'chart-core'
+          return undefined
+        },
+      },
       input: {
         main: 'index.html',
         overview: 'overview/index.html',

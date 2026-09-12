@@ -23,6 +23,10 @@ const detailRows = computed(() => {
 
 function formatValue(value) {
   if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(3)
+  if (typeof value === 'object' && value !== null) {
+    const serialized = JSON.stringify(value)
+    return serialized.length > 96 ? `${serialized.slice(0, 93)}…` : serialized
+  }
   return String(value ?? '—')
 }
 

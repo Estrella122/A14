@@ -1198,3 +1198,49 @@
 {"id": "train-none-15-0", "group": "train-none-15", "text": "what is the weather", "labels": [], "source": "assistant_authored_synthetic", "split": "train"}
 {"id": "train-none-15-1", "group": "train-none-15", "text": "请帮我what is the weather", "labels": [], "source": "assistant_authored_synthetic", "split": "train"}
 {"id": "train-none-15-2", "group": "train-none-15", "text": "我需要what is the weather", "labels": [], "source": "assistant_authored_synthetic", "split": "train"}
+{"id": "train-visual-hard-00-0", "group": "train-visual-hard-00", "text": "画出预测残差的分布", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-visual-hard-00-1", "group": "train-visual-hard-00", "text": "请画模型误差的直方分布", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-visual-hard-00-2", "group": "train-visual-hard-00", "text": "展示预测误差直方图", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-visual-hard-01-0", "group": "train-visual-hard-01", "text": "把寻优轮次得分画成图", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-visual-hard-01-1", "group": "train-visual-hard-01", "text": "展示闭环优化每一轮的分数曲线", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-visual-hard-01-2", "group": "train-visual-hard-01", "text": "可视化各轮综合目标得分", "labels": ["engineering_visualization_builder"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-export-hard-00-0", "group": "train-export-hard-00", "text": "把现成的分析报告发我下载", "labels": ["final_artifact_exporter"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-export-hard-00-1", "group": "train-export-hard-00", "text": "给我下载当前已有报告", "labels": ["final_artifact_exporter"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-export-hard-00-2", "group": "train-export-hard-00", "text": "提供已生成报告的下载产物", "labels": ["final_artifact_exporter"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-experiment-hard-00-0", "group": "train-experiment-hard-00", "text": "比较不同批次运行的实验记录", "labels": ["experiment_tracker_comparator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-experiment-hard-00-1", "group": "train-experiment-hard-00", "text": "对比多个批次的模型效果", "labels": ["experiment_tracker_comparator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-experiment-hard-00-2", "group": "train-experiment-hard-00", "text": "查看不同实验批次之间的指标差异", "labels": ["experiment_tracker_comparator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-model-hard-00-0", "group": "train-model-hard-00", "text": "重新拟合这个过程的ARX预测器", "labels": ["system_identification_trainer"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-model-hard-00-1", "group": "train-model-hard-00", "text": "训练动态预测器的参数", "labels": ["system_identification_trainer"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-model-hard-00-2", "group": "train-model-hard-00", "text": "用当前样本重训过程预测模型", "labels": ["system_identification_trainer"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-lag-hard-00-0", "group": "train-lag-hard-00", "text": "测一下输入到输出之间晚了几个采样点", "labels": ["time_delay_estimator_compensator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-lag-hard-00-1", "group": "train-lag-hard-00", "text": "估计控制量变化后输出响应的延迟", "labels": ["time_delay_estimator_compensator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id": "train-lag-hard-00-2", "group": "train-lag-hard-00", "text": "计算输入阶跃到输出变化的滞后", "labels": ["time_delay_estimator_compensator"], "source": "assistant_authored_targeted", "split": "train"}
+{"id":"train-clean-repair-r2-0","group":"train-clean-repair-r2","text":"把采集序列中的空白点和尖峰修复掉","labels":["missing_anomaly_cleaner"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-clean-repair-r2-1","group":"train-clean-repair-r2","text":"修补测点缺口并处理突刺值","labels":["missing_anomaly_cleaner"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-clean-repair-r2-2","group":"train-clean-repair-r2","text":"温度信号有断点和毛刺需要补齐","labels":["missing_anomaly_cleaner"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-clean-repair-r2-3","group":"train-clean-repair-r2","text":"用因果方式填补传感器采集空档","labels":["missing_anomaly_cleaner"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-scene-classify-r2-0","group":"train-scene-classify-r2","text":"识别这份CSV属于哪种工业装置","labels":["dataset_scenario_profiler"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-scene-classify-r2-1","group":"train-scene-classify-r2","text":"判断上传数据对应的生产场景","labels":["dataset_scenario_profiler"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-scene-classify-r2-2","group":"train-scene-classify-r2","text":"从字段特征辨认设备类型","labels":["dataset_scenario_profiler"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-scene-classify-r2-3","group":"train-scene-classify-r2","text":"给当前数据文件做场景画像和设备归类","labels":["dataset_scenario_profiler"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-diagnostic-metrics-r2-0","group":"train-diagnostic-metrics-r2","text":"查看预测器的平均绝对误差和均方根误差","labels":["model_diagnostics_evaluator"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-diagnostic-metrics-r2-1","group":"train-diagnostic-metrics-r2","text":"评估模型误差指标和预测可靠程度","labels":["model_diagnostics_evaluator"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-diagnostic-metrics-r2-2","group":"train-diagnostic-metrics-r2","text":"诊断辨识结果在新数据上的泛化能力","labels":["model_diagnostics_evaluator"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-diagnostic-metrics-r2-3","group":"train-diagnostic-metrics-r2","text":"检查模型残差和独立测试误差","labels":["model_diagnostics_evaluator"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-structure-nk-r2-0","group":"train-structure-nk-r2","text":"选择ARX的na nb nk结构参数","labels":["arx_structure_order_selector"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-structure-nk-r2-1","group":"train-structure-nk-r2","text":"确定输入延迟阶次和候选结构","labels":["arx_structure_order_selector"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-structure-nk-r2-2","group":"train-structure-nk-r2","text":"搜索模型阶次与纯滞后项组合","labels":["arx_structure_order_selector"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-structure-nk-r2-3","group":"train-structure-nk-r2","text":"为动态模型挑选结构阶次","labels":["arx_structure_order_selector"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-visualize-r2-0","group":"train-visualize-r2","text":"把寻优迭代得分画成趋势图","labels":["engineering_visualization_builder"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-visualize-r2-1","group":"train-visualize-r2","text":"生成各轮候选结果的可视化曲线","labels":["engineering_visualization_builder"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-visualize-r2-2","group":"train-visualize-r2","text":"展示残差分布与预测误差图","labels":["engineering_visualization_builder"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-visualize-r2-3","group":"train-visualize-r2","text":"绘制模型诊断图表","labels":["engineering_visualization_builder"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-report-r2-0","group":"train-report-r2","text":"撰写本次辨识分析技术报告","labels":["expert_report_writer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-report-r2-1","group":"train-report-r2","text":"编写模型验证评审文档","labels":["expert_report_writer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-report-r2-2","group":"train-report-r2","text":"形成系统辨识结果报告","labels":["expert_report_writer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-report-r2-3","group":"train-report-r2","text":"整理一份工程建模评审稿","labels":["expert_report_writer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-audit-hash-r2-0","group":"train-audit-hash-r2","text":"核验交付文件的哈希值","labels":["evidence_audit_reproducer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-audit-hash-r2-1","group":"train-audit-hash-r2","text":"审查每项产物的摘要是否一致","labels":["evidence_audit_reproducer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-audit-hash-r2-2","group":"train-audit-hash-r2","text":"复核输入数据和报告的SHA256证据","labels":["evidence_audit_reproducer"],"source":"assistant_authored_targeted_round2","split":"train"}
+{"id":"train-audit-hash-r2-3","group":"train-audit-hash-r2","text":"检查审计清单中的文件指纹","labels":["evidence_audit_reproducer"],"source":"assistant_authored_targeted_round2","split":"train"}

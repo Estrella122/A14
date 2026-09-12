@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { getAgentTrace } from '../api/agent'
-import { mockAgentTraceByScenario } from '../data/mockData'
 
 const props = defineProps({ runId: { type: String, default: '' }, running: { type: Boolean, default: false }, scenarioId: { type: String, default: 'blast_furnace' } })
 const trace = ref(null)
@@ -16,7 +15,7 @@ let stepTimer
 
 const nodes = computed(() => trace.value?.nodes ?? [])
 const activeIndex = computed(() => props.running ? Math.min(nodes.value.length - 1, activeStep.value) : -1)
-const traceSource = computed(() => trace.value?.source === 'mock' ? '演示轨迹' : '后端真实轨迹')
+const traceSource = computed(() => trace.value ? '后端真实轨迹' : '暂无真实轨迹')
 
 function toggle(id) {
   expanded.value = expanded.value.includes(id) ? expanded.value.filter((item) => item !== id) : [...expanded.value, id]
@@ -27,14 +26,13 @@ async function loadTrace() {
   controller = new AbortController()
   loading.value = true
   error.value = ''
+  trace.value = null
+  if (!props.runId) { loading.value = false; return }
   try {
     trace.value = await getAgentTrace(props.runId, { signal: controller.signal })
   } catch (requestError) {
     if (requestError.name === 'AbortError') return
-    // TODO(mock): trace API 请求失败或无运行记录时使用一次完整执行链，保证离线演示可用。
-    const fallback = mockAgentTraceByScenario[props.scenarioId] ?? mockAgentTraceByScenario.blast_furnace
-    trace.value = { ...fallback, nodes: fallback.nodes.map((node) => ({ ...node })) }
-    error.value = '推理轨迹接口待接入，当前展示同结构演示数据'
+    error.value = `真实轨迹读取失败：${requestError.message}`
   } finally {
     loading.value = false
   }
@@ -63,7 +61,7 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
     <div class="section-heading compact">
       <div><span class="section-kicker">Reasoning & Tool Trace</span><h2>Agent 推理链路</h2></div>
       <div class="trace-heading-actions">
-        <StatusPill v-if="error" tone="warning">{{ traceSource }}</StatusPill>
+        <StatusPill v-if="error" tone="warning">读取失败</StatusPill>
         <StatusPill v-else :tone="loading ? 'neutral' : 'success'" dot>{{ loading ? '读取中' : traceSource }}</StatusPill>
         <span>{{ trace?.total_duration_ms ? `${(trace.total_duration_ms / 1000).toFixed(2)} s` : '—' }}</span>
       </div>
@@ -88,7 +86,7 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
         </div>
       </article>
     </div>
-    <div v-else class="empty-state">{{ loading ? '正在读取 Agent 推理轨迹…' : '当前任务暂无推理节点。' }}</div>
+    <div v-else class="empty-state">{{ loading ? '正在读取 Agent 推理轨迹…' : runId ? '当前任务暂无可核验的推理节点。' : '请先上传并运行 CSV，之后这里展示后端真实轨迹。' }}</div>
 
     <div class="trace-toolchain">
       <div><span class="section-kicker">Tool Call Chain</span><strong>底层工具调用链</strong></div>

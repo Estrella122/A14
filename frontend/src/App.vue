@@ -1,32 +1,22 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from './components/AppIcon.vue'
 import StatusPill from './components/StatusPill.vue'
 import { navGroups, navItems, projects } from './data/projectData'
-import OverviewView from './views/OverviewView.vue'
-import AgentWorkflowView from './views/AgentWorkflowView.vue'
-import DataAssetsView from './views/DataAssetsView.vue'
-import CleaningView from './views/CleaningView.vue'
-import DataSelectionView from './views/DataSelectionView.vue'
-import ModelingView from './views/ModelingView.vue'
-import OptimizationView from './views/OptimizationView.vue'
-import DeliveryView from './views/DeliveryView.vue'
-import PipelineBuilderView from './views/PipelineBuilderView.vue'
-import ExperimentTrackerView from './views/ExperimentTrackerView.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import { useLatestPipelineRun } from './composables/useLatestPipelineRun'
 
 const viewMap = {
-  '/overview/': OverviewView,
-  '/agent-review/': AgentWorkflowView,
-  '/scenario-data/': DataAssetsView,
-  '/standard-check/': CleaningView,
-  '/data-selection/': DataSelectionView,
-  '/identification-modeling/': ModelingView,
-  '/closed-loop-optimization/': OptimizationView,
-  '/report-export/': DeliveryView,
-  '/pipeline-builder/': PipelineBuilderView,
-  '/experiments/': ExperimentTrackerView,
+  '/overview/': defineAsyncComponent(() => import('./views/OverviewView.vue')),
+  '/agent-review/': defineAsyncComponent(() => import('./views/AgentWorkflowView.vue')),
+  '/scenario-data/': defineAsyncComponent(() => import('./views/DataAssetsView.vue')),
+  '/standard-check/': defineAsyncComponent(() => import('./views/CleaningView.vue')),
+  '/data-selection/': defineAsyncComponent(() => import('./views/DataSelectionView.vue')),
+  '/identification-modeling/': defineAsyncComponent(() => import('./views/ModelingView.vue')),
+  '/closed-loop-optimization/': defineAsyncComponent(() => import('./views/OptimizationView.vue')),
+  '/report-export/': defineAsyncComponent(() => import('./views/DeliveryView.vue')),
+  '/pipeline-builder/': defineAsyncComponent(() => import('./views/PipelineBuilderView.vue')),
+  '/experiments/': defineAsyncComponent(() => import('./views/ExperimentTrackerView.vue')),
 }
 
 function normalizePath(path) {
@@ -78,7 +68,7 @@ const effectiveProject = computed(() => {
   }
 })
 const activeItem = computed(() => navItems.find((item) => item.path === activePath.value) ?? navItems[0])
-const activeView = computed(() => viewMap[activePath.value] ?? OverviewView)
+const activeView = computed(() => viewMap[activePath.value] ?? viewMap['/overview/'])
 const toast = ref(null)
 const commandPaletteOpen = ref(false)
 let toastTimer

@@ -173,3 +173,13 @@ class ContextAwareCapabilityResolutionTests(SimpleTestCase):
     def test_non_industrial_task_does_not_load_industrial_skill(self):
         plan = plan_skills("修改登录页面按钮颜色", snapshot=self.context_snapshot())
         self.assertIsNone(plan["analysis"]["skill_runtime"]["selected_skill"])
+
+    def test_object_prefixed_visualization_and_download_commands_route_precisely(self):
+        chart = plan_skills("把闭环寻优每轮得分可视化")
+        download = plan_skills("把已经做好的报告下载给我")
+        self.assertEqual(["engineering_visualization_builder"], chart["direct_skill_ids"])
+        self.assertEqual(["final_artifact_exporter"], download["direct_skill_ids"])
+
+    def test_unit_circle_is_not_treated_as_field_unit(self):
+        plan = plan_skills("验证模型极点是否落在单位圆以内")
+        self.assertNotIn("semantic_field_unit_standardizer", plan["direct_skill_ids"])

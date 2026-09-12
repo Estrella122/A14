@@ -11,8 +11,14 @@ from typing import Any, Iterable
 CONCEPT_PATTERNS = (
     ("direction_in", r"influent|inlet|入口|进口|进水|进料|入炉|入口侧"),
     ("direction_out", r"effluent|outlet|出口|出口侧|出水|出料|排出"),
+    ("direction_upper", r"\bupper\b|上部|上段|上层|上压差"),
+    ("direction_lower", r"\blower\b|下部|下段|下层|下压差"),
+    ("direction_hot", r"\bhot\b|热风|热端|热侧"),
+    ("direction_cold", r"\bcold\b|冷风|冷端|冷侧"),
     ("order_primary", r"primary|一次|\bpa\b"),
     ("order_secondary", r"secondary|二次|\bsa\b"),
+    ("variant_a", r"(?<![a-z])a(?![a-z])|[_\-\s]a(?:[_\-\s]|$)|\ba线\b|温度a|压力a"),
+    ("variant_b", r"(?<![a-z])b(?![a-z])|[_\-\s]b(?:[_\-\s]|$)|\bb线\b|温度b|压力b"),
     ("zone_1", r"zone[_\- ]?1|一区|一段|预热段|炉温1"),
     ("zone_2", r"zone[_\- ]?2|二区|二段|加热段|炉温2"),
     ("zone_3", r"zone[_\- ]?3|三区|三段|均热段|炉温3"),
@@ -21,9 +27,10 @@ CONCEPT_PATTERNS = (
     ("material_rawmeal", r"raw[_\- ]?meal|生料|raw[_\- ]?feed"),
     ("material_coal", r"coal|煤粉|煤量|喂煤"),
     ("kind_timestamp", r"timestamp|date[_\- ]?time|采集时间|时间戳"),
-    ("measure_temp", r"temp(?:erature)?|温度|炉温"),
+    ("measure_temp", r"temp(?:erature)?|\btt\b|温度|炉温"),
     ("measure_flow", r"flow|流量|风量"),
-    ("measure_pressure", r"pressure|压力|压强"),
+    ("measure_pressure", r"pressure|\bpt\b|压力|压强"),
+    ("measure_pressure_drop", r"pressure[_\- ]?difference|pressure[_\- ]?drop|压差"),
     ("measure_level", r"level|液位|料位"),
     ("direction_lagging", r"lagging|滞后"),
     ("direction_leading", r"leading|超前"),
@@ -34,6 +41,16 @@ CONCEPT_PATTERNS = (
     ("measure_frequency", r"frequency|频率|转速"),
     ("chem_ammonia", r"ammonia|nh3[_\-]?n|氨氮"),
     ("chem_cod", r"\bcod\b|化学需氧量"),
+)
+
+ORDINAL_PATTERN = re.compile(
+    r"(?:zone|temp|temperature|pressure|level|flow|tp|炉温|温度|压力|压差|液位|流量|周边|炉顶)[_\-\s#]*(\d{1,2})"
+    r"|(\d{1,2})\s*(?:号)?(?:区|段|层|点|通道|周边|炉顶|温度|压力|压差|液位|流量)"
+)
+
+LETTER_VARIANT_PATTERN = re.compile(
+    r"(?:^|[_\-\s#.]|[温压])([ab])(?:$|[_\-\s#.]|线|相|侧|温度|压力)|(?:温度|压力|流量)([ab])",
+    re.I,
 )
 
 
@@ -60,6 +77,24 @@ def text_features(text: str) -> Counter[str]:
         if re.search(pattern, lowered):
             concepts.append(concept)
             features[f"concept:{concept}"] += 4
+    for match in ORDINAL_PATTERN.finditer(lowered):
+        number = next((group for group in match.groups() if group), None)
+        if number is None:
+            continue
+        normalized = str(int(number))
+        concepts.append(f"ordinal_{normalized}")
+        features[f"ordinal:{normalized}"] += 6
+        for concept in concepts:
+            if concept.startswith("measure_") or concept.startswith("position_") or concept.startswith("direction_"):
+                features[f"ordinal_pair:{concept}+{normalized}"] += 3
+    for match in LETTER_VARIANT_PATTERN.finditer(lowered):
+        letter = next((group for group in match.groups() if group), "").lower()
+        if letter:
+            concepts.append(f"variant_{letter}")
+            features[f"variant:{letter}"] += 5
+            for concept in concepts:
+                if concept.startswith("measure_") or concept.startswith("position_"):
+                    features[f"variant_pair:{concept}+{letter}"] += 3
     for left in concepts:
         for right in concepts:
             if left < right:

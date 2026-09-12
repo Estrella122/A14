@@ -2,7 +2,6 @@ import json
 from datetime import datetime
 
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .services.agent_chat import chat
@@ -20,7 +19,6 @@ def _duration_ms(start, end):
         return 0
 
 
-@csrf_exempt
 @require_POST
 def agent_chat(request):
     try:
@@ -38,7 +36,6 @@ def agent_skills(request):
     return JsonResponse({"ok": True, "data": data}, json_dumps_params={"ensure_ascii": False})
 
 
-@csrf_exempt
 @require_POST
 def agent_plan(request):
     try:
@@ -50,7 +47,6 @@ def agent_plan(request):
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
 
-@csrf_exempt
 @require_POST
 def agent_skill_run_collection(request):
     try:

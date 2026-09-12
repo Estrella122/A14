@@ -46,14 +46,16 @@ def select(message: str, analysis: dict, expert_rules, topic_keys):
         result=predict(part)
         # Grammar resolves the requested action/object before statistical
         # ranking: drawing residuals is a chart task, not model retraining.
-        prefix=r'^(?:(?:请|帮我|给我|我需要|只|仅|现在|先|再)\s*)*'
+        prefix=r'^(?:(?:请|帮我|给我|我需要|只|仅|现在|先|再|把|将|对)\s*)*'
         forced=None
-        if re.search(prefix+r'(?:下载|导出|打包|获取.{0,20}下载|提供.{0,20}下载)',part):
+        if re.search(prefix+r'(?:下载|导出|打包|获取.{0,20}下载|提供.{0,20}下载)',part) or re.search(r'^(?:(?:请|帮我|给我)\s*)*(?:把|将).{0,60}(?:下载|导出|打包)', part):
             forced='final_artifact_exporter'
         elif re.search(prefix+r'(?:撰写|编写|起草|写).{0,40}(?:报告|文档|评审稿|评审材料)',part):
             forced='expert_report_writer'
-        elif re.search(prefix+r'(?:画|绘制|展示|生成).{0,40}(?:图|曲线|可视化)',part):
+        elif re.search(prefix+r'(?:画|绘制|展示|生成).{0,40}(?:图|曲线|可视化)',part) or re.search(r'^(?:(?:请|帮我|给我)\s*)*(?:把|将).{0,60}(?:画成|绘制|可视化)', part):
             forced='engineering_visualization_builder'
+        elif re.search(prefix+r'(?:重新执行|重新运行|重跑|执行|开始|请|帮我|按\d+秒|改为\d+秒)?.{0,30}(?:清洗|规整|缺失值|缺测|空值|异常点|离群点)',part):
+            forced='missing_anomaly_cleaner'
         if forced:
             result.update(skill_id=forced,accepted=True,reason='explicit_action_grammar',model_score=result['score'],score=1.0,score_type='explicit_action_rule')
             if forced not in {candidate['skill_id'] for candidate in result['candidates']}:
@@ -76,7 +78,8 @@ def select(message: str, analysis: dict, expert_rules, topic_keys):
         # Retain the curated evidence requirements of expert reviews; do not
         # promote a topic mentioned only inside a denied action.
         selected=set();scores={}
-        active='，'.join(positive)
+        # “单位圆”是控制稳定性术语，不应被“单位”误判成字段单位标准化。
+        active='，'.join(positive).replace('单位圆', '稳定极点')
         for topic,(terms,ids) in zip(topic_keys,expert_rules):
             hits=[term for term in terms if term.lower() in active]
             if hits:

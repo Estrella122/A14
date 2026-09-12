@@ -28,6 +28,10 @@ class SkillLoaderTests(SimpleTestCase):
         self.assertNotIn("EQUIPMENT_HEALTH", trace["loaded_capabilities"])
         self.assertIn("unknown-scene", trace["loaded_workflows"])
 
+    def test_unknown_scene_keeps_generic_time_series_capability(self):
+        trace = load_skill_context("分析未知工业数据的时序和滞后", default_skill_roots(), scene="unknown_scene", selected_capabilities=["TIME_SERIES_ANALYSIS"], selected_skill_name="industrial-analysis")
+        self.assertEqual(["TIME_SERIES_ANALYSIS"], trace["loaded_capabilities"])
+
     def test_unrelated_request_does_not_load_industrial_skill(self):
         trace = load_skill_context("修改登录页面按钮颜色", default_skill_roots())
         self.assertIsNone(trace["selected_skill"])

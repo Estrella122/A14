@@ -39,19 +39,28 @@ const matrixLabels = computed(() => liveModel.value?.collinearity?.labels?.lengt
 const matrix = computed(() => liveModel.value?.collinearity?.matrix?.length ? liveModel.value.collinearity.matrix : demoMatrix)
 
 const demoLagRows = computed(() => [
-  { input: props.project.mvTag, output: props.project.targetTag, lag: '95 s', corr: 0.82, method: '时间轴前移 + 线性补偿', action: '保留主变量' },
-  { input: 'AIR_FUEL_RATIO', output: props.project.targetTag, lag: '70 s', corr: 0.76, method: '时间轴前移', action: '保留' },
-  { input: 'ZONE_PRESSURE', output: props.project.targetTag, lag: '40 s', corr: 0.44, method: '低权重补偿', action: '降权' },
-  { input: props.project.disturbanceTag, output: props.project.targetTag, lag: '125 s', corr: -0.69, method: '时间轴前移', action: '保留扰动' },
+  { input: props.project.mvTag, output: props.project.targetTag, lagSamples: 24, lag: '24 点', corr: 0.82, method: '段内历史输入补偿', action: '保留主变量' },
+  { input: 'AIR_FUEL_RATIO', output: props.project.targetTag, lagSamples: 18, lag: '18 点', corr: 0.76, method: '段内历史输入补偿', action: '保留' },
+  { input: 'ZONE_PRESSURE', output: props.project.targetTag, lagSamples: 10, lag: '10 点', corr: 0.44, method: '低权重补偿', action: '降权' },
+  { input: props.project.disturbanceTag, output: props.project.targetTag, lagSamples: 31, lag: '31 点', corr: -0.69, method: '段内历史输入补偿', action: '保留扰动' },
 ])
 const lagRows = computed(() => liveModel.value?.lags?.length ? liveModel.value.lags.map((row) => ({
   input: row.input,
   output: row.output,
+  lagSamples: Number(row.delay_samples),
   lag: `${Number(row.delay_samples)} 点`,
   corr: Number(row.correlation).toFixed(3),
   method: Number(row.delay_samples) >= 0 ? '使用历史输入，段内对齐' : '历史任务负时滞，需重跑',
   action: row.boundary_hit ? '命中上界，复核' : '训练段估计',
 })) : demoLagRows.value)
+const lagAxisMax = computed(() => Math.max(
+  1,
+  Number(liveModel.value?.config?.max_lag ?? 0),
+  ...lagRows.value.map(row => Number(row.lagSamples) || 0),
+))
+const lagAxisTicks = computed(() => Array.from({ length: 5 }, (_, index) =>
+  `${Math.round(lagAxisMax.value * index / 4)} 点`))
+const lagPercent = row => `${Math.min(100, Math.max(0, Number(row.lagSamples) / lagAxisMax.value * 100))}%`
 
 const variableActions = computed(() => {
   const vifRows = liveModel.value?.collinearity?.vif ?? []
@@ -176,9 +185,9 @@ async function showFrequencyAnalysis() {
       <section class="panel lag-panel">
         <div class="section-heading compact"><div><span class="section-kicker">多变量时滞估算</span><h2>相对 {{ project.targetTag }} 的最佳补偿</h2></div><button class="text-button" type="button" :aria-expanded="correlationDetailOpen" @click="correlationDetailOpen = !correlationDetailOpen">{{ correlationDetailOpen ? '收起相关证据' : '查看互相关证据' }} <AppIcon name="arrow" :size="15" /></button></div>
         <div class="lag-visual">
-          <div class="lag-axis"><span>0 s</span><span>40 s</span><span>80 s</span><span>120 s</span><span>160 s</span></div>
-          <div v-for="(row, index) in lagRows" :key="row.input" class="lag-row">
-            <span>{{ row.input }}</span><div><i :style="{ left: `${parseInt(row.lag) / 1.6}%` }"></i><b :style="{ width: `${parseInt(row.lag) / 1.6}%` }"></b></div><strong>{{ row.lag }}</strong>
+          <div class="lag-axis"><span v-for="tick in lagAxisTicks" :key="tick">{{ tick }}</span></div>
+          <div v-for="row in lagRows" :key="row.input" class="lag-row">
+            <span>{{ row.input }}</span><div><i :style="{ left: lagPercent(row) }"></i><b :style="{ width: lagPercent(row) }"></b></div><strong>{{ row.lag }}</strong>
           </div>
         </div>
         <div class="table-wrap compact-table-wrap">

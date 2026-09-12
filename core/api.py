@@ -1,11 +1,12 @@
 import json
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.utils.dateparse import parse_datetime
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from .models import (
@@ -192,11 +193,7 @@ MODEL_CONFIG = {
 
 
 def api_response(data, status=200):
-    response = JsonResponse(data, status=status, json_dumps_params={'ensure_ascii': False})
-    response['Access-Control-Allow-Origin'] = '*'
-    response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-    response['Access-Control-Allow-Headers'] = 'Content-Type'
-    return response
+    return JsonResponse(data, status=status, json_dumps_params={'ensure_ascii': False})
 
 
 def parse_json_body(request):
@@ -256,7 +253,6 @@ def convert_value(model, field_name, value):
     return value
 
 
-@csrf_exempt
 @require_http_methods(['GET', 'POST', 'OPTIONS'])
 def table_collection(request, table_key):
     if request.method == 'OPTIONS':
@@ -342,4 +338,16 @@ def api_index(request):
             }
             for key, config in MODEL_CONFIG.items()
         },
+    })
+
+
+@ensure_csrf_cookie
+@require_http_methods(['GET'])
+def security_session(request):
+    return api_response({
+        'ok': True,
+        'auth_required': bool(getattr(settings, 'PROCESSPILOT_REQUIRE_AUTH', False)),
+        'authenticated': bool(request.user.is_authenticated),
+        'username': request.user.get_username() if request.user.is_authenticated else None,
+        'login_url': '/admin/login/?next=/overview/',
     })
