@@ -55,6 +55,9 @@ function runFullLoop() {
       description="以辨识效果为反馈信号，自动完成工业时序数据规整、动态优选、解耦辨识与预处理策略闭环寻优。"
     >
       <template #actions>
+        <button class="btn btn-secondary" type="button" @click="emit('navigate', '/digital-twin/')">
+          <AppIcon name="cube" />查看三维场景
+        </button>
         <button class="btn btn-secondary" type="button" @click="emit('navigate', '/agent-review/')">
           <AppIcon name="spark" />打开 Agent 中枢
         </button>

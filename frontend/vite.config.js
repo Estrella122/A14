@@ -28,6 +28,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         overview: 'overview/index.html',
+        digitalTwin: 'digital-twin/index.html',
         scenarioData: 'scenario-data/index.html',
         standardCheck: 'standard-check/index.html',
         dataSelection: 'data-selection/index.html',

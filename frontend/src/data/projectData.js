@@ -4,6 +4,7 @@ export const navGroups = [
     items: [
       { label: '项目驾驶舱', shortLabel: '总览', path: '/overview/', icon: 'dashboard' },
       { label: 'Agent 中枢', shortLabel: 'Agent', path: '/agent-review/', icon: 'spark' },
+      { label: '三维场景', shortLabel: '3D', path: '/digital-twin/', icon: 'cube' },
     ],
   },
   {

@@ -10,6 +10,7 @@ import { buildSceneState } from './composables/useSceneBinding'
 const viewMap = {
   '/overview/': defineAsyncComponent(() => import('./views/OverviewView.vue')),
   '/agent-review/': defineAsyncComponent(() => import('./views/AgentWorkflowView.vue')),
+  '/digital-twin/': defineAsyncComponent(() => import('./views/DigitalTwinView.vue')),
   '/scenario-data/': defineAsyncComponent(() => import('./views/DataAssetsView.vue')),
   '/standard-check/': defineAsyncComponent(() => import('./views/CleaningView.vue')),
   '/data-selection/': defineAsyncComponent(() => import('./views/DataSelectionView.vue')),

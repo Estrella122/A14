@@ -56,6 +56,10 @@ defineProps({
       <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
       <path d="m3 7 6-4 6 6 6-5" />
     </template>
+    <template v-else-if="name === 'cube'">
+      <path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2Z" />
+      <path d="m4 6.5 8 4.5 8-4.5M12 11v9" />
+    </template>
     <template v-else-if="name === 'loop'">
       <path d="M20 7h-7a5 5 0 0 0-5 5v1" />
       <path d="m17 4 3 3-3 3" />
