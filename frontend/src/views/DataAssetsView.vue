@@ -7,6 +7,7 @@ import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import { formatNumber } from '../data/projectData'
 import { announcePipelineUpdate, artifactUrl, rerunPipeline, uploadPipelineFile } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
+import { buildSceneState } from '../composables/useSceneBinding'
 import { buildSimulationCsv } from '../utils/simulationCsv'
 
 const props = defineProps({ project: { type: Object, required: true } })
@@ -17,7 +18,8 @@ const isGenerating = ref(false)
 const uploading = ref(false)
 const dragActive = ref(false)
 const generatedDataset = ref(null)
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
+const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 const simulation = ref({ steady: 45, step: 18, noise: 3, anomalies: 12 })
 const fileFilter = ref('all')
 const chartRange = ref('6h')
@@ -59,6 +61,9 @@ const visibleFiles = computed(() => {
 const reviewMappings = computed(() => (liveStandard.value?.mapping?.mappings ?? []).filter((item) => item.status !== 'matched'))
 const scenarioCandidates = computed(() => liveStandard.value?.detection?.candidates ?? [])
 const dictionary = computed(() => liveStandard.value?.dictionary ?? [])
+
+const dataSceneInfo = computed(() => sceneState.value.data_scene)
+const mismatchText = computed(() => sceneState.value.is_mismatch ? sceneState.value.mismatch_text : '')
 
 watch(liveStandard, (standard) => {
   reviewScenario.value = standard?.scenario?.scenario_id ?? ''
@@ -228,7 +233,12 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="standardization" />
+      <IntegratedEvidencePanel module="standardization" />
+
+      <section v-if="mismatchText" class="panel scene-mismatch-panel">
+        <AppIcon name="alert" :size="15" />
+        <p>{{ mismatchText }}</p>
+      </section>
 
     <section v-if="latestRun" class="panel pipeline-run-panel">
       <div class="section-heading compact"><div><span class="section-kicker">真实执行任务</span><h2>{{ latestRun.original_name }}</h2></div><StatusPill :tone="latestRun.status === 'completed' ? 'success' : 'warning'" dot>{{ latestRun.status === 'completed' ? '全部完成' : '运行异常' }}</StatusPill></div>
@@ -256,7 +266,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
     <section class="metric-grid four-col">
       <article class="metric-card"><span class="metric-label">当前数据文件</span><div class="metric-value">{{ latestRun ? 1 : files.length }} <small>个</small></div><p>{{ latestRun?.original_name ?? '演示数据资产' }}</p><span class="metric-trend positive">{{ latestRun?.run_id ?? '等待真实任务' }}</span></article>
-      <article class="metric-card"><span class="metric-label">规整数据量</span><div class="metric-value">{{ formatNumber(liveCleaning?.cleaned_row_count ?? totalRows) }}</div><p>{{ liveFieldCount }} 个识别字段</p><span class="metric-trend positive">场景：{{ liveStandard?.scenario?.scenario_name ?? '等待识别' }}</span></article>
+      <article class="metric-card"><span class="metric-label">规整数据量</span><div class="metric-value">{{ formatNumber(liveCleaning?.cleaned_row_count ?? totalRows) }}</div><p>{{ liveFieldCount }} 个识别字段</p><span class="metric-trend positive">当前数据场景：{{ dataSceneInfo.display_name }}</span></article>
       <article class="metric-card"><span class="metric-label">综合数据质量</span><div class="metric-value">{{ liveCleaning?.overall_score ?? '—' }}<small> / 100</small></div><p>必需字段覆盖 {{ ((liveStandard?.mapping?.required_coverage ?? 0) * 100).toFixed(0) }}%</p><span class="metric-trend" :class="liveStandard?.data_decision?.status === 'ready' ? 'positive' : 'warning'">{{ liveStandard?.data_decision?.status ?? '等待判断' }}</span></article>
       <article class="metric-card"><span class="metric-label">字段统一结果</span><div class="metric-value metric-value-text">{{ liveStandard?.mapping?.review_count ?? 0 }} 待确认</div><p>{{ liveStandard?.mapping?.unmapped_count ?? 0 }} 未映射 · {{ liveStandard?.mapping?.unit_risk_count ?? 0 }} 单位风险</p><span class="metric-trend positive">数据字典已生成</span></article>
     </section>
@@ -369,4 +379,5 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 .simulation-result button { color: #047857; font-size: 9px; white-space: nowrap; }
 @media (max-width: 900px) { .pipeline-stage-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 520px) { .pipeline-stage-grid { grid-template-columns: 1fr; } }
+.scene-mismatch-panel { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; padding: 9px 12px; color: #854d0e; border: 1px solid #fcd34d; border-radius: 10px; background: #fffbeb; font-size: 13px; }
 </style>

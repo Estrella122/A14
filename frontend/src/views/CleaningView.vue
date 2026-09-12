@@ -14,7 +14,7 @@ const recommendedConfig = { sample: '5 s', missing: '局部线性插值', method
 const config = ref({ ...recommendedConfig })
 const running = ref(false)
 const auditFilter = ref('all')
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? null)
 const liveMissing = computed(() => {
   const values = Object.values(liveCleaning.value?.missing_rate ?? {})

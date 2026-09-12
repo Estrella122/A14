@@ -11,11 +11,14 @@ from uuid import uuid4
 from django.conf import settings
 
 from .analysis_plan import build_analysis_plan
-from .capability_resolver import resolve_capabilities, understand_task
+from .task_understanding import understand_task
 from .catalog import CATEGORIES, SKILLS, SKILL_MAP, identify_scene_from_text
 from .context import build_data_context
 from .routing import select
 from .skill_loader import default_skill_roots, load_skill_context
+from .skill_loader import discover_skills
+from .skill_resolver import resolve_skills
+from .executor import get_executor
 
 
 RUNS_DIR = Path(settings.BASE_DIR) / "runtime" / "agent_skill_runs"
@@ -167,12 +170,12 @@ def _with_dependencies(selected: set[str]) -> list[str]:
     return ordered
 
 
-def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
+def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
     text = str(message or "").strip()
     if not text:
         raise ValueError("规划指令不能为空。")
     analysis = _request_analysis(text)
-    task_understanding = understand_task(text)
+    task_understanding = understand_task(text, conversation_context)
     try:
         route = select(text, analysis, EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -186,7 +189,9 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         from core.services.pipeline import get_run
         snapshot = get_run(run_id)
     data_context = build_data_context(snapshot, run_id).public()
-    capability_resolution = resolve_capabilities(task_understanding, data_context, recalled_skill_ids, lexical_candidates)
+    discovered_skills, _discovery_metrics = discover_skills(default_skill_roots())
+    skill_resolution = resolve_skills(task_understanding, data_context, discovered_skills, recalled_skill_ids, lexical_candidates)
+    capability_resolution = skill_resolution["capability_resolution"]
     capability_skill_ids = set(capability_resolution["resolved_skill_ids"])
     # The trained router is the user's direct business intent. Capability
     # resolution may block data-dependent analysis when no run snapshot exists,
@@ -194,7 +199,12 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
     routed_business_skills = set(recalled_skill_ids) if task_understanding["task_kind"] != "knowledge_explanation" else set()
     operational = set(recalled_skill_ids) if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} else set()
     direct = capability_skill_ids | routed_business_skills | operational
-    execution_mode = "execute" if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} and route["mode"] == "execute" else "analyze"
+    runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
+    execution_mode = route["mode"] if runtime_mode == "legacy" else task_understanding["execution_mode"]
+    if route.get("source") == "model_unavailable":
+        execution_mode = "analyze"
+    if execution_mode == "explain":
+        execution_mode = "analyze"
     detected_scene_id = data_context.get("detected_scene")
     if not detected_scene_id:
         detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
@@ -204,7 +214,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         default_skill_roots(),
         scene=detected_scene_id or "unknown_scene",
         selected_capabilities=documents,
-        selected_skill_name="industrial-analysis" if documents else None,
+        selected_skill_name=skill_resolution["selected_skills"][0] if skill_resolution["selected_skills"] else None,
         task_kind=task_understanding["task_kind"],
     )
     analysis_plan = build_analysis_plan(
@@ -215,10 +225,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         capability_resolution=capability_resolution,
         task_understanding=task_understanding,
     )
-    needs_clarification = bool(
-        task_understanding["task_kind"] != "knowledge_explanation"
-        and not direct
-    )
+    needs_clarification = bool(task_understanding.get("requires_clarification") or (task_understanding["task_kind"] not in {"knowledge_explanation", "conversation"} and not direct))
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": needs_clarification,
                      "unresolved_clauses": route["unresolved_clauses"],
@@ -229,11 +236,18 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                      "task_understanding": task_understanding,
                      "data_context": data_context,
                      "capability_resolution": capability_resolution,
+                     "skill_resolution": skill_resolution,
+                     "execution_plan": {
+                         "executor": "industrial-analysis" if "industrial-analysis" in skill_resolution["selected_skills"] else None,
+                         "capabilities": capability_resolution["selected"],
+                         "blocked": skill_resolution["blocked_capabilities"],
+                         "skipped": skill_resolution["skipped_capabilities"],
+                     },
                      "skill_runtime": skill_runtime,
                      "agent_context": {
                          "base_agent_context": "ProcessPilot Agent Runtime",
                          "loaded_skill_context": skill_runtime["context"],
-                         "task_context": {"objective": text, "run_id": run_id},
+                         "task_context": {"objective": task_understanding["objective"], "user_message": text, "run_id": run_id},
                          "data_context": data_context,
                      }})
     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
@@ -261,9 +275,9 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         reason = "用户目标直接命中" if skill_id in direct else "Agent 运行时治理" if skill_id in runtime_skills else "上游依赖自动补齐"
         steps.append({"order": index, "skill_id": skill.id, "name": skill.name, "category": skill.category, "reason": reason, "selection_kind": "direct" if skill_id in direct else "governance" if skill_id in runtime_skills else "dependency", "relevance_score": relevance_scores.get(skill_id, 1.0 if skill_id in runtime_skills else 0.68), "status": "ready"})
     return {
-        "plan_id": f"plan_{uuid4().hex[:12]}", "run_id": run_id, "objective": text,
+        "plan_id": f"plan_{uuid4().hex[:12]}", "run_id": run_id, "objective": task_understanding["objective"], "user_message": text,
         "mode": execution_mode, "analysis": analysis, "entities": entities, "parameters": parameters,
-        "execution_contract": {"executor": "validated_pipeline_bundle" if execution_mode == "execute" else "evidence_only",
+        "execution_contract": {"executor": "skill_executor_registry" if runtime_mode == "skill_runtime" else "hybrid_skill_executor_with_pipeline_fallback" if runtime_mode == "hybrid" else "validated_pipeline_bundle" if execution_mode == "execute" else "evidence_only",
                                "supported_parameters": ["resample_seconds", "max_lag"],
                                "unapplied_parameters": [k for k in parameters if k not in {"resample_seconds", "max_lag"}]},
         "constraints": {"local_execution": True, "auditable": True, "execution_scope": "bundled_pipeline_then_evidence_read"},
@@ -314,6 +328,39 @@ def _summary(snapshot: dict[str, Any], handler: str) -> tuple[dict, list, list, 
 
 def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_reason: str | None = None) -> dict[str, Any]:
     started = datetime.now().astimezone().isoformat(timespec="seconds")
+    skill_run_id = f"skillrun_{uuid4().hex[:12]}"
+    runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
+    industrial_result = None
+    capability_by_skill: dict[str, list[dict[str, Any]]] = {}
+    analysis_plan = plan.get("analysis", {}).get("analysis_plan", {})
+    if runtime_mode != "legacy" and not blocked_reason and analysis_plan.get("selected_capabilities"):
+        data = snapshot.get("_dataframe")
+        data_path = None
+        if data is None:
+            try:
+                from core.services.pipeline import resolve_artifact
+                data_path, _ = resolve_artifact(snapshot.get("run_id"), "standardized_csv")
+            except Exception:
+                data_path = None
+        if data is not None or data_path is not None:
+            skill_runtime = plan.get("analysis", {}).get("skill_runtime", {})
+            executor = get_executor("industrial-analysis")
+            industrial_result = executor.execute(
+                "industrial-analysis",
+                [item["capability"] for item in analysis_plan.get("selected_capabilities", [])],
+                plan.get("analysis", {}).get("task_understanding", {}),
+                plan.get("analysis", {}).get("data_context", {}),
+                {"data": data, "data_path": data_path},
+                {
+                    "analysis_plan": analysis_plan,
+                    "execution_policy": skill_runtime.get("manifest", {}).get("execution_policy", {}),
+                    "evidence_policy": skill_runtime.get("manifest", {}).get("evidence_policy", {}),
+                    "output_dir": RUNS_DIR / skill_run_id,
+                },
+            )
+            for decision, result in zip(analysis_plan.get("selected_capabilities", []), industrial_result["capability_executions"]):
+                for skill_id in decision.get("selected_skill_ids", []):
+                    capability_by_skill.setdefault(skill_id, []).append(result)
     executions = []
     for step in plan.get("steps", []):
         skill = SKILL_MAP[step["skill_id"]]
@@ -327,7 +374,14 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             })
             continue
         status, activity = "success", "read"
-        if skill.handler == "intent":
+        capability_executions = capability_by_skill.get(skill.id, [])
+        if capability_executions:
+            activity = "executed"
+            metrics = {item["capability_id"]: item["metrics"] for item in capability_executions}
+            artifacts = [industrial_result["artifact"]] if industrial_result and industrial_result.get("artifact") else []
+            evidence = [entry for item in capability_executions for entry in item["evidence"]]
+            warnings = [entry for item in capability_executions for entry in item["warnings"]]
+        elif skill.handler == "intent":
             metrics = {"objective": plan["objective"], "mode": plan.get("mode", "analyze")}
             artifacts, evidence, warnings = [], ["user_instruction"], []
         elif skill.handler == "entity":
@@ -358,17 +412,16 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "experiment_tracker_comparator": False,
             "execution_supervisor_replanner": False,
         }
-        if not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"}):
+        if activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"
             warnings = warnings or ["此能力未执行或缺少独立产物，不能标记完成"]
         executions.append({
             **step, "status": status, "activity": activity, "duration_ms": round((perf_counter() - tick) * 1000),
-            "execution_scope": "plan" if activity == "planned" else "pipeline_evidence_read",
+            "execution_scope": "skill_executor" if activity == "executed" else "plan" if activity == "planned" else "pipeline_evidence_read",
             "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
             "metrics": metrics, "artifacts": artifacts, "evidence": evidence, "warnings": warnings,
             "suggested_next_skills": [item.id for item in SKILLS if skill.id in item.depends_on][:3],
         })
-    skill_run_id = f"skillrun_{uuid4().hex[:12]}"
     pipeline_run_id = snapshot.get("run_id")
     if not isinstance(pipeline_run_id, (str, int, float, bool, type(None))):
         pipeline_run_id = None
@@ -376,7 +429,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         "skill_run_id": skill_run_id, "pipeline_run_id": pipeline_run_id, "status": "blocked" if blocked_reason else "partial" if any(row["status"] == "unavailable" for row in executions) else "completed",
         "blocked_reason": blocked_reason,
         "started_at": started, "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "plan": plan, "executions": executions,
+        "plan": plan, "executions": executions, "skill_execution_result": industrial_result,
         "summary": {
             "total": len(executions), "success": sum(item["status"] == "success" for item in executions),
             "blocked": sum(item["status"] == "blocked" for item in executions), "failed": 0,
@@ -384,7 +437,9 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "read": sum(item["activity"] == "read" for item in executions),
             "planned": sum(item["activity"] == "planned" for item in executions),
             "unavailable": sum(item["status"] == "unavailable" for item in executions),
-            "executed": 0,
+            "executed": sum(item["activity"] == "executed" for item in executions),
+            "executor_invocations": 1 if industrial_result else 0,
+            "capabilities_executed": len((industrial_result or {}).get("capability_executions", [])),
         },
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)

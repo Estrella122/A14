@@ -25,6 +25,9 @@ SECRET_KEY = os.getenv('PROCESSPILOT_SECRET_KEY', 'processpilot-local-developmen
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('PROCESSPILOT_DEBUG', '1').strip().lower() in {'1', 'true', 'yes', 'on'}
+AGENT_RUNTIME_MODE = os.getenv('AGENT_RUNTIME_MODE', 'hybrid').strip().lower()
+if AGENT_RUNTIME_MODE not in {'legacy', 'hybrid', 'skill_runtime'}:
+    AGENT_RUNTIME_MODE = 'hybrid'
 PROCESSPILOT_REQUIRE_AUTH = os.getenv('PROCESSPILOT_REQUIRE_AUTH', '0' if DEBUG else '1').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 ALLOWED_HOSTS = [item.strip() for item in os.getenv(

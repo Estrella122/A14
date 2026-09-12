@@ -63,7 +63,9 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
             timestamp = field_info["name"]
         if isinstance(row.get("confidence"), (int, float)):
             confidences.append(float(row["confidence"]))
-    trace = snapshot.get("runtime_trace", standard.get("runtime_trace", {}))
+    root_trace = snapshot.get("runtime_trace") or {}
+    standard_trace = standard.get("runtime_trace") or {}
+    trace = {**standard_trace, **root_trace}
     time_axis_type = scenario.get("time_axis_type")
     sample_count = int(standard.get("source_row_count") or cleaning.get("cleaned_row_count") or 0)
     quality = cleaning.get("overall_score")
@@ -74,9 +76,9 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
     return DataContext(
         run_id=snapshot.get("run_id") or run_id,
         project_context_scene=snapshot.get("project_scene"),
-        detected_scene=scenario.get("scenario_id") or trace.get("selected_scene"),
-        scene_confidence=trace.get("confidence"),
-        scene_status=trace.get("status"),
+        detected_scene=trace.get("final_scene") or trace.get("selected_scene") or trace.get("agent_scene") or trace.get("detected_scene") or scenario.get("scenario_id"),
+        scene_confidence=trace.get("scene_confidence", trace.get("confidence")),
+        scene_status=trace.get("scene_status", trace.get("status")),
         standardized_fields=fields,
         semantic_types=sorted(semantic_types),
         mapping_confidence=round(sum(confidences) / len(confidences), 3) if confidences else None,

@@ -1,0 +1,48 @@
+{
+  "name": "industrial-analysis",
+  "description": "对标准化工业数据执行画像、质量、趋势、异常、相关和稳定性分析。",
+  "triggers": ["工业数据", "能耗", "异常", "趋势", "时序", "相关", "稳定性", "设备健康", "工况", "瓶颈", "根因", "数据质量", "缺失"],
+  "capabilities": {
+    "DATA_PROFILING": {"path": "capabilities/data-profiling.md"},
+    "DATA_QUALITY_ANALYSIS": {"path": "capabilities/data-quality-analysis.md"},
+    "TREND_ANALYSIS": {"path": "capabilities/trend-analysis.md"},
+    "TIME_SERIES_ANALYSIS": {"path": "capabilities/time-series-analysis.md"},
+    "ANOMALY_DETECTION": {"path": "capabilities/anomaly-detection.md"},
+    "CORRELATION_ANALYSIS": {"path": "capabilities/correlation-analysis.md"},
+    "PROCESS_STABILITY": {"path": "capabilities/process-stability.md"},
+    "ENERGY_ANALYSIS": {"path": "capabilities/energy-analysis.md"},
+    "EQUIPMENT_HEALTH": {"path": "capabilities/equipment-health.md"},
+    "QUALITY_ANALYSIS": {"path": "capabilities/quality-analysis.md"},
+    "OPERATING_STATE": {"path": "capabilities/operating-state.md"},
+    "BOTTLENECK_ANALYSIS": {"path": "capabilities/bottleneck-analysis.md"},
+    "MISSING_DATA_ANALYSIS": {"path": "capabilities/missing-data-analysis.md"},
+    "ROOT_CAUSE_CANDIDATES": {"path": "capabilities/root-cause-candidates.md"}
+  },
+  "workflows": {
+    "generic-analysis": {"path": "workflows/generic-analysis.md", "when": "capability_selected"},
+    "unknown-scene": {"path": "workflows/unknown-scene.md", "when": "unknown_scene"},
+    "validation": {"path": "workflows/validation.md", "when": "validation_requested"}
+  },
+  "references": {
+    "industrial-semantics": {"path": "references/industrial-semantics.md"},
+    "evidence-rules": {"path": "references/evidence-rules.md"},
+    "confidence-rules": {"path": "references/confidence-rules.md"}
+  },
+  "scripts": {
+    "build-analysis-plan": {"path": "scripts/build_analysis_plan.py", "purpose": "ANALYSIS_PLAN"},
+    "execute-analysis": {"path": "executor.py", "purpose": "CAPABILITY_EXECUTOR"}
+  },
+  "input_requirements": ["objective", "data_or_dataset_ref"],
+  "output_contract": "contracts/analysis-result.schema.json",
+  "execution_policy": {
+    "minimum_samples": 30,
+    "anomaly_zscore_threshold": 3.0,
+    "max_preview_findings": 8,
+    "root_cause_requires_causal_evidence": true
+  },
+  "evidence_policy": {
+    "require_reproducible_statistics": true,
+    "correlation_is_not_causation": true,
+    "single_anomaly_is_not_equipment_failure": true
+  }
+}

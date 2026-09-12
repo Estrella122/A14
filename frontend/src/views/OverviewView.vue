@@ -6,11 +6,13 @@ import StatusPill from '../components/StatusPill.vue'
 import IndustrialTwinPanel from '../components/IndustrialTwinPanel.vue'
 import { formatNumber, requirementCoverage } from '../data/projectData'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
+import { buildSceneState } from '../composables/useSceneBinding'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate', 'notify'])
 
-const { latestRun, pipelineError: loadError } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun, pipelineError: loadError } = useLatestPipelineRun()
+const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 const result = computed(() => latestRun.value?.results ?? {})
 const standard = computed(() => result.value.standardization ?? {})
 const cleaning = computed(() => result.value.cleaning ?? {})
@@ -70,7 +72,7 @@ function runFullLoop() {
           <span>{{ latestRun?.run_id ?? project.code }}</span>
         </div>
         <h2 id="hero-title">让高价值动态样本，从海量稳态数据中自动浮现</h2>
-        <p v-if="latestRun">Agent 已对 {{ latestRun.original_name }} 完成 {{ latestRun.stages.length }} 个真实阶段，识别场景为 {{ standard.scenario?.scenario_name ?? '待确认' }}，全部结果来自任务 {{ latestRun.run_id }}。</p>
+        <p v-if="latestRun">Agent 已对 {{ latestRun.original_name }} 完成 {{ latestRun.stages.length }} 个真实阶段，识别场景为 {{ sceneState.data_scene.display_name }}，全部结果来自任务 {{ latestRun.run_id }}。</p>
         <p v-else>{{ loadError || '正在读取最近一次真实任务…' }}</p>
         <div class="hero-value-row">
           <div><span>必需字段覆盖率</span><strong>{{ ((standard.mapping?.required_coverage ?? 0) * 100).toFixed(0) }}%</strong></div>
@@ -92,7 +94,7 @@ function runFullLoop() {
       </div>
     </section>
 
-    <IndustrialTwinPanel :project="project" :latest-run="latestRun" />
+    <IndustrialTwinPanel :project="project" :latest-run="latestRun" :scene-state="sceneState" />
 
     <section class="metric-grid four-col" aria-label="核心项目指标">
       <article class="metric-card accent-cyan">

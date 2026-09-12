@@ -9,6 +9,8 @@ from core.skills import execute_skill_plan, plan_skills
 from .expert_qa import answer_expert_question
 from .pipeline import PipelineError, get_run, rerun_pipeline
 from core.skills.catalog import resolve_scene_family
+from django.conf import settings
+from core.skills.response_renderer import DeterministicResponseRenderer
 
 
 INTENTS = [
@@ -37,6 +39,20 @@ INTENT_LABELS = {
     "optimization": "闭环寻优",
     "review": "Agent评审",
 }
+
+TASK_INTENT_TO_CHAT_INTENT = {
+    "anomaly_detection": "diagnosis", "process_stability": "diagnosis", "trend_analysis": "cleaning",
+    "time_window_analysis": "selection", "relationship_analysis": "collinearity",
+    "missing_data_analysis": "cleaning", "energy_analysis": "overview", "quality_analysis": "overview",
+    "equipment_health": "diagnosis", "bottleneck_analysis": "diagnosis", "root_cause_analysis": "diagnosis",
+    "data_profiling": "overview",
+}
+
+
+def _intent_from_task_spec(task_spec: dict[str, Any]) -> tuple[str, float, list[str], list[str]]:
+    matched = task_spec.get("response_intents") or [task_spec.get("response_intent", "overview")]
+    key = task_spec.get("response_intent", "overview")
+    return key, float(task_spec.get("confidence", 0.7)), [], matched or [key]
 
 
 def _detect_intent(message: str, previous_intent: str | None = None, previous_intents: list[str] | None = None) -> tuple[str, float, list[str], list[str]]:
@@ -353,8 +369,14 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     if not snapshot:
         raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
 
-    intent, confidence, keywords, matched_intents = _detect_intent(message, previous_intent, previous_intents)
-    skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
+    previous_semantic = [name for name, chat_intent in TASK_INTENT_TO_CHAT_INTENT.items() if chat_intent in set(previous_intents or ([previous_intent] if previous_intent else []))]
+    previous_response_intents = list(previous_intents or ([previous_intent] if previous_intent else []))
+    conversation_context = {"previous_task_spec": {"semantic_intents": previous_semantic, "response_intent": previous_intent, "response_intents": previous_response_intents}} if previous_semantic or previous_response_intents else None
+    skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, conversation_context=conversation_context)
+    if getattr(settings, "AGENT_RUNTIME_MODE", "hybrid") == "legacy":
+        intent, confidence, keywords, matched_intents = _detect_intent(message, previous_intent, previous_intents)
+    else:
+        intent, confidence, keywords, matched_intents = _intent_from_task_spec(skill_plan["analysis"]["task_understanding"])
     if skill_plan["analysis"].get("needs_clarification") and previous_intent == intent and intent not in {"conversation", "capability", "clarification", "overview"} and not keywords:
         skill_plan = plan_skills("解释" + INTENT_LABELS[intent] + "结果", snapshot["run_id"], snapshot=snapshot)
         skill_plan["objective"] = message
@@ -385,7 +407,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         stop_after = "standardization"
     if needs_clarification and not mismatch:
         blocked_reason = "未能确定完整执行目标，请明确需要的技能；没有启动算法。"
-    if skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
+    if getattr(settings, "AGENT_RUNTIME_MODE", "hybrid") != "skill_runtime" and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
@@ -442,6 +464,9 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         {"time": now, "level": "WARN" if blocked_reason else "BEST" if executed else "INFO", "text": blocked_reason if blocked_reason else f"已执行至 {execution_scope} 并刷新证据" if executed else "本次为只读分析，未修改运行产物"},
     ]
     skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason)
+    skill_result = skill_run.get("skill_execution_result") or {}
+    if skill_result and not executed and not blocked_reason:
+        answer = DeterministicResponseRenderer().render(skill_plan["analysis"]["task_understanding"], skill_result)
     logs.extend({
         "time": now,
         "level": "SKILL",

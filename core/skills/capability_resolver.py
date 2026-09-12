@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import re
 from typing import Any
+
+from .task_understanding import understand_task
 
 
 CAPABILITY_DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -39,38 +40,6 @@ for _capability, _definition in CAPABILITY_DEFINITIONS.items():
 GENERIC_UNKNOWN_SAFE = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "TIME_SERIES_ANALYSIS", "ANOMALY_DETECTION", "CORRELATION_ANALYSIS", "MISSING_DATA_ANALYSIS"}
 
 
-def understand_task(message: str) -> dict[str, Any]:
-    text = str(message or "").strip()
-    normalized = text.lower()
-    knowledge = bool(re.search(r"(?:解释|介绍|说明).{0,16}(?:是什么|什么意思|概念|区别)|^(?:解释|介绍|说明)(?:一下)?(?:异常检测|趋势分析|相关性|因果)|(?:是什么|什么意思|有什么区别)[？?]?$", normalized))
-    artifact = bool(re.search(r"导出|下载|打包|产物", normalized))
-    execution = bool(re.search(r"(?:请|帮我|立即|重新|开始|继续)?(?:执行|重跑|训练|清洗|生成|提取|估计)|重新运行|运行(?:全流程|流水线|模型)", normalized)) and not knowledge
-    task_kind = "knowledge_explanation" if knowledge else "artifact_request" if artifact else "execute_pipeline" if execution else "data_analysis"
-    intents = []
-    patterns = (
-        ("locate_abnormal_behavior", r"异常|不正常|不一样|重点检查|波动.{0,6}(?:问题|异常)|哪里.{0,8}(?:问题|异常)"),
-        ("compare_normal_operation", r"正常运行|和平时|不一样|偏离正常"),
-        ("prioritize_time_windows", r"时间段|重点检查|哪些时候|哪段"),
-        ("inspect_variation", r"波动|变化|走势|趋势"),
-        ("analyze_relationships", r"相关|关联|因果|影响"),
-        ("inspect_missing_data", r"缺失|空值|完整性"),
-        ("analyze_energy", r"能耗|能源|电量|功率|燃料"),
-        ("analyze_quality", r"产品质量|合格率|硅含量|水分"),
-        ("assess_equipment", r"设备健康|故障|劣化|振动"),
-        ("find_bottleneck", r"瓶颈|产能|卡点"),
-        ("find_root_cause", r"根因|为什么|原因"),
-    )
-    for intent, pattern in patterns:
-        if re.search(pattern, normalized):
-            intents.append(intent)
-    if task_kind == "data_analysis" and not intents and re.search(r"数据|字段|样本|工况|设备|过程|分析", normalized):
-        intents.append("inspect_data")
-    explicit = [name for name, terms in CAPABILITY_TERMS.items() if any(term in normalized for term in terms)]
-    outputs = [name for name, pattern in (("time_windows", r"时间段|哪段"), ("explanation", r"解释|介绍|说明"), ("findings", r"找|看看|分析|检查")) if re.search(pattern, normalized)]
-    negations = re.findall(r"(?:不要|不必|无需|禁止|别)\s*([^，。；]+)", text)
-    return {"task_kind": task_kind, "semantic_intents": intents, "requested_outputs": outputs or ["findings"], "execution_requested": execution, "negations": negations, "constraints": {}, "explicit_capabilities": explicit}
-
-
 def evidence_flags(context: dict[str, Any]) -> set[str]:
     flags = set()
     if context.get("run_id") and context.get("sample_count", 0) > 0: flags.add("readable_data")
@@ -89,14 +58,22 @@ def evidence_flags(context: dict[str, Any]) -> set[str]:
 
 
 def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled_skill_ids=(), lexical_candidates=()) -> dict[str, Any]:
-    intents = set(task["semantic_intents"])
+    intent_aliases = {
+        "anomaly_detection": "locate_abnormal_behavior", "process_stability": "compare_normal_operation",
+        "trend_analysis": "inspect_variation", "time_window_analysis": "prioritize_time_windows",
+        "relationship_analysis": "analyze_relationships", "missing_data_analysis": "inspect_missing_data",
+        "energy_analysis": "analyze_energy", "quality_analysis": "analyze_quality",
+        "equipment_health": "assess_equipment", "bottleneck_analysis": "find_bottleneck",
+        "root_cause_analysis": "find_root_cause", "data_profiling": "inspect_data",
+    }
+    intents = {intent_aliases.get(item, item) for item in task["semantic_intents"]}
     flags = evidence_flags(context)
     recalled = {cap for sid in recalled_skill_ids for cap in SKILL_TO_CAPABILITIES.get(sid, ())}
     weak_recalled = set()
-    lexical = set(task["explicit_capabilities"])
+    lexical = set(task.get("requested_capabilities") or task.get("explicit_capabilities") or ())
     for item in lexical_candidates:
         weak_recalled.update(SKILL_TO_CAPABILITIES.get(item.get("skill_id"), ()))
-    if task["task_kind"] == "data_analysis" and intents & {"locate_abnormal_behavior", "compare_normal_operation", "prioritize_time_windows", "inspect_variation"}:
+    if task["task_kind"] in {"data_analysis", "execute_pipeline"} and intents & {"locate_abnormal_behavior", "compare_normal_operation", "prioritize_time_windows", "inspect_variation"}:
         recalled.update(("DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "ANOMALY_DETECTION"))
     candidates = recalled | weak_recalled | lexical
     if task["task_kind"] == "knowledge_explanation":

@@ -2,7 +2,9 @@ import { computed, onBeforeUnmount, onMounted, ref, toValue } from 'vue'
 import { getLatestPipelineRun } from '../api/pipeline'
 
 export function getRunScenarioId(run) {
-  return run?.results?.standardization?.scenario?.scenario_id ?? run?.scenario_request ?? null
+  const trace = run?.runtime_trace ?? {}
+  const standardTrace = run?.results?.standardization?.runtime_trace ?? {}
+  return trace.final_scene ?? standardTrace.final_scene ?? trace.selected_scene ?? standardTrace.selected_scene ?? trace.agent_scene ?? standardTrace.agent_scene ?? trace.detected_scene ?? standardTrace.detected_scene ?? run?.detected_scene ?? trace.scene_id ?? standardTrace.scene_id ?? run?.results?.standardization?.scenario?.scenario_id ?? null
 }
 
 export function useLatestPipelineRun(expectedScenarioId = null) {
@@ -13,8 +15,9 @@ export function useLatestPipelineRun(expectedScenarioId = null) {
   const latestRun = computed({
     get() {
       const run = rawLatestRun.value
+      if (!toValue(expectedScenarioId)) return run
       const expected = toValue(expectedScenarioId)
-      if (!run || !expected) return run
+      if (!run) return null
       const actual = getRunScenarioId(run)
       return !actual || actual === 'auto' || actual === expected ? run : null
     },
@@ -37,6 +40,10 @@ export function useLatestPipelineRun(expectedScenarioId = null) {
   }
 
   onMounted(() => {
+    try {
+      const cached = JSON.parse(window.localStorage.getItem('processpilot-latest-run') || 'null')
+      if (cached?.snapshot) rawLatestRun.value = cached.snapshot
+    } catch { /* The API refresh below remains authoritative. */ }
     refreshPipeline()
     window.addEventListener('processpilot:pipeline-updated', handleUpdate)
     window.addEventListener('storage', handleStorage)

@@ -4,7 +4,7 @@ import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { getAgentTrace } from '../api/agent'
 
-const props = defineProps({ runId: { type: String, default: '' }, running: { type: Boolean, default: false }, scenarioId: { type: String, default: 'blast_furnace' } })
+const props = defineProps({ runId: { type: String, default: '' }, running: { type: Boolean, default: false }, scenarioId: { type: String, default: 'blast_furnace' }, fallbackScenarioId: { type: String, default: '' } })
 const trace = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -46,6 +46,7 @@ function stateOf(node, index) {
 
 watch(() => props.runId, loadTrace, { immediate: true })
 watch(() => props.scenarioId, loadTrace)
+watch(() => props.fallbackScenarioId, loadTrace)
 watch(() => props.running, (value) => {
   window.clearInterval(stepTimer)
   if (value) {

@@ -19,7 +19,7 @@ class DiscoveredSkill:
     description: str
     root: Path
     entrypoint: Path
-    entrypoint_text: str
+    entrypoint_text: str | None
     manifest: dict[str, Any]
 
 
@@ -56,6 +56,16 @@ def discover_skills(roots: Iterable[Path]) -> tuple[list[DiscoveredSkill], dict[
             continue
         for entrypoint in sorted(root.glob("*/SKILL.md")):
             try:
+                sidecar = entrypoint.parent / "manifest.json"
+                if sidecar.is_file():
+                    manifest = json.loads(sidecar.read_text(encoding="utf-8"))
+                    name = manifest.get("name")
+                    if not name:
+                        continue
+                    discovered.append(DiscoveredSkill(name, manifest.get("description", ""), entrypoint.parent, entrypoint, None, manifest))
+                    continue
+                # Compatibility path for Skills that have not migrated to a
+                # lightweight sidecar manifest yet.
                 text = entrypoint.read_text(encoding="utf-8")
                 metadata = _frontmatter(text)
                 manifest_match = MANIFEST_PATTERN.search(text)
@@ -141,7 +151,24 @@ def load_skill_context(
             invoked_scripts.append(name)
         except (OSError, ValueError) as exc:
             errors.append({"resource": f"scripts/{name}", "error": type(exc).__name__})
-    parts = [{"name": "SKILL.md", "path": "SKILL.md", "content": selected_skill.entrypoint_text}, *capabilities, *workflows, *references]
+    entrypoint_text = selected_skill.entrypoint_text
+    if entrypoint_text is None:
+        try:
+            entrypoint_text = selected_skill.entrypoint.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append({"resource": "SKILL.md", "error": type(exc).__name__})
+            entrypoint_text = ""
+    effective_manifest = dict(selected_skill.manifest)
+    detailed_manifest_match = MANIFEST_PATTERN.search(entrypoint_text)
+    if detailed_manifest_match:
+        try:
+            detailed_manifest = json.loads(detailed_manifest_match.group(1))
+            for key in ("input_requirements", "output_contract", "execution_policy", "evidence_policy", "dependencies"):
+                if key in detailed_manifest:
+                    effective_manifest[key] = detailed_manifest[key]
+        except json.JSONDecodeError as exc:
+            errors.append({"resource": "SKILL.md/manifest", "error": type(exc).__name__})
+    parts = ([{"name": "SKILL.md", "path": "SKILL.md", "content": entrypoint_text}] if entrypoint_text else []) + capabilities + workflows + references
     context = "\n\n".join(f"[source: {item['path']}]\n{item['content']}" for item in parts)
     elapsed = round((perf_counter() - started) * 1000, 3)
     return {
@@ -149,6 +176,7 @@ def load_skill_context(
         "loaded_capabilities": [item["name"] for item in capabilities], "loaded_workflows": [item["name"] for item in workflows],
         "loaded_references": [item["name"] for item in references], "invoked_scripts": invoked_scripts,
         "sources": [item["path"] for item in parts], "context": context, "errors": errors, "candidates": candidates,
+        "manifest": effective_manifest,
         "performance": {**discovery, "resolve_and_load_ms": elapsed, "loaded_skill_count": 1, "capability_count": len(capabilities), "context_characters": len(context), "estimated_tokens": (len(context) + 3) // 4},
     }
 

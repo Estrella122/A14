@@ -7,8 +7,9 @@ import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import { getAgentSkills, sendAgentMessage } from '../api/agent'
-import { announcePipelineUpdate, artifactUrl, getLatestPipelineRun, uploadPipelineFile } from '../api/pipeline'
-import { getRunScenarioId } from '../composables/useLatestPipelineRun'
+import { announcePipelineUpdate, artifactUrl, uploadPipelineFile } from '../api/pipeline'
+import { buildSceneState } from '../composables/useSceneBinding'
+import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
@@ -29,7 +30,6 @@ const prompt = ref(savedChat?.prompt ?? '')
 const isRunning = ref(false)
 const runProgress = ref(0)
 const currentNode = ref(0)
-const latestRun = ref(null)
 const chatThread = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -41,7 +41,9 @@ const messages = ref(savedChat?.messages?.length ? savedChat.messages : [welcome
 const liveLogs = ref(savedChat?.liveLogs ?? [])
 const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
+const { latestRun } = useLatestPipelineRun()
 let runTimer
+const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 
 const promptTemplates = computed(() => ({
   blast_furnace: ['提取高炉高信噪比动态数据并评估铁水硅模型', '判断矿焦比和鼓风流量是否存在共线性', '以稳健性优先重新执行闭环寻优'],
@@ -220,7 +222,6 @@ async function handleCsv(event) {
 
 onMounted(async () => {
   await Promise.allSettled([
-    getLatestPipelineRun().then((result) => { latestRun.value = getRunScenarioId(result) === props.project.scenarioId ? result : null }),
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
   ])
   scrollToLatest()
@@ -350,7 +351,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
       </div>
     </section>
 
-    <AgentTracePanel :run-id="contextRunId === '尚无任务' ? '' : contextRunId" :running="isRunning" :scenario-id="project.scenarioId" />
+    <AgentTracePanel :run-id="contextRunId === '尚无任务' ? '' : contextRunId" :running="isRunning" :scenario-id="project.scenarioId" :fallback-scenario-id="sceneState.data_scene.id || props.project.scenarioId" />
 
     <section class="panel console-panel">
       <div class="console-header"><div><i class="console-dot red"></i><i class="console-dot amber"></i><i class="console-dot green"></i></div><strong>AGENT TRACE · {{ contextRunId }}</strong><button type="button" @click="logsNewestFirst = !logsNewestFirst">{{ logsNewestFirst ? '最新优先' : '时间顺序' }}</button></div>

@@ -34,10 +34,22 @@ description: 对调用方提供的标准字段、设备、工艺、质量与限�
     "capability-routing": {"path": "references/capability-routing.md", "when": "debug"}
   },
   "scripts": {
-    "build-analysis-plan": {"path": "scripts/build_analysis_plan.py", "purpose": "ANALYSIS_PLAN"}
+    "build-analysis-plan": {"path": "scripts/build_analysis_plan.py", "purpose": "ANALYSIS_PLAN"},
+    "execute-analysis": {"path": "executor.py", "purpose": "CAPABILITY_EXECUTOR"}
   },
   "input_requirements": ["objective", "data_or_dataset_ref"],
-  "output_contract": "contracts/analysis-result.schema.json"
+  "output_contract": "contracts/analysis-result.schema.json",
+  "execution_policy": {
+    "minimum_samples": 30,
+    "anomaly_zscore_threshold": 3.0,
+    "max_preview_findings": 8,
+    "root_cause_requires_causal_evidence": true
+  },
+  "evidence_policy": {
+    "require_reproducible_statistics": true,
+    "correlation_is_not_causation": true,
+    "single_anomaly_is_not_equipment_failure": true
+  }
 }
 -->
 
@@ -56,6 +68,8 @@ description: 对调用方提供的标准字段、设备、工艺、质量与限�
 任何分析前必须生成 `analysis_plan`。只选择 `requires` 已满足的 capability；请求了但证据不足的能力放入 `skipped_capabilities` 并给出原因。可调用 `scripts/build_analysis_plan.py` 生成确定性计划。
 
 单项请求只加载对应 `capabilities/` 文件。综合分析读取 [workflows/generic-analysis.md](workflows/generic-analysis.md) 后动态加载多个 capability；`scene=unknown` 读取 [workflows/unknown-scene.md](workflows/unknown-scene.md)；验证或审计读取 [workflows/validation.md](workflows/validation.md)。完整路由表见 [references/capability-routing.md](references/capability-routing.md)。
+
+Runtime 按 manifest 中的 `execution_policy` 调用 `executor.py`。`selected_capabilities` 必须执行，`blocked_capabilities` 与 `skipped_capabilities` 禁止进入 Executor；统计阈值、输出契约和证据约束均来自当前 Skill manifest。
 
 ## 输出边界
 

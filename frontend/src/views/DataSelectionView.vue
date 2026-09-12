@@ -9,7 +9,7 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
-const { latestRun } = useLatestPipelineRun(() => props.project.scenarioId)
+const { latestRun } = useLatestPipelineRun()
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? {})
 const seriesPreview = computed(() => liveCleaning.value.timeseries_preview ?? {})
 const seriesPoints = computed(() => (seriesPreview.value.points ?? []).filter((item) => Number.isFinite(Number(item.input)) && Number.isFinite(Number(item.output))))

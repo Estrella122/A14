@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
+import { sceneFromRun } from '../composables/useSceneBinding'
 
 const props = defineProps({
   module: { type: String, required: true },
@@ -64,6 +65,7 @@ function liveEvidence(run, module) {
     passed_items: result.mapping?.mappings?.filter((item) => item.status === 'matched').length ?? 0,
     total_items: result.mapping?.mappings?.length ?? 0,
     mapping_preview: result.mapping?.mappings ?? [],
+    data_scene: sceneFromRun(run),
   }
   if (module === 'cleaning') return {
     ...common,
@@ -120,7 +122,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
       <div v-if="module === 'standardization'" class="evidence-kpis">
         <div><span>验收结果</span><strong>{{ data.passed ? '通过' : '待复核' }}</strong></div>
         <div><span>验收条目</span><strong>{{ data.passed_items }} / {{ data.total_items }}</strong></div>
-        <div><span>模板能力</span><strong>3 场景</strong></div>
+        <div><span>当前数据场景</span><strong class="scene-value">{{ data.data_scene?.display_name ?? '待识别' }}</strong></div>
       </div>
       <div v-else-if="module === 'cleaning'" class="evidence-kpis">
         <div><span>质量评分</span><strong>{{ data.overall_score }}<small> / 100</small></strong></div>
@@ -159,6 +161,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:pipeline-updated'
 .evidence-kpis > div { padding: 13px 14px; border-radius: 10px; background: #f8fbff; border: 1px solid #e1ecfb; }
 .evidence-kpis span { display: block; color: #64748b; font-size: 12px; margin-bottom: 4px; }
 .evidence-kpis strong { color: #173b74; font-size: 20px; }
+.evidence-kpis .scene-value { font-size: 14px; line-height: 1.45; }
 .evidence-kpis small { font-size: 12px; color: #64748b; }
 .evidence-table-wrap { max-height: 205px; }
 .evidence-table td, .evidence-table th { white-space: nowrap; }

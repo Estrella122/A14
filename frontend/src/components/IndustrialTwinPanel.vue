@@ -3,11 +3,19 @@ import { computed, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { useEChart } from '../composables/useEChart'
+import { sceneStateFromProject, sceneFromRun } from '../composables/useSceneBinding'
 
-const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null } })
+const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null }, sceneState: { type: Object, default: null } })
 const selectedId = ref('')
 const sparkline = ref(null)
-const scenarioId = computed(() => props.project.scenarioId || 'blast_furnace')
+const dataSceneId = computed(() => {
+  const stateSceneId = props.sceneState?.data_scene?.id
+  if (stateSceneId) return stateSceneId
+  const runtimeScene = sceneFromRun(props.latestRun)
+  if (runtimeScene?.id) return runtimeScene.id
+  return sceneStateFromProject(props.project).id || 'blast_furnace'
+})
+const scenarioId = computed(() => dataSceneId.value || props.project.scenarioId || 'blast_furnace')
 const isBlastFurnace = computed(() => scenarioId.value === 'blast_furnace')
 const isDebutanizer = computed(() => scenarioId.value === 'debutanizer_column')
 const isDryer = computed(() => scenarioId.value === 'industrial_dryer')

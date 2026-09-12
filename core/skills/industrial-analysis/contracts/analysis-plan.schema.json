@@ -8,7 +8,9 @@
     "data_quality": {},
     "selected_capabilities": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
     "skipped_capabilities": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "blocked_capabilities": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "documentation_capabilities": {"type": "array", "items": {"type": "string"}},
     "result_contract": {"type": "object"}
   },
-  "$defs": {"decision": {"type": "object", "required": ["capability", "requires", "reason"], "properties": {"capability": {"type": "string"}, "requires": {"type": "array", "items": {"type": "string"}}, "reason": {"type": "string"}, "confidence": {"enum": ["low", "medium", "high"]}}}}
+  "$defs": {"decision": {"type": "object", "required": ["capability", "requires", "reason"], "properties": {"capability": {"type": "string"}, "requires": {"type": "object", "properties": {"all": {"type": "array", "items": {"type": "string"}}, "any": {"type": "array", "items": {"type": "string"}}}}, "reason": {"type": "string"}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}}}
 }

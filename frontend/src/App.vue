@@ -5,6 +5,7 @@ import StatusPill from './components/StatusPill.vue'
 import { navGroups, navItems, projects } from './data/projectData'
 import CommandPalette from './components/CommandPalette.vue'
 import { useLatestPipelineRun } from './composables/useLatestPipelineRun'
+import { buildSceneState } from './composables/useSceneBinding'
 
 const viewMap = {
   '/overview/': defineAsyncComponent(() => import('./views/OverviewView.vue')),
@@ -38,35 +39,14 @@ const activePath = ref(normalizePath(window.location.pathname))
 const currentProjectId = ref(getStoredProject())
 const currentProject = computed(() => projects.find((project) => project.id === currentProjectId.value) ?? projects[0])
 const { latestRun } = useLatestPipelineRun()
-const latestRunScenarioId = computed(() => latestRun.value?.results?.standardization?.scenario?.scenario_id ?? latestRun.value?.scenario_request ?? null)
-const activeLatestRun = computed(() => {
-  if (!latestRun.value) return null
-  if (!latestRunScenarioId.value || latestRunScenarioId.value === 'auto') return latestRun.value
-  return latestRunScenarioId.value === currentProject.value.scenarioId ? latestRun.value : null
-})
-const runtimeStandardization = computed(() => latestRun.value?.results?.standardization ?? {})
-const runtimeDictionary = computed(() => runtimeStandardization.value.dictionary ?? [])
-const runtimeInput = computed(() => runtimeDictionary.value.find((item) => item.role === 'manipulated') ?? runtimeDictionary.value.find((item) => item.role === 'disturbance'))
-const runtimeOutput = computed(() => runtimeDictionary.value.find((item) => item.role === 'controlled'))
-const effectiveProject = computed(() => {
-  if (!activeLatestRun.value) return currentProject.value
-  const scenario = runtimeStandardization.value.scenario?.scenario_name ?? '待识别工业场景'
-  return {
-    ...currentProject.value,
-    name: `${scenario}建模任务`,
-    shortName: scenario,
-    scene: scenario,
-    unit: activeLatestRun.value.original_name,
-    badge: '当前 CSV 真实运行',
-    mv: runtimeInput.value?.display_name ?? runtimeInput.value?.standard_name ?? '主要输入变量',
-    mvTag: runtimeInput.value?.standard_name ?? '—',
-    mvUnit: runtimeInput.value?.unit ?? '',
-    target: runtimeOutput.value?.display_name ?? runtimeOutput.value?.standard_name ?? '被控输出变量',
-    targetTag: runtimeOutput.value?.standard_name ?? '—',
-    targetUnit: runtimeOutput.value?.unit ?? '',
-    runId: activeLatestRun.value.run_id,
-  }
-})
+const sceneState = computed(() => buildSceneState(currentProject.value, latestRun.value))
+const dataSceneText = computed(() => sceneState.value.data_scene.display_name)
+const effectiveProject = computed(() => currentProject.value)
+const dataSceneStatus = computed(() => sceneState.value.data_scene_status_label)
+const isDataSceneMismatch = computed(() => sceneState.value.is_mismatch)
+const dataSceneMismatchText = computed(() => sceneState.value.mismatch_text)
+const activeLatestRun = computed(() => latestRun.value)
+const projectSceneText = computed(() => effectiveProject.value.scene ?? effectiveProject.value.shortName ?? effectiveProject.value.name)
 const activeItem = computed(() => navItems.find((item) => item.path === activePath.value) ?? navItems[0])
 const activeView = computed(() => viewMap[activePath.value] ?? viewMap['/overview/'])
 const toast = ref(null)
@@ -136,11 +116,6 @@ watch(currentProjectId, (value, previous) => {
   try { window.localStorage.setItem('processpilot-project', value) } catch { /* local storage is optional */ }
   if (previous) showToast({ tone: 'info', title: '项目上下文已切换', message: `${currentProject.value.name} 的数据、模型与运行记录已载入。` })
 })
-watch(latestRunScenarioId, (scenarioId) => {
-  const detectedProject = projects.find((project) => project.scenarioId === scenarioId)
-  if (detectedProject) currentProjectId.value = detectedProject.id
-})
-
 watch([activePath, effectiveProject], () => {
   document.title = `${activeItem.value.label} · ${effectiveProject.value.shortName} · ProcessPilot`
 }, { immediate: true })
@@ -209,7 +184,9 @@ onBeforeUnmount(() => {
               <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.shortName }} · {{ project.target }}</option>
             </select>
           </label>
-          <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>{{ activeLatestRun ? '当前CSV真实运行' : '等待CSV' }}</StatusPill>
+        <div v-if="isDataSceneMismatch" class="topbar-mismatch">场景提示：{{ dataSceneMismatchText }}</div>
+        <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>项目场景：{{ projectSceneText }}</StatusPill>
+        <StatusPill tone="brand">当前数据场景：{{ dataSceneText }} · {{ dataSceneStatus }}</StatusPill>
         </div>
         <div class="topbar-actions">
           <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
