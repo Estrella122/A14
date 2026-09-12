@@ -569,17 +569,25 @@ class RuntimeRetentionTests(SimpleTestCase):
             (runs / 'latest.json').write_text(json.dumps({'run_id': 'latest'}))
             old_skill = skills / 'skillrun_old.json'
             old_skill.write_text('{}')
+            old_skill_live = skills / 'skillrun_old.live.json'
+            old_skill_live.write_text('{}')
+            old_skill_events = skills / 'skillrun_old.events.jsonl'
+            old_skill_events.write_text('{}\n')
             old_timestamp = time.time() - 40 * 86400
             os.utime(runs / 'old', (old_timestamp, old_timestamp))
             os.utime(old_skill, (old_timestamp, old_timestamp))
+            os.utime(old_skill_live, (old_timestamp, old_timestamp))
+            os.utime(old_skill_events, (old_timestamp, old_timestamp))
 
             preview = prune_runtime(root, keep=1, days=30)
             self.assertEqual(preview['mode'], 'dry-run')
             self.assertTrue((runs / 'old').exists())
             applied = prune_runtime(root, keep=1, days=30, apply=True)
-            self.assertEqual(applied['candidate_count'], 2)
+            self.assertEqual(applied['candidate_count'], 4)
             self.assertFalse((runs / 'old').exists())
             self.assertFalse(old_skill.exists())
+            self.assertFalse(old_skill_live.exists())
+            self.assertFalse(old_skill_events.exists())
             self.assertTrue((runs / 'latest').exists())
 
 class OptimizationServiceTests(SimpleTestCase):

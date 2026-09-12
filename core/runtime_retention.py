@@ -31,14 +31,22 @@ def retention_candidates(base_dir: Path, keep: int = 100, days: int = 30, runtim
             candidates.append(path)
 
     skill_root = runtime / "agent_skill_runs"
-    skill_runs = sorted(
-        (path for path in skill_root.glob("skillrun_*.json") if path.is_file() and not path.is_symlink()),
-        key=lambda path: path.stat().st_mtime,
+    skill_groups: dict[str, list[Path]] = {}
+    if skill_root.is_dir():
+        for path in skill_root.glob("skillrun_*"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            run_id = path.name.split(".", 1)[0]
+            skill_groups.setdefault(run_id, []).append(path)
+    ordered_skill_groups = sorted(
+        skill_groups.values(),
+        key=lambda paths: max(path.stat().st_mtime for path in paths),
         reverse=True,
-    ) if skill_root.is_dir() else []
-    for index, path in enumerate(skill_runs):
-        if index >= keep or path.stat().st_mtime < cutoff:
-            candidates.append(path)
+    )
+    for index, paths in enumerate(ordered_skill_groups):
+        newest_mtime = max(path.stat().st_mtime for path in paths)
+        if index >= keep or newest_mtime < cutoff:
+            candidates.extend(paths)
     return candidates
 
 
