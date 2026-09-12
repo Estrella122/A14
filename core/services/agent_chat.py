@@ -394,6 +394,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     needs_clarification = skill_plan.get("analysis", {}).get("needs_clarification", False) and intent not in {"conversation", "capability", "clarification"}
     action_note = ""
     execution_scope = "evidence_only"
+    core_executor_steps = skill_plan.get("analysis", {}).get("execution_plan", {}).get("core", {}).get("steps", [])
     stop_after = None
     if skill_plan.get("analysis", {}).get("full_pipeline_requested") or "closed_loop_preprocessing_optimizer" in direct:
         stop_after = "report"
@@ -407,7 +408,9 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         stop_after = "standardization"
     if needs_clarification and not mismatch:
         blocked_reason = "未能确定完整执行目标，请明确需要的技能；没有启动算法。"
-    if getattr(settings, "AGENT_RUNTIME_MODE", "hybrid") != "skill_runtime" and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
+    runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
+    use_pipeline_fallback = runtime_mode == "legacy" or (runtime_mode == "hybrid" and not core_executor_steps)
+    if use_pipeline_fallback and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
@@ -417,6 +420,10 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         execution_scope = stop_after
         executed = True
         skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
+        skill_plan["analysis"]["execution_plan"]["fallback"] = {
+            "used": runtime_mode == "hybrid",
+            "reason": "selected capability has no migrated executor" if runtime_mode == "hybrid" else "legacy runtime mode",
+        }
 
     answer, cards, suggestions = _answer(snapshot, intent, message, matched_intents)
     # A broad multi-topic summary should retain its complete overview.  A single
@@ -465,7 +472,18 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     ]
     skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason)
     skill_result = skill_run.get("skill_execution_result") or {}
-    if skill_result and not executed and not blocked_reason:
+    core_results = skill_run.get("core_skill_execution_results", [])
+    core_success = [item for item in core_results if item.get("status") in {"success", "partial"}]
+    if core_results and not blocked_reason:
+        executed = bool(core_success)
+        execution_scope = "+".join(item.get("skill_id", "") for item in core_results)
+        if core_success:
+            action_note = ""
+            answer = "已按最小执行计划调用独立 Skill Executor。" + answer
+        elif any(item.get("status") == "blocked" for item in core_results):
+            action_note = "独立 Executor 因前置条件不足而阻断；没有回退到 synthetic data 或重跑 Pipeline。"
+            answer = action_note + answer
+    if skill_result and not core_results and not executed and not blocked_reason:
         answer = DeterministicResponseRenderer().render(skill_plan["analysis"]["task_understanding"], skill_result)
     logs.extend({
         "time": now,

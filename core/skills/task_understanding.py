@@ -94,13 +94,15 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         if re.search(r"你是谁|你能做什么|怎么用|有什么功能|能干什么", normalized):
             return TaskSpec("说明 Agent 能力和使用方式", "knowledge_explanation", requested_outputs=["explanation"], execution_mode="explain", confidence=.98, response_intent="capability", response_intents=["capability"])
         knowledge = bool(re.search(r"(?:解释|介绍|说明).{0,20}(?:是什么|什么意思|概念|区别)|^(?:解释|介绍|说明)(?:一下)?(?:异常检测|趋势分析|相关性|因果)|(?:异常检测|趋势分析|相关性|因果).{0,12}(?:是什么|什么意思|有什么区别)[？?]?$", normalized))
-        artifact = bool(re.search(r"导出|下载|打包|产物", normalized))
+        artifact = bool(re.search(r"导出|下载|打包|产物|生成.{0,8}报告", normalized))
         question = bool(re.search(r"为什么|为何|怎么|如何|是否|能否|什么|哪些|[？?吗呢]$", normalized))
         positive_text = re.sub(r"(?:不要|不必|无需|禁止|别)\s*[^，。；]+", "", normalized)
-        action = bool(re.search(r"^(?:(?:请|帮我|立即|重新|开始|继续|先|再|只|仅|把|将|对)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|估计|导出|下载|优化)", positive_text.strip(" ，,。")))
-        if question or re.search(r"按钮|字符串|这句话|原话|原文|引用|提示|如果|假如|假设|会不会|能不能|可不可以", normalized):
+        action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|估计|导出|下载|优化|建立|建一个)", positive_text.strip(" ，,。")))
+        action = action or bool(re.search(r"^(?:请|帮我|给我|用这份数据|把|将).{0,30}(?:清洗|训练|建立|建一个|生成|优化|导出|下载)", positive_text.strip(" ，,。")))
+        request_then_evaluate = bool(action and re.search(r"并.{0,12}(?:告诉|评估|比较|判断|验证)", normalized))
+        if (question and not request_then_evaluate) or re.search(r"按钮|字符串|这句话|原话|原文|引用|提示|如果|假如|假设|会不会|能不能|可不可以", normalized):
             action = False
-        execution_mode = "explain" if knowledge else "execute" if action and not question else "analyze"
+        execution_mode = "explain" if knowledge else "execute" if action else "analyze"
         task_kind = "knowledge_explanation" if knowledge else "artifact_request" if artifact else "execute_pipeline" if execution_mode == "execute" else "data_analysis"
         intents = [name for name, pattern in INTENT_PATTERNS.items() if re.search(pattern, normalized)]
         negations = re.findall(r"(?:不要|不必|无需|禁止|别)\s*([^，。；]+)", text)

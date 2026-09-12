@@ -215,13 +215,13 @@ class AgentChatTests(SimpleTestCase):
         snapshot['results']['modeling']['input_cols'] = ['gas_flow', 'air_flow']
         snapshot['results']['modeling']['selected_inputs'] = ['gas_flow_aligned']
         snapshot['artifacts'] = {'segments_csv': 'segments.csv', 'modeling_csv': 'modeling.csv', 'optimization_json': 'optimization.json'}
-        with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=snapshot):
+        with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=snapshot) as rerun:
             result = chat('提取高炉高信噪比动态数据，处理共线性后进行闭环寻优')
-        self.assertTrue(result['executed'])
+        rerun.assert_not_called()
         self.assertFalse(result['blocked'])
-        self.assertIn('共线性诊断从 2 个输入保留 1 个', result['answer'])
-        self.assertIn('第 2 轮验证得分最高', result['answer'])
-        self.assertEqual({item['key'] for item in result['deliverables']}, {'segments_csv', 'modeling_csv', 'optimization_json'})
+        optimization = next(item for item in result['skill_executions'] if item['skill_id'] == 'closed_loop_preprocessing_optimizer')
+        self.assertEqual(optimization['status'], 'blocked')
+        self.assertIn('synthetic', ''.join(optimization['warnings']))
 
     def test_compound_expert_question_uses_minimal_precise_skill_set(self):
         question = '当前模型测试集R²不错，如何证明没有时序数据泄漏和过拟合？请结合残差自相关、模型阶次和独立工况验证说明，不要直接给出可上线结论。'
@@ -412,9 +412,9 @@ class AgentChatTests(SimpleTestCase):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=rerun) as mocked:
             result = chat('按5秒重新执行数据清洗')
 
-        mocked.assert_called_once_with('run_test', resample_rule='5s', max_lag=60, stop_after='cleaning')
-        self.assertTrue(result['executed'])
-        self.assertEqual(result['run_id'], 'run_rerun')
+        mocked.assert_not_called()
+        self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'], ['standardization', 'cleaning'])
+        self.assertEqual(result['run_id'], 'run_test')
 
     @patch('core.agent_api.get_run')
     def test_agent_trace_exposes_auditable_execution_nodes(self, mocked_get_run):

@@ -19,6 +19,7 @@ from .skill_loader import default_skill_roots, load_skill_context
 from .skill_loader import discover_skills
 from .skill_resolver import resolve_skills
 from .executor import get_executor
+from .execution_plan import build_execution_plan
 
 
 RUNS_DIR = Path(settings.BASE_DIR) / "runtime" / "agent_skill_runs"
@@ -226,6 +227,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         task_understanding=task_understanding,
     )
     needs_clarification = bool(task_understanding.get("requires_clarification") or (task_understanding["task_kind"] not in {"knowledge_explanation", "conversation"} and not direct))
+    core_execution_plan = build_execution_plan(task_understanding, [skill.id for skill in SKILLS if skill.id in direct])
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
                      "needs_clarification": needs_clarification,
                      "unresolved_clauses": route["unresolved_clauses"],
@@ -242,6 +244,7 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                          "capabilities": capability_resolution["selected"],
                          "blocked": skill_resolution["blocked_capabilities"],
                          "skipped": skill_resolution["skipped_capabilities"],
+                         "core": core_execution_plan,
                      },
                      "skill_runtime": skill_runtime,
                      "agent_context": {
@@ -331,9 +334,11 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     skill_run_id = f"skillrun_{uuid4().hex[:12]}"
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
     industrial_result = None
+    core_results: list[dict[str, Any]] = []
+    core_result_by_skill: dict[str, dict[str, Any]] = {}
     capability_by_skill: dict[str, list[dict[str, Any]]] = {}
     analysis_plan = plan.get("analysis", {}).get("analysis_plan", {})
-    if runtime_mode != "legacy" and not blocked_reason and analysis_plan.get("selected_capabilities"):
+    if runtime_mode != "legacy" and not blocked_reason and analysis_plan.get("selected_capabilities") and plan.get("analysis", {}).get("task_understanding", {}).get("task_kind") == "data_analysis":
         data = snapshot.get("_dataframe")
         data_path = None
         if data is None:
@@ -361,6 +366,38 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             for decision, result in zip(analysis_plan.get("selected_capabilities", []), industrial_result["capability_executions"]):
                 for skill_id in decision.get("selected_skill_ids", []):
                     capability_by_skill.setdefault(skill_id, []).append(result)
+    core_plan = plan.get("analysis", {}).get("execution_plan", {}).get("core", {})
+    if runtime_mode != "legacy" and plan.get("mode") == "execute" and not blocked_reason:
+        state: dict[str, Any] = {}
+        parameters = {item.get("name"): item.get("value") for item in plan.get("analysis", {}).get("task_understanding", {}).get("parameters", [])}
+        parameters.update(plan.get("parameters", {}))
+        if "resample_seconds" in parameters:
+            parameters["resample_rule"] = f"{parameters['resample_seconds']}s"
+        for node in core_plan.get("steps", []):
+            executor = get_executor(node["executor"])
+            if executor is None:
+                result = {"status": "unavailable", "skill_id": node["executor"], "capabilities_executed": [],
+                          "facts": [], "findings": [], "hypotheses": [], "limitations": ["尚无独立 Executor。"],
+                          "metrics": {}, "artifacts": [], "evidence": [], "warnings": [], "execution_trace": [], "duration_ms": 0}
+            elif any(result.get("status") in {"failed", "blocked", "unavailable"} for result in core_results if result.get("skill_id") in node.get("dependencies", [])):
+                result = {"status": "blocked", "skill_id": node["executor"], "capabilities_executed": [],
+                          "facts": [], "findings": [], "hypotheses": [], "limitations": ["前置 Executor 未成功。"],
+                          "metrics": {}, "artifacts": [], "evidence": [], "warnings": [], "execution_trace": [], "duration_ms": 0}
+            else:
+                try:
+                    result = executor.execute(node["executor"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
+                                              plan.get("analysis", {}).get("data_context", {}),
+                                              {"snapshot": snapshot, "parameters": parameters},
+                                              {"state": state, "results": core_results, "output_dir": RUNS_DIR / skill_run_id,
+                                               "target_groups": core_plan.get("target_groups", [])})
+                except Exception as exc:
+                    result = {"status": "failed", "skill_id": node["executor"], "capabilities_executed": [],
+                              "facts": [], "findings": [], "hypotheses": [], "limitations": [str(exc)],
+                              "metrics": {}, "artifacts": [], "evidence": [], "warnings": [type(exc).__name__],
+                              "execution_trace": [{"step": node["executor"], "status": "failed"}], "duration_ms": 0}
+            core_results.append(result)
+            for selected_skill_id in node["skill_ids"]:
+                core_result_by_skill[selected_skill_id] = result
     executions = []
     for step in plan.get("steps", []):
         skill = SKILL_MAP[step["skill_id"]]
@@ -375,7 +412,15 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             continue
         status, activity = "success", "read"
         capability_executions = capability_by_skill.get(skill.id, [])
-        if capability_executions:
+        core_result = core_result_by_skill.get(skill.id)
+        if core_result:
+            status = core_result["status"]
+            activity = "executed" if status in {"success", "partial"} else status
+            metrics = core_result.get("metrics", {})
+            artifacts = core_result.get("artifacts", [])
+            evidence = core_result.get("evidence", [])
+            warnings = core_result.get("warnings", []) + core_result.get("limitations", [])
+        elif capability_executions:
             activity = "executed"
             metrics = {item["capability_id"]: item["metrics"] for item in capability_executions}
             artifacts = [industrial_result["artifact"]] if industrial_result and industrial_result.get("artifact") else []
@@ -412,12 +457,12 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "experiment_tracker_comparator": False,
             "execution_supervisor_replanner": False,
         }
-        if activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
+        if core_result is None and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"
             warnings = warnings or ["此能力未执行或缺少独立产物，不能标记完成"]
         executions.append({
             **step, "status": status, "activity": activity, "duration_ms": round((perf_counter() - tick) * 1000),
-            "execution_scope": "skill_executor" if activity == "executed" else "plan" if activity == "planned" else "pipeline_evidence_read",
+            "execution_scope": "skill_executor" if core_result is not None or activity == "executed" else "plan" if activity == "planned" else "pipeline_evidence_read",
             "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
             "metrics": metrics, "artifacts": artifacts, "evidence": evidence, "warnings": warnings,
             "suggested_next_skills": [item.id for item in SKILLS if skill.id in item.depends_on][:3],
@@ -425,21 +470,28 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     pipeline_run_id = snapshot.get("run_id")
     if not isinstance(pipeline_run_id, (str, int, float, bool, type(None))):
         pipeline_run_id = None
+    result_status = "blocked" if blocked_reason or any(item.get("status") == "blocked" for item in core_results) else "failed" if any(item.get("status") == "failed" for item in core_results) else "partial" if any(item.get("status") in {"partial", "unavailable"} for item in core_results) or any(row["status"] == "unavailable" for row in executions) else "completed"
+    fallback = plan.get("analysis", {}).get("execution_plan", {}).get("fallback", {})
     payload = {
-        "skill_run_id": skill_run_id, "pipeline_run_id": pipeline_run_id, "status": "blocked" if blocked_reason else "partial" if any(row["status"] == "unavailable" for row in executions) else "completed",
+        "skill_run_id": skill_run_id, "pipeline_run_id": pipeline_run_id, "status": result_status,
         "blocked_reason": blocked_reason,
         "started_at": started, "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-        "plan": plan, "executions": executions, "skill_execution_result": industrial_result,
+        "plan": plan, "executions": executions, "skill_execution_result": industrial_result, "core_skill_execution_results": core_results,
         "summary": {
-            "total": len(executions), "success": sum(item["status"] == "success" for item in executions),
-            "blocked": sum(item["status"] == "blocked" for item in executions), "failed": 0,
+            "total": len(executions), "success": sum(item.get("status") == "success" for item in core_results) + (1 if industrial_result else 0),
+            "blocked": sum(item.get("status") == "blocked" for item in core_results) + sum(item["status"] == "blocked" for item in executions if item["skill_id"] not in core_result_by_skill),
+            "failed": sum(item.get("status") == "failed" for item in core_results),
             "warnings": sum(bool(item["warnings"]) for item in executions),
             "read": sum(item["activity"] == "read" for item in executions),
             "planned": sum(item["activity"] == "planned" for item in executions),
             "unavailable": sum(item["status"] == "unavailable" for item in executions),
-            "executed": sum(item["activity"] == "executed" for item in executions),
-            "executor_invocations": 1 if industrial_result else 0,
-            "capabilities_executed": len((industrial_result or {}).get("capability_executions", [])),
+            "executed": sum(item.get("status") in {"success", "partial"} for item in core_results) + (1 if industrial_result else 0),
+            "selected": len(plan.get("direct_skill_ids", [])),
+            "skipped": sum(item["activity"] == "skipped" for item in executions),
+            "executor_invocations": (1 if industrial_result else 0) + sum(item.get("status") not in {"unavailable"} for item in core_results),
+            "capabilities_executed": len((industrial_result or {}).get("capability_executions", [])) + sum(len(item.get("capabilities_executed", [])) for item in core_results),
+            "fallback_used": bool(fallback.get("used")),
+            "fallback_reason": fallback.get("reason"),
         },
     }
     RUNS_DIR.mkdir(parents=True, exist_ok=True)

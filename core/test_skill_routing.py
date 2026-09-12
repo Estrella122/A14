@@ -110,8 +110,9 @@ class TrainedRoutingTests(SimpleTestCase):
     def test_model_training_does_not_trigger_optimizer(self):
         with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline',return_value=self.snapshot()) as rerun:
             result=chat('训练系统辨识模型')
-        self.assertEqual(rerun.call_args.kwargs['stop_after'],'modeling')
-        self.assertEqual(result['execution_scope'],'modeling')
+        rerun.assert_not_called()
+        self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'],['standardization','cleaning','modeling','review'])
+        self.assertNotIn('optimization',result['execution_scope'])
 
 
 class ContextAwareCapabilityResolutionTests(SimpleTestCase):

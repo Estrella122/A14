@@ -253,6 +253,7 @@ def _clean(
     primary_output: str | None = None,
     selection_window: int = 30,
     selection_step: int = 15,
+    include_segmentation: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "data_cleaning" / "src"
     with _module_path(module_dir):
@@ -300,9 +301,9 @@ def _clean(
                 frame = frame.loc[frame.index > list(parts.values())[-1].index[-1]]
             parts[label] = frame
             if label == "train":
-                train_segments = part_agent.select_dynamic_segments(frame)
+                train_segments = part_agent.select_dynamic_segments(frame) if include_segmentation else pd.DataFrame(columns=["level", "segment_score", "start_time", "end_time"])
                 report = part_agent.build_quality_report(aligned, frame, train_segments)
-                snr_evidence = part_agent.snr_evidence
+                snr_evidence = part_agent.snr_evidence if include_segmentation else []
         if requested_rule != resample_rule:
             report["logs"].append(f"请求周期{requested_rule}短于原始典型周期，实际采用{resample_rule}，避免插值制造输出真值。")
         report["config"] = {"requested_resample_rule": requested_rule, "resample_rule": resample_rule}
@@ -319,9 +320,9 @@ def _clean(
                  "partitions": {k: {"rows": len(v), "start": str(v.index[0]), "end": str(v.index[-1])} for k,v in parts.items()}}
         _write_json(split_dir / "split_manifest.json", split)
         report["snr"] = {"method": "robust_second_difference_white_noise_proxy", "threshold_db": 10,
-            "status": "estimated", "scope": "training_windows_only", "calibrated": False,
+            "status": "estimated" if include_segmentation else "not_requested", "scope": "training_windows_only", "calibrated": False,
             "assumptions": "局部平滑信号与加性白噪声；有色噪声、曲率及量化会影响估计",
-            "passed_windows": int((segments["level"] == "优质动态段").sum()),
+            "passed_windows": int((segments["level"] == "优质动态段").sum()) if include_segmentation else 0,
             "window_overlap": f"{selection_window}点窗口，{selection_step}点步长；重叠窗口不是独立激励次数"}
         report["split"] = split
 
@@ -883,6 +884,17 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
     report_path.write_text('\n'.join(lines), encoding='utf-8')
     return {'title': '工业时序数据智能优选与系统辨识分析报告', 'format': 'markdown',
             'path': _artifact(run_dir, report_path), 'summary': review['conclusion']}
+
+
+# Stable stage-service entry points. Pipeline orchestration and independent Skill
+# executors call these same implementations; the private names remain compatible
+# with existing integrations and tests during the incremental migration.
+run_standardization_stage = _standardize
+run_cleaning_stage = _clean
+run_modeling_stage = _model
+run_optimization_stage = _optimize_real_data
+run_review_stage = _review
+run_report_stage = _analysis_report
 
 
 def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:

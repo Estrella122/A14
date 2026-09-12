@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .industrial_executor import execute_analysis
+from .core_executors import (CleaningExecutor, ModelingExecutor, OptimizationExecutor,
+                             ReportExecutor, ReviewExecutor, StandardizationExecutor)
 
 
 class SkillExecutor(ABC):
@@ -22,8 +24,22 @@ class IndustrialAnalysisExecutor(SkillExecutor):
         return execute_analysis(task_spec, analysis_plan, data_context, data=inputs.get("data"), data_path=inputs.get("data_path"), runtime_context=runtime_context)
 
 
-EXECUTORS: dict[str, SkillExecutor] = {IndustrialAnalysisExecutor.skill_id: IndustrialAnalysisExecutor()}
+EXECUTOR_DESCRIPTORS = {
+    "industrial-analysis": {"status": "executable", "executor": IndustrialAnalysisExecutor()},
+    "standardization": {"status": "executable", "executor": StandardizationExecutor()},
+    "cleaning": {"status": "executable", "executor": CleaningExecutor()},
+    "segmentation": {"status": "reader_only", "executor": None},
+    "modeling": {"status": "executable", "executor": ModelingExecutor()},
+    "optimization": {"status": "executable", "executor": OptimizationExecutor()},
+    "review": {"status": "executable", "executor": ReviewExecutor()},
+    "report": {"status": "executable", "executor": ReportExecutor()},
+}
+EXECUTORS = {key: value["executor"] for key, value in EXECUTOR_DESCRIPTORS.items() if value["executor"] is not None}
 
 
 def get_executor(skill_id: str) -> SkillExecutor | None:
     return EXECUTORS.get(skill_id)
+
+
+def executor_status(skill_id: str) -> str:
+    return EXECUTOR_DESCRIPTORS.get(skill_id, {"status": "unavailable"})["status"]
