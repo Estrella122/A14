@@ -11,6 +11,8 @@ from typing import Any
 
 import pandas as pd
 
+from .artifacts import RuntimeArtifactResolver
+
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,14 +33,8 @@ def _result(skill_id: str, started: float, *, status: str = "success", capabilit
 
 
 def _artifact_path(snapshot: dict[str, Any], key: str) -> Path | None:
-    run_id = snapshot.get("run_id")
-    if not run_id or key not in snapshot.get("artifacts", {}):
-        return None
-    try:
-        from core.services.pipeline import resolve_artifact
-        return resolve_artifact(str(run_id), key)[0]
-    except Exception:
-        return None
+    ref = RuntimeArtifactResolver(snapshot).resolve(key)
+    return Path(ref.path) if ref else None
 
 
 class StandardizationExecutor:
@@ -90,9 +86,11 @@ class CleaningExecutor:
             primary_output=standard.get("scenario", {}).get("primary_output"),
             selection_window=standard.get("scenario", {}).get("selection_window_samples", 30),
             selection_step=standard.get("scenario", {}).get("selection_step_samples", 15),
-            include_segmentation="segmentation" in runtime_context.get("target_groups", []),
+            include_segmentation=False,
         )
-        state.update(modeling_data=modeling, segments=segments, cleaning=report, dictionary=dictionary, stage_run_dir=run_dir)
+        partitions = report.pop("_partitions", {"train": modeling})
+        state.update(train_data=partitions.get("train", modeling), validation_data=partitions.get("validation"), test_data=partitions.get("test"),
+                     modeling_data=modeling, segments=segments, cleaning=report, dictionary=dictionary, stage_run_dir=run_dir)
         before = int(report.get("source_row_count") or len(standardized))
         after = int(report.get("cleaned_row_count") or 0)
         audit = {"rows_before": before, "rows_after": after, "rows_changed": abs(before - after),
@@ -100,10 +98,59 @@ class CleaningExecutor:
                  "anomaly_rate": report.get("anomaly_rate", {})}
         return _result(skill_id, started, capabilities=capability_ids,
             facts=[f"清洗前 {before} 行，清洗后 {after} 行。"],
-            findings=[f"质量评分 {report.get('overall_score', 'unknown')}；候选动态段 {report.get('selected_segment_count', 0)} 个。"],
+            findings=[f"清洗质量评分 {report.get('overall_score', 'unknown')}；本节点没有执行动态分段。"],
             limitations=["窗口 SNR 是代理估计，不能视为仪表标定结果。"], metrics=audit,
             artifacts=list(report.get("artifacts", {}).values()), evidence=[audit],
             trace=[{"step": "DataCleaningSelectionAgent", "status": "completed", "rules": report.get("logs", [])}])
+
+
+class SegmentationExecutor:
+    skill_id = "segmentation"
+
+    def execute(self, skill_id, capability_ids, task_spec, data_context, inputs, runtime_context):
+        from core.services.pipeline import _read_csv
+        from core.services.segmentation_service import run_segmentation_stage
+        started = perf_counter()
+        snapshot, state = inputs["snapshot"], runtime_context["state"]
+        train = state.get("train_data")
+        resolver = RuntimeArtifactResolver(snapshot, state)
+        if train is None:
+            ref = resolver.resolve("train_csv", "cleaning")
+            if ref:
+                train = _read_csv(Path(ref.path))
+                if "timestamp" in train:
+                    train["timestamp"] = pd.to_datetime(train["timestamp"], errors="coerce")
+                    train = train.set_index("timestamp")
+        standard = state.get("standardization") or snapshot.get("results", {}).get("standardization", {})
+        dictionary = state.get("dictionary") or standard.get("dictionary", [])
+        cleaning = state.get("cleaning") or snapshot.get("results", {}).get("cleaning", {})
+        split = cleaning.get("split", {})
+        if train is None or not split:
+            missing = []
+            if train is None:
+                missing.append("cleaned_training_data")
+            if not split:
+                missing.append("frozen_split")
+            return _result(skill_id, started, status="blocked", limitations=["分段缺少前置条件：" + "、".join(missing)],
+                           evidence=[{"dependency": "cleaning", "status": "missing"}])
+        params = inputs.get("parameters", {})
+        output = Path(runtime_context["output_dir"]) / "segmentation"
+        result = run_segmentation_stage(
+            train, dictionary, output, upstream_run_id=str(snapshot.get("run_id") or "skill-runtime"),
+            split_version=split.get("protocol", ""), window_length=int(params.get("window_length", 30)),
+            step=int(params.get("step", 15)), primary_output=standard.get("scenario", {}).get("primary_output"),
+        )
+        if result["status"] != "success":
+            return _result(skill_id, started, status="blocked", limitations=result.get("limitations"), evidence=result.get("evidence"))
+        state.update(segmentation=result, segments=result.pop("_segments_frame"), modeling_data=result.pop("_modeling_frame"))
+        refs = [resolver.register(key, path, skill_id, str(runtime_context.get("execution_id", "segmentation"))).public()
+                for key, path in result["artifacts"].items()]
+        return _result(skill_id, started, capabilities=capability_ids,
+            facts=[f"只使用训练分区评估 {result['metrics']['candidate_count']} 个窗口。"],
+            findings=[f"选中 {result['metrics']['selected_count']} 个优质动态段、{result['metrics']['selected_row_count']} 行建模数据。"],
+            limitations=result["limitations"], metrics={**result["metrics"], "snr": result["snr_metrics"]},
+            artifacts=refs, evidence=result["evidence"], warnings=result["warnings"],
+            trace=[{"step": "run_segmentation_stage", "scope": "training_only", "validation_rows_read": 0, "test_rows_read": 0, "status": "completed"}])
 
 
 class ModelingExecutor:
@@ -132,8 +179,12 @@ class ModelingExecutor:
             from core.services.pipeline import RUNS_DIR
             run_dir = RUNS_DIR / str(snapshot["run_id"])
         params = inputs.get("parameters", {})
+        modeling_path = run_dir / "03_cleaning" / "modeling_dataset.csv"
+        if not modeling_path.exists() or state.get("modeling_data") is not None:
+            modeling_path.parent.mkdir(parents=True, exist_ok=True)
+            modeling.reset_index().to_csv(modeling_path, index=False, encoding="utf-8-sig")
         report = run_modeling_stage(modeling, dictionary, run_dir, params.get("max_lag", 60),
-                        primary_output=standard.get("scenario", {}).get("primary_output"))
+                        modeling_path=modeling_path, primary_output=standard.get("scenario", {}).get("primary_output"))
         state["modeling"] = report
         diagnostics = report.get("diagnostics", {}).get("test", {})
         baseline = {
@@ -156,15 +207,81 @@ class OptimizationExecutor:
     skill_id = "optimization"
 
     def execute(self, skill_id, capability_ids, task_spec, data_context, inputs, runtime_context):
+        from core.services.pipeline import run_optimization_stage
         started = perf_counter()
-        required = {"objective", "model", "bounds", "constraints", "real_data"}
-        request = inputs.get("optimization_request") or {}
-        missing = sorted(required - {key for key, value in request.items() if value not in (None, "", [], {})})
+        request = dict(inputs.get("optimization_request") or {})
+        state = runtime_context.get("state", {})
+        # A planner/snapshot must declare the optimization policy. Upstream
+        # executors may satisfy only artifact/data slots; they never invent an
+        # objective, bounds, constraints or search policy.
+        runtime_artifacts = {
+            "model_artifact": state.get("modeling"),
+            "frozen_split": state.get("cleaning", {}).get("split"),
+            "training_data": state.get("train_data"),
+            "validation_data": state.get("validation_data"),
+            "test_data": state.get("test_data"),
+            "segments": state.get("segments"),
+            "field_dictionary": state.get("dictionary"),
+            "primary_output": state.get("standardization", {}).get("scenario", {}).get("primary_output"),
+        }
+        for key, value in runtime_artifacts.items():
+            if request.get(key) is None and value is not None:
+                request[key] = value
+        required = {"objective", "model_artifact", "frozen_split", "training_data", "validation_data", "test_data",
+                    "segments", "decision_variables", "bounds", "constraints", "search_space", "optimization_policy", "field_dictionary", "real_data"}
+        def present(value):
+            if value is None or isinstance(value, str) and not value.strip():
+                return False
+            if isinstance(value, (list, dict, tuple, set)):
+                return bool(value)
+            if isinstance(value, pd.DataFrame):
+                return not value.empty
+            return True
+        missing = sorted(key for key in required if not present(request.get(key)))
         if missing:
             return _result(skill_id, started, status="blocked", limitations=["优化缺少前置条件：" + "、".join(missing)],
                            warnings=["没有生成或回退到 synthetic data。"], evidence=[{"synthetic_fallback": False, "missing": missing}])
-        return _result(skill_id, started, status="partial", limitations=["独立优化执行器尚未完成迁移；现有 Pipeline 仍保留真实数据候选搜索。"],
-                       warnings=["skill_runtime 模式不使用 Pipeline fallback。"])
+        if request["optimization_policy"].get("mode") != "real_data":
+            return _result(skill_id, started, status="blocked", limitations=["工业 Optimization Executor 只接受 real_data 模式。"],
+                           warnings=["synthetic benchmark 必须通过独立显式入口请求。"], evidence=[{"synthetic_fallback": False}])
+        def frame(value):
+            data = value.copy() if isinstance(value, pd.DataFrame) else pd.read_csv(value)
+            if "timestamp" in data.columns:
+                data["timestamp"] = pd.to_datetime(data["timestamp"], errors="raise")
+                data = data.set_index("timestamp")
+            return data
+        training, validation, test = frame(request["training_data"]), frame(request["validation_data"]), frame(request["test_data"])
+        segments = request["segments"] if isinstance(request["segments"], pd.DataFrame) else pd.DataFrame(request["segments"])
+        model = request["model_artifact"]
+        if isinstance(model, (str, Path)):
+            model = json.loads(Path(model).read_text(encoding="utf-8"))
+        run_dir = Path(runtime_context["output_dir"]) / "optimization"
+        clean_dir = run_dir / "03_cleaning"
+        clean_dir.mkdir(parents=True, exist_ok=True)
+        validation.reset_index().to_csv(clean_dir / "validation.csv", index=False)
+        test.reset_index().to_csv(clean_dir / "test.csv", index=False)
+        (clean_dir / "split_manifest.json").write_text(json.dumps(request["frozen_split"], ensure_ascii=False, indent=2), encoding="utf-8")
+        standard = runtime_context.get("state", {}).get("standardization") or inputs.get("snapshot", {}).get("results", {}).get("standardization", {})
+        report, best_model = run_optimization_stage(
+            training, segments, request["field_dictionary"], model, run_dir,
+            int(request.get("max_lag", 60)), primary_output=request.get("primary_output") or standard.get("scenario", {}).get("primary_output"),
+            model_outputs=[request.get("primary_output") or standard.get("scenario", {}).get("primary_output")],
+            objective=request["objective"], bounds=request["bounds"], constraints=request["constraints"],
+            search_space=request["search_space"], optimization_policy=request["optimization_policy"],
+        )
+        feasible = any(item.get("status") == "completed" and item.get("feasible") for item in report["iterations"])
+        status = "success" if feasible else "partial"
+        runtime_context.get("state", {}).update(optimization=report, modeling=best_model)
+        evidence = {"test_used_for_search": False, "test_evaluation_count": 1, "synthetic_fallback": False,
+                    "validation_target_hash": report.get("validation_target_hash"), "decision_variables": request["decision_variables"]}
+        return _result(skill_id, started, status=status, capabilities=capability_ids,
+            facts=[f"在真实训练/验证数据上评估 {len(report['iterations'])} 个候选，冻结赢家后测试一次。"],
+            findings=[f"最优候选为第 {report['best_round']} 轮，验证得分 {report['best_score']}。"],
+            limitations=[] if feasible else ["搜索完成，但没有候选满足显式可行性约束。"],
+            metrics={"objective": report["objective"], "best_candidate": report["best_parameters"], "validation_scores": report["best_metrics"],
+                     "test_score": best_model.get("metrics", {}).get("test", {}), "feasibility": feasible,
+                     "constraints": request["constraints"]}, artifacts=list(report.get("artifacts", {}).values()), evidence=[evidence],
+            warnings=[], trace=[{"step": "run_optimization_stage", **evidence, "status": status}])
 
 
 class ReviewExecutor:

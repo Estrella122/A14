@@ -98,7 +98,7 @@ class CausalModelingTests(SimpleTestCase):
             result = execute_skill_plan(plan, snapshot)
         snr = next(r for r in result['executions'] if r['skill_id']=='signal_noise_ratio_estimator')
         order = next(r for r in result['executions'] if r['skill_id']=='arx_structure_order_selector')
-        self.assertEqual(snr['status'], 'unavailable')
+        self.assertEqual(snr['status'], 'blocked')
         self.assertEqual(order['status'], 'unavailable')
         self.assertEqual(result['summary']['executed'], 0)
         self.assertFalse(any(r['activity']=='executed' for r in result['executions']))

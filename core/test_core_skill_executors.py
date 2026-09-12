@@ -86,8 +86,8 @@ class ExecutorRegistryTests(SimpleTestCase):
     def test_report_executor_available(self):
         self.assertIsNotNone(get_executor("report"))
 
-    def test_segmentation_is_reader_only(self):
-        self.assertEqual(EXECUTOR_DESCRIPTORS["segmentation"]["status"], "reader_only")
+    def test_segmentation_is_executable(self):
+        self.assertEqual(EXECUTOR_DESCRIPTORS["segmentation"]["status"], "executable")
 
     def test_previously_unavailable_product_skills_are_executable(self):
         for executor in ("simulation", "visualization", "experiment", "supervision"):

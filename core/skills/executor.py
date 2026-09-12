@@ -5,7 +5,7 @@ from typing import Any
 
 from .industrial_executor import execute_analysis
 from .core_executors import (CleaningExecutor, ExperimentExecutor, ModelingExecutor, OptimizationExecutor,
-                             ReportExecutor, ReviewExecutor, SimulationExecutor, StandardizationExecutor,
+                             ReportExecutor, ReviewExecutor, SegmentationExecutor, SimulationExecutor, StandardizationExecutor,
                              SupervisionExecutor, VisualizationExecutor)
 
 
@@ -29,7 +29,7 @@ EXECUTOR_DESCRIPTORS = {
     "industrial-analysis": {"status": "executable", "executor": IndustrialAnalysisExecutor()},
     "standardization": {"status": "executable", "executor": StandardizationExecutor()},
     "cleaning": {"status": "executable", "executor": CleaningExecutor()},
-    "segmentation": {"status": "reader_only", "executor": None},
+    "segmentation": {"status": "executable", "executor": SegmentationExecutor()},
     "modeling": {"status": "executable", "executor": ModelingExecutor()},
     "optimization": {"status": "executable", "executor": OptimizationExecutor()},
     "review": {"status": "executable", "executor": ReviewExecutor()},

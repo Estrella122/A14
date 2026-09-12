@@ -76,7 +76,7 @@ RESPONSE_INTENT_PATTERNS = (
     ("selection", r"动态段|动态数据|高信噪比|信噪比|筛选|优选|稳态|持续激励|可辨识"),
     ("lag", r"时滞|延迟|滞后|补偿|互相关"),
     ("collinearity", r"共线|vif|冗余|相关变量|降维"),
-    ("modeling", r"模型|辨识|arx|拟合|r2|r²|rmse|mae|预测|残差|白噪声|稳定性|极点|伯德|奈奎斯特|频响|过拟合|泛化|数据泄漏|阶次|aic|bic"),
+    ("modeling", r"模型|建模|辨识|arx|拟合|r2|r²|rmse|mae|预测|残差|白噪声|稳定性|极点|伯德|奈奎斯特|频响|过拟合|泛化|数据泄漏|阶次|aic|bic"),
     ("optimization", r"寻优|优化|候选|最佳策略|最优策略|最优轮次|轮次|闭环|目标函数|收敛|停止条件|局部最优"),
     ("review", r"评审|通过|报告|交付|缺陷|风险|上线|投运|联锁|审计|复现|迁移|模型漂移"),
     ("diagnosis", r"最大的问题|主要问题|有什么问题|哪里不好|问题是什么|薄弱|短板|瓶颈"),
@@ -97,7 +97,8 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         artifact = bool(re.search(r"导出|下载|打包|产物|生成.{0,8}报告", normalized))
         question = bool(re.search(r"为什么|为何|怎么|如何|是否|能否|什么|哪些|[？?吗呢]$", normalized))
         positive_text = re.sub(r"(?:不要|不必|无需|禁止|别)\s*[^，。；]+", "", normalized)
-        action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|估计|导出|下载|优化|建立|建一个)", positive_text.strip(" ，,。")))
+        action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|找|找出|筛选|估计|导出|下载|优化|建立|建模|建一个)", positive_text.strip(" ，,。")))
+        action = action or bool(re.search(r"^用.{0,30}(?:优化|训练|建模)", positive_text.strip(" ，,。")))
         action = action or bool(re.search(r"^(?:请|帮我|给我|用这份数据|把|将).{0,30}(?:清洗|训练|建立|建一个|生成|优化|导出|下载)", positive_text.strip(" ，,。")))
         request_then_evaluate = bool(action and re.search(r"并.{0,12}(?:告诉|评估|比较|判断|验证)", normalized))
         if (question and not request_then_evaluate) or re.search(r"按钮|字符串|这句话|原话|原文|引用|提示|如果|假如|假设|会不会|能不能|可不可以", normalized):
@@ -155,6 +156,10 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             objective=objective, task_kind=task_kind, semantic_intents=intents,
             requested_capabilities=list(dict.fromkeys(capabilities)), requested_outputs=outputs or ["findings"], entities=entity_rows, parameters=parameter_rows,
             execution_mode=execution_mode, negations=negations,
+            constraints={"use_existing_model": bool(re.search(r"已有模型|现有模型", normalized)),
+                         "use_existing_artifacts": bool(re.search(r"已有|现有|当前结果", normalized)),
+                         "selection_only": bool(re.search(r"适合建模.{0,8}(?:动态|工况|数据)?段", normalized)
+                                                and not re.search(r"重新建模|训练模型|建立模型", normalized))},
             requires_clarification=requires_clarification,
             clarification_reason="未识别出工业数据目标" if requires_clarification else None,
             confidence=round(min(0.92, 0.58 + 0.08 * len(intents) + 0.05 * bool(previous and follow_up)), 2),

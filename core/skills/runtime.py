@@ -340,7 +340,9 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     core_result_by_skill: dict[str, dict[str, Any]] = {}
     capability_by_skill: dict[str, list[dict[str, Any]]] = {}
     analysis_plan = plan.get("analysis", {}).get("analysis_plan", {})
-    if runtime_mode != "legacy" and not blocked_reason and analysis_plan.get("selected_capabilities") and plan.get("analysis", {}).get("task_understanding", {}).get("task_kind") == "data_analysis":
+    task_kind = plan.get("analysis", {}).get("task_understanding", {}).get("task_kind")
+    selected_runtime_skills = plan.get("analysis", {}).get("skill_resolution", {}).get("selected_skills", [])
+    if runtime_mode != "legacy" and not blocked_reason and analysis_plan.get("selected_capabilities") and "industrial-analysis" in selected_runtime_skills and task_kind not in {"knowledge_explanation", "artifact_request", "conversation"}:
         data = snapshot.get("_dataframe")
         data_path = None
         if data is None:
@@ -389,8 +391,10 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                 try:
                     result = executor.execute(node["executor"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
                                               plan.get("analysis", {}).get("data_context", {}),
-                                              {"snapshot": snapshot, "parameters": parameters},
+                                              {"snapshot": snapshot, "parameters": parameters,
+                                               "optimization_request": (snapshot.get("runtime_state", {}) or {}).get("optimization_contract") or snapshot.get("optimization_contract")},
                                               {"state": state, "results": core_results, "output_dir": RUNS_DIR / skill_run_id,
+                                               "execution_id": skill_run_id,
                                                "target_groups": core_plan.get("target_groups", [])})
                 except Exception as exc:
                     result = {"status": "failed", "skill_id": node["executor"], "capabilities_executed": [],

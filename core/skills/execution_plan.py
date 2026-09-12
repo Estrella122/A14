@@ -21,6 +21,8 @@ SKILL_GROUP = {skill_id: group for group, skill_ids in GROUP_SKILLS.items() for 
 
 def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str]) -> dict[str, Any]:
     """Build the minimal executor DAG. Catalog dependencies remain planning metadata."""
+    if task_spec.get("execution_mode") in {"analyze", "explain"}:
+        return {"version": "core-executor-dag-v1", "steps": [], "target_groups": []}
     direct = set(direct_skill_ids)
     response_intents = set(task_spec.get("response_intents") or [])
     requested_outputs = set(task_spec.get("requested_outputs") or [])
@@ -40,13 +42,18 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
         targets.add("review")
     if "artifact" in requested_outputs and ("report" in task_spec.get("objective", "") or "expert_report_writer" in direct):
         targets.add("report")
+    if task_spec.get("constraints", {}).get("use_existing_model") and "optimization" in targets:
+        targets.discard("modeling")
+        targets.discard("review")
+    if task_spec.get("constraints", {}).get("selection_only"):
+        targets.discard("modeling")
+        targets.discard("review")
 
     # Anomaly detection belongs to industrial-analysis. Lexical recall of the
     # cleaner must not silently turn it into a data mutation request.
     if "ANOMALY_DETECTION" in requested_capabilities and "MISSING_DATA_ANALYSIS" not in requested_capabilities:
         targets.discard("cleaning")
-        if direct <= {"missing_anomaly_cleaner"}:
-            targets.discard("standardization")
+        targets.discard("standardization")
 
     # Execution dependencies describe data production, not every Catalog/document dependency.
     if "cleaning" in targets:
@@ -59,7 +66,10 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
     order = ("simulation", "standardization", "cleaning", "segmentation", "modeling", "optimization", "review", "report", "visualization", "experiment", "supervision")
     dependencies = {
         "simulation": [], "standardization": [], "cleaning": ["standardization"], "segmentation": ["cleaning"],
-        "modeling": ["cleaning"], "optimization": [], "review": ["modeling"], "report": [],
+        "modeling": ["segmentation"] if "segmentation" in targets else ["cleaning"],
+        "optimization": ["modeling"] if "modeling" in targets else [],
+        "review": ["optimization"] if "optimization" in targets else ["modeling"],
+        "report": [],
         "visualization": [], "experiment": [], "supervision": [],
     }
     steps = []

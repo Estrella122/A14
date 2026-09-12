@@ -237,17 +237,8 @@ def _effective_max_lag(requested: int, scenario: dict[str, Any]) -> int:
 
 
 def _select_modeling_rows(cleaned: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
-    if segments.empty:
-        return cleaned
-    chosen = segments[segments["level"] == "优质动态段"].head(top_k) if strict_first else segments.iloc[0:0]
-    if chosen.empty:
-        chosen = segments.head(min(top_k, len(segments)))
-    pieces = []
-    for row in chosen.itertuples(index=False):
-        pieces.append(cleaned.loc[pd.Timestamp(row.start_time):pd.Timestamp(row.end_time)])
-    if not pieces:
-        return cleaned
-    return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index()
+    from .segmentation_service import select_modeling_rows
+    return select_modeling_rows(cleaned, segments, top_k, strict_first)
 
 
 def _clean(
@@ -307,9 +298,8 @@ def _clean(
                 frame = frame.loc[frame.index > list(parts.values())[-1].index[-1]]
             parts[label] = frame
             if label == "train":
-                train_segments = part_agent.select_dynamic_segments(frame) if include_segmentation else pd.DataFrame(columns=["level", "segment_score", "start_time", "end_time"])
+                train_segments = pd.DataFrame(columns=["level", "segment_score", "start_time", "end_time"])
                 report = part_agent.build_quality_report(aligned, frame, train_segments)
-                snr_evidence = part_agent.snr_evidence if include_segmentation else []
         if requested_rule != resample_rule:
             report["logs"].append(f"请求周期{requested_rule}短于原始典型周期，实际采用{resample_rule}，避免插值制造输出真值。")
         report["config"] = {"requested_resample_rule": requested_rule, "resample_rule": resample_rule}
@@ -317,7 +307,6 @@ def _clean(
         cleaned = pd.concat(parts.values()).sort_index()
         split_dir = run_dir / "03_cleaning"
         split_dir.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(snr_evidence).to_csv(split_dir / "snr_estimates.csv", index=False, encoding="utf-8-sig")
         for label, frame in parts.items():
             frame.reset_index().to_csv(split_dir / f"{label}.csv", index=False, encoding="utf-8-sig")
         seconds = pd.Timedelta(resample_rule).total_seconds()
@@ -326,11 +315,14 @@ def _clean(
                  "partitions": {k: {"rows": len(v), "start": str(v.index[0]), "end": str(v.index[-1])} for k,v in parts.items()}}
         _write_json(split_dir / "split_manifest.json", split)
         report["snr"] = {"method": "robust_second_difference_white_noise_proxy", "threshold_db": 10,
-            "status": "estimated" if include_segmentation else "not_requested", "scope": "training_windows_only", "calibrated": False,
+            "status": "not_requested", "scope": "training_windows_only", "calibrated": False,
             "assumptions": "局部平滑信号与加性白噪声；有色噪声、曲率及量化会影响估计",
-            "passed_windows": int((segments["level"] == "优质动态段").sum()) if include_segmentation else 0,
+            "passed_windows": 0,
             "window_overlap": f"{selection_window}点窗口，{selection_step}点步长；重叠窗口不是独立激励次数"}
         report["split"] = split
+        if not include_segmentation:
+            dimensions = report["dimension_scores"]
+            report["overall_score"] = round((.25 * dimensions["completeness"] + .20 * dimensions["validity"] + .15 * dimensions["smoothness"] + .10 * dimensions["consistency"]) / .70, 2)
 
     clean_dir = run_dir / "03_cleaning"
     cleaned_path = clean_dir / "cleaned.csv"
@@ -339,9 +331,24 @@ def _clean(
     report_path = clean_dir / "quality_report.json"
     clean_dir.mkdir(parents=True, exist_ok=True)
     cleaned.reset_index().to_csv(cleaned_path, index=False, encoding="utf-8-sig")
-    segments.to_csv(segments_path, index=False, encoding="utf-8-sig")
-    modeling = _select_modeling_rows(parts["train"], segments)
-    modeling.reset_index().to_csv(modeling_path, index=False, encoding="utf-8-sig")
+    modeling = parts["train"]
+    if include_segmentation:
+        from .segmentation_service import run_segmentation_stage
+        segmentation = run_segmentation_stage(
+            parts["train"], dictionary, clean_dir, split_version=split["protocol"],
+            window_length=selection_window, step=selection_step, primary_output=primary_output,
+            policy={"strict_score": 80, "snr_db": 10},
+        )
+        if segmentation["status"] != "success":
+            raise PipelineError("动态分段失败：" + "；".join(segmentation.get("limitations", [])))
+        segments = segmentation.pop("_segments_frame")
+        modeling = segmentation.pop("_modeling_frame")
+        dynamic_score = float(segments["segment_score"].head(5).mean()) if not segments.empty else 0
+        report["dimension_scores"]["dynamic"] = round(dynamic_score, 2)
+        dimensions = report["dimension_scores"]
+        report["overall_score"] = round(.25 * dimensions["completeness"] + .20 * dimensions["validity"] + .15 * dimensions["smoothness"] + .30 * dynamic_score + .10 * dimensions["consistency"], 2)
+        report["selected_segment_count"] = segmentation["metrics"]["selected_count"]
+        report["snr"].update(status="estimated", passed_windows=segmentation["metrics"]["selected_count"])
     output_field = next((item for item in dictionary if item.get("standard_name") == primary_output and item["standard_name"] in cleaned.columns), None)
     if output_field is None:
         output_field = next((item for item in dictionary if item.get("role") == "controlled" and item["standard_name"] in cleaned.columns), None)
@@ -382,18 +389,28 @@ def _clean(
         "variable_spec": spec,
         "cleaned_row_count": len(cleaned),
         "modeling_row_count": len(modeling),
-        "segments_preview": segments.head(MAX_PREVIEW_ROWS).to_dict("records"),
+        "segments_preview": segments.head(MAX_PREVIEW_ROWS).to_dict("records") if include_segmentation else [],
         "timeseries_preview": timeseries_preview,
     })
     _write_json(report_path, report)
     report["artifacts"] = {
-        "snr_csv": "03_cleaning/snr_estimates.csv",
         "split_json": "03_cleaning/split_manifest.json",
         "cleaned_csv": _artifact(run_dir, cleaned_path),
-        "segments_csv": _artifact(run_dir, segments_path),
-        "modeling_csv": _artifact(run_dir, modeling_path),
+        "train_csv": "03_cleaning/train.csv",
+        "validation_csv": "03_cleaning/validation.csv",
+        "test_csv": "03_cleaning/test.csv",
         "report_json": _artifact(run_dir, report_path),
     }
+    if include_segmentation:
+        report["artifacts"].update({
+            "snr_csv": _artifact(run_dir, clean_dir / "snr_estimates.csv"),
+            "segments_csv": _artifact(run_dir, segments_path),
+            "segment_scores_csv": _artifact(run_dir, clean_dir / "segment_scores.csv"),
+            "modeling_csv": _artifact(run_dir, modeling_path),
+            "segmentation_report_json": _artifact(run_dir, clean_dir / "segmentation_report.json"),
+        })
+    else:
+        report["_partitions"] = parts
     return modeling, segments, report
 
 
@@ -510,20 +527,31 @@ def _optimize_real_data(
     max_lag: int,
     primary_output: str | None = None,
     model_outputs: list[str] | None = None,
+    objective: str | None = None,
+    bounds: dict[str, Any] | None = None,
+    constraints: dict[str, Any] | None = None,
+    search_space: dict[str, Any] | None = None,
+    optimization_policy: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    exploration_candidates = [
+    exploration_candidates = list((optimization_policy or {}).get("candidates") or [
         {"round": 1, "top_k": 5, "max_lag": max_lag, "label": "基线策略"},
         {"round": 2, "top_k": 3, "max_lag": max(10, max_lag // 2), "label": "精炼动态段"},
         {"round": 3, "top_k": 8, "max_lag": min(600, max_lag + max(10, max_lag // 2)), "label": "扩大覆盖与时滞"},
         {"round": 4, "top_k": 6, "max_lag": max(10, round(max_lag * 0.75)), "label": "中等覆盖短时滞"},
         {"round": 5, "top_k": 10, "max_lag": min(600, max_lag * 2), "label": "高覆盖长时滞"},
         {"round": 6, "top_k": 4, "max_lag": min(600, max(10, round(max_lag * 1.25))), "label": "低覆盖稳健辨识"},
-    ]
+    ])
     iterations = []
     best_model = baseline_model
 
     def evaluate(candidate: dict[str, Any]) -> dict[str, Any]:
         try:
+            for variable in ("top_k", "max_lag"):
+                rule = (bounds or {}).get(variable)
+                if rule and not float(rule["min"]) <= float(candidate[variable]) <= float(rule["max"]):
+                    iteration = {**candidate, "status": "infeasible", "error": f"{variable} 超出显式边界", "score": -1.0, "feasible": False}
+                    iterations.append(iteration)
+                    return iteration
             # Every round uses exactly its declared selection, including round 1.
             data = _select_modeling_rows(cleaned, segments, top_k=candidate["top_k"], strict_first=True)
             candidate_dir = run_dir / "05_optimization" / f"candidate_{candidate['round']:02d}"
@@ -550,6 +578,7 @@ def _optimize_real_data(
                 "rmse": float(test.get("rmse") or 0),
                 "mae": float(test.get("mae") or 0),
                 "score": _candidate_score(test, coverage),
+                "feasible": float(test.get("r2") or 0) >= float((constraints or {}).get("min_r2", 0)) and coverage >= float((constraints or {}).get("min_coverage", .05)),
                 "model": model,
             }
         except Exception as exc:
@@ -595,7 +624,7 @@ def _optimize_real_data(
                 best_so_far = iteration
             improvement = float(best_so_far["score"]) - previous_best_score
             no_improvement_rounds = 0 if improvement >= min_improvement else no_improvement_rounds + 1
-            feasible = float(best_so_far.get("r2") or 0) >= 0 and float(best_so_far.get("coverage") or 0) >= 0.05
+            feasible = bool(best_so_far.get("feasible"))
             if round_number >= min_rounds and feasible and no_improvement_rounds >= patience:
                 early_stopped = True
                 stop_reason = (
@@ -610,9 +639,10 @@ def _optimize_real_data(
         _write_json(run_dir / "05_optimization/optimization_report.json", {"status": "failed", "iterations": iterations})
         reasons = list(dict.fromkeys(item.get("error", "未知错误") for item in iterations))
         raise PipelineError("所有候选均失败：" + "；".join(reasons[:3]))
-    best = max(completed, key=lambda item: item["score"])
+    feasible_candidates = [item for item in completed if item.get("feasible")]
+    best = max(feasible_candidates or completed, key=lambda item: item["score"])
     if not stop_reason:
-        best_feasible = float(best.get("r2") or 0) >= 0 and float(best.get("coverage") or 0) >= 0.05
+        best_feasible = bool(best.get("feasible"))
         stop_reason = f"达到最大轮次{max_rounds}轮；{'已获得可行候选' if best_feasible else '最优候选仍未通过R²与覆盖率门槛，建议返回数据优选或辨识阶段'}"
     hashes = {item["evaluation_target_hash"] for item in completed}
     if len(hashes) != 1:
@@ -682,6 +712,9 @@ def _optimize_real_data(
         "coverage_denominator": "training_partition_rows",
         "validation_target_hash": best["evaluation_target_hash"],
         "test_evaluations": 1,
+        "test_used_for_search": False,
+        "test_evaluation_count": 1,
+        "synthetic_fallback": False,
         "best_training_rows": best["row_count"],
         "search_strategy": "前6轮覆盖动态段数量与时滞空间，第7轮起围绕当前最优反馈精搜；最少8轮、最多16轮，自适应收敛",
         "stopping": {
@@ -694,7 +727,11 @@ def _optimize_real_data(
             "early_stopped": early_stopped,
             "stop_reason": stop_reason,
         },
-        "objective": "0.68×R²得分 + 0.17×误差得分 + 0.15×数据覆盖率",
+        "objective": objective or "0.68×R²得分 + 0.17×误差得分 + 0.15×数据覆盖率",
+        "bounds": bounds or {},
+        "constraints": constraints or {},
+        "search_space": search_space or {},
+        "optimization_policy": optimization_policy or {"mode": "legacy_pipeline_default"},
         "iterations": public_iterations,
         "best_round": best["round"],
         "best_label": best["label"],
