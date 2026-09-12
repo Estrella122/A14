@@ -1,4 +1,4 @@
-import { apiBaseUrl, apiRequest, secureFetch } from './client'
+import { apiBaseUrl, apiRequest, parseApiResponse, secureFetch } from './client'
 
 export async function uploadPipelineFile(file, options = {}) {
   const form = new FormData()
@@ -10,8 +10,7 @@ export async function uploadPipelineFile(file, options = {}) {
   form.append('max_lag', String(options.maxLag ?? 60))
   form.append('overrides', JSON.stringify(options.overrides ?? {}))
   const response = await secureFetch('/pipeline/runs/', { method: 'POST', body: form })
-  const payload = await response.json()
-  if (!response.ok || payload?.ok === false) throw new Error(payload?.message || `运行失败（HTTP ${response.status}）`)
+  const payload = await parseApiResponse(response)
   return payload.data
 }
 

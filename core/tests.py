@@ -518,6 +518,17 @@ class SecurityApiTests(TestCase):
         )
         self.assertEqual(accepted.status_code, 201, accepted.content)
 
+    def test_loopback_vite_origin_is_trusted_with_valid_csrf_token(self):
+        client = Client(enforce_csrf_checks=True)
+        session = client.get('/api/security/session/')
+        token = session.cookies['csrftoken'].value
+        accepted = client.post(
+            '/api/agent/plans/', data=json.dumps({'message': '分析数据'}),
+            content_type='application/json', HTTP_X_CSRFTOKEN=token,
+            HTTP_ORIGIN='http://127.0.0.1:5176', HTTP_REFERER='http://127.0.0.1:5176/agent-review/',
+        )
+        self.assertEqual(accepted.status_code, 201, accepted.content)
+
     @override_settings(PROCESSPILOT_REQUIRE_AUTH=True)
     def test_production_api_requires_authenticated_session(self):
         client = Client()

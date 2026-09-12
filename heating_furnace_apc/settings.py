@@ -153,6 +153,16 @@ CSRF_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_SAMESITE = 'Lax'
+# Vite uses a same-origin /api proxy, but browsers preserve the frontend Origin
+# header on unsafe requests. Trust loopback Vite origins during local development;
+# deployments must provide their explicit origins through the environment.
+_local_vite_ports = range(5173, 5181)
+_default_csrf_origins = ','.join(
+    f'http://{host}:{port}' for host in ('127.0.0.1', 'localhost') for port in _local_vite_ports
+) if DEBUG else ''
+CSRF_TRUSTED_ORIGINS = [item.strip() for item in os.getenv(
+    'PROCESSPILOT_CSRF_TRUSTED_ORIGINS', _default_csrf_origins,
+).split(',') if item.strip()]
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 SECURE_HSTS_SECONDS = int(os.getenv('PROCESSPILOT_HSTS_SECONDS', '0' if DEBUG else '31536000'))
