@@ -8,11 +8,13 @@ import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
-import { getAgentSkillRun, getAgentSkills, sendAgentMessage } from '../api/agent'
+import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
+import { getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildRuntimeObservability } from '../utils/runtimeObservability'
+import { applyRuntimeEvents, mergeRuntimeEvents } from '../utils/runtimeEvents'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
@@ -31,8 +33,8 @@ const welcomeMessage = { id: 1, role: 'agent', text: `你好，我已进入 ${pr
 
 const prompt = ref(savedChat?.prompt ?? '')
 const isRunning = ref(false)
-const runProgress = ref(0)
-const currentNode = ref(0)
+const liveProgress = ref(null)
+const activeLiveRun = ref(savedChat?.activeLiveRun ?? null)
 const chatThread = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
@@ -48,7 +50,7 @@ const liveLogs = ref(savedChat?.liveLogs ?? [])
 const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
 const { latestRun } = useLatestPipelineRun()
-let runTimer
+let pollController
 const activeRun = computed(() => selectedRun.value ?? latestRun.value)
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
@@ -90,6 +92,7 @@ watch([messages, responseState, runtimeHistory, liveLogs, prompt], () => {
       runtimeHistory: runtimeHistory.value,
       selectedRunId: selectedRun.value?.run_id ?? activeRun.value?.run_id ?? null,
       liveLogs: liveLogs.value.slice(0, 20),
+      activeLiveRun: activeLiveRun.value,
     }))
   } catch { /* Conversation persistence is best effort. */ }
 }, { deep: true })
@@ -129,51 +132,76 @@ async function scrollToLatest() {
   if (chatThread.value) chatThread.value.scrollTop = chatThread.value.scrollHeight
 }
 
+async function pollLiveRun(live, timelineMessage) {
+  isRunning.value = true
+  activeLiveRun.value = live
+  let after = Number(live.after ?? 0)
+  pollController?.abort()
+  pollController = new AbortController()
+  while (true) {
+    const payload = await getAgentSkillEvents(live.skill_run_id, after, { signal: pollController.signal })
+    timelineMessage.events = mergeRuntimeEvents(timelineMessage.events, payload.events ?? [])
+    after = Number(payload.next_sequence ?? after)
+    timelineMessage.status = payload.status
+    timelineMessage.metrics = payload.metrics ?? {}
+    activeLiveRun.value = { ...live, after, status: payload.status }
+    liveProgress.value = [...timelineMessage.events].reverse().find((event) => Number.isFinite(event.progress))?.progress ?? null
+    responseState.value = {
+      ...(responseState.value ?? { run_id: live.run_id }),
+      skill_run_id: live.skill_run_id,
+      runtime_observability: applyRuntimeEvents(responseState.value?.runtime_observability, payload.events ?? []),
+    }
+    await scrollToLatest()
+    if (payload.status === 'completed') return payload.result
+    if (payload.status === 'failed') throw new Error(payload.error || 'Agent 执行失败')
+    await new Promise((resolve) => window.setTimeout(resolve, 450))
+  }
+}
+
+function appendAgentResult(result, prefix = '') {
+  responseState.value = result
+  rememberRuntime(result)
+  liveLogs.value = [...(result.logs ?? []), ...liveLogs.value].slice(0, 18)
+  messages.value.push({
+    id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
+    skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity })) ?? [],
+    skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
+    runId: result.run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  })
+  if (result.snapshot) {
+    latestRun.value = result.snapshot
+    selectedRun.value = result.snapshot
+    announcePipelineUpdate(result.snapshot)
+  }
+}
+
+async function executeLiveMessage(userText, runId, prefix = '') {
+  const started = await startAgentLiveRun(userText, runId, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [])
+  const timelineMessage = { id: Date.now() + 1, role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+  messages.value.push(timelineMessage)
+  const result = await pollLiveRun(started, timelineMessage)
+  appendAgentResult(result, prefix)
+  activeLiveRun.value = null
+  liveProgress.value = null
+  return result
+}
+
 async function runWorkflow() {
   if (!prompt.value.trim() || isRunning.value) return
   const userText = prompt.value.trim()
   messages.value.push({ id: Date.now(), role: 'user', text: userText, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
   prompt.value = ''
   isRunning.value = true
-  runProgress.value = 8
-  currentNode.value = 0
   await scrollToLatest()
-  emit('notify', { tone: 'info', title: 'Agent 正在回答', message: '正在理解问题并读取相关任务证据。' })
-  clearInterval(runTimer)
-  runTimer = window.setInterval(() => {
-    runProgress.value = Math.min(88, runProgress.value + 8)
-    currentNode.value = Math.min(planNodes.value.length - 1, Math.floor((runProgress.value / 100) * planNodes.value.length))
-  }, 240)
+  emit('notify', { tone: 'info', title: 'Agent 正在执行', message: '实时状态将直接来自后端 Runtime。' })
   try {
-    const result = await sendAgentMessage(userText, activeRun.value?.run_id, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [])
-    responseState.value = result
-    rememberRuntime(result)
-    liveLogs.value = [...result.logs, ...liveLogs.value].slice(0, 12)
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'agent',
-      text: result.answer,
-      cards: result.cards,
-      skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity })) ?? [],
-      skillRunId: result.skill_run_id,
-      skillSummary: result.skill_summary,
-      deliverables: result.deliverables ?? [],
-      runId: result.run_id,
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    })
-    if (result.snapshot) {
-      latestRun.value = result.snapshot
-      selectedRun.value = result.snapshot
-      announcePipelineUpdate(result.snapshot)
-    }
-    runProgress.value = 100
-    currentNode.value = Math.max(planNodes.value.length - 1, 0)
-    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : result.executed ? 'Agent 已执行并刷新任务' : 'Agent 分析完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key} · 任务理解置信度 ${(result.intent.confidence * 100).toFixed(0)}%` })
+    const result = await executeLiveMessage(userText, activeRun.value?.run_id)
+    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : 'Agent 执行完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key}` })
   } catch (error) {
-    messages.value.push({ id: Date.now() + 1, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    activeLiveRun.value = null
+    messages.value.push({ id: Date.now() + 2, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'Agent 请求失败', message: error.message })
   } finally {
-    clearInterval(runTimer)
     isRunning.value = false
     await scrollToLatest()
   }
@@ -201,12 +229,9 @@ async function handleCsv(event) {
   if (!file || uploading.value) return
   uploading.value = true
   isRunning.value = true
-  runProgress.value = 5
   const uploadMessage = { id: Date.now(), role: 'user', text: `上传并分析CSV：${file.name}`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
   messages.value.push(uploadMessage)
   await scrollToLatest()
-  clearInterval(runTimer)
-  runTimer = window.setInterval(() => { runProgress.value = Math.min(90, runProgress.value + 5) }, 300)
   try {
     const snapshot = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     // A successfully created CSV run starts a fresh evidence conversation.
@@ -218,32 +243,16 @@ async function handleCsv(event) {
     latestRun.value = snapshot
     selectedRun.value = snapshot
     announcePipelineUpdate(snapshot)
-    const result = await sendAgentMessage('总结刚刚上传的CSV，说明数据质量、模型效果、评审结论和报告产物', snapshot.run_id)
-    responseState.value = result
-    rememberRuntime(result)
+    const result = await executeLiveMessage('总结刚刚上传的CSV，说明数据质量、模型效果、评审结论和报告产物', snapshot.run_id, `已接收 ${file.name}，并完成全部子Agent调度。`)
     liveLogs.value = [
-      ...result.logs,
+      ...(result.logs ?? []),
       ...snapshot.stages.map((stage) => ({ time: stage.finished_at ?? snapshot.updated_at, level: stage.status === 'completed' ? 'TOOL' : 'WARN', text: `${stage.label}：${stage.message}` })),
     ].slice(0, 18)
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'agent',
-      text: `已接收 ${file.name}，并完成全部子Agent调度。${result.answer} 分析报告已生成，可在对话框下方下载。`,
-      cards: result.cards,
-      skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity })) ?? [],
-      skillRunId: result.skill_run_id,
-      skillSummary: result.skill_summary,
-      deliverables: result.deliverables ?? [],
-      runId: result.run_id,
-      time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-    })
-    runProgress.value = 100
     emit('notify', { tone: 'success', title: 'CSV全流程分析完成', message: `任务 ${snapshot.run_id} 已生成分析报告和全部中间产物。` })
   } catch (error) {
     messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'CSV分析失败', message: error.message })
   } finally {
-    clearInterval(runTimer)
     uploading.value = false
     isRunning.value = false
     await scrollToLatest()
@@ -259,6 +268,18 @@ onMounted(async () => {
       if (restored) selectedRun.value = restored
     }),
   ])
+  if (activeLiveRun.value?.skill_run_id && activeLiveRun.value.status === 'running') {
+    const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
+    if (!messages.value.includes(timelineMessage)) messages.value.push(timelineMessage)
+    try {
+      const result = await pollLiveRun(activeLiveRun.value, timelineMessage)
+      appendAgentResult(result)
+      activeLiveRun.value = null
+    } catch (error) {
+      if (error.name !== 'AbortError') messages.value.push({ id: Date.now() + 1, role: 'agent', text: `恢复实时任务失败：${error.message}`, error: true })
+      activeLiveRun.value = null
+    } finally { isRunning.value = false }
+  }
   if (responseState.value?.skill_run_id) {
     try {
       const skillRun = await getAgentSkillRun(responseState.value.skill_run_id)
@@ -268,7 +289,7 @@ onMounted(async () => {
   }
   scrollToLatest()
 })
-onBeforeUnmount(() => clearInterval(runTimer))
+onBeforeUnmount(() => pollController?.abort())
 
 function switchRun(event) {
   const run = recentRuns.value.find((item) => item.run_id === event.target.value)
@@ -286,7 +307,7 @@ function switchRun(event) {
       <template #actions>
         <label class="run-switcher"><span>最近运行</span><select :value="activeRun?.run_id ?? ''" aria-label="切换最近运行" @change="switchRun"><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
         <input ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
-        <button class="btn btn-primary" type="button" :disabled="uploading" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" />{{ uploading ? `子Agent执行中 ${runProgress}%` : '上传CSV并全流程运行' }}</button>
+        <button class="btn btn-primary" type="button" :disabled="uploading" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" />{{ uploading ? '子Agent执行中' : '上传CSV并全流程运行' }}</button>
         <StatusPill tone="success" dot>证据 Agent 在线</StatusPill>
         <StatusPill tone="neutral"><AppIcon name="shield" :size="14" /> 本地安全执行</StatusPill>
       </template>
@@ -312,9 +333,10 @@ function switchRun(event) {
         </div>
 
         <div ref="chatThread" class="chat-thread">
-          <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : 'message-user'">
+          <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
+            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" />
             <div v-if="message.role === 'agent'" class="message-avatar"><AppIcon name="spark" :size="17" /></div>
-            <div class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
+            <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
               <p>{{ message.text }}</p>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">
@@ -328,10 +350,7 @@ function switchRun(event) {
               <span>{{ message.time }}</span>
             </div>
           </div>
-          <div v-if="isRunning" class="message message-agent">
-            <div class="message-avatar"><AppIcon name="spark" :size="17" /></div>
-            <div class="message-bubble"><p>我正在结合这次任务的数据想一下…</p></div>
-          </div>
+
         </div>
 
         <div class="prompt-templates">
@@ -353,10 +372,10 @@ function switchRun(event) {
             <div><span class="composer-tag">当前任务</span><span>{{ contextRunId }}</span></div>
             <button class="send-button" type="button" :disabled="isRunning || !prompt.trim()" @click="runWorkflow">
               <AppIcon :name="isRunning ? 'loop' : 'arrow'" :class="{ spinning: isRunning }" />
-              {{ isRunning ? `处理中 ${runProgress}%` : '发送' }}
+              {{ isRunning ? (liveProgress == null ? '处理中' : `处理中 ${liveProgress}%`) : '发送' }}
             </button>
           </div>
-          <div v-if="isRunning" class="composer-progress"><span :style="{ width: `${runProgress}%` }"></span></div>
+          <div v-if="isRunning && liveProgress != null" class="composer-progress"><span :style="{ width: `${liveProgress}%` }"></span></div>
         </div>
       </section>
 
@@ -392,11 +411,11 @@ function switchRun(event) {
           v-for="(node, index) in planNodes"
           :key="node.name"
           class="plan-node"
-          :class="{ 'is-complete': ['completed', 'success'].includes(node.status), 'is-partial': node.status === 'partial', 'is-blocked': node.status === 'blocked', 'is-failed': node.status === 'failed', 'is-current': isRunning && index === currentNode, 'is-waiting': node.status === 'pending' || node.status === 'skipped' || (isRunning && index > currentNode) }"
+          :class="{ 'is-complete': ['completed', 'success'].includes(node.status), 'is-partial': node.status === 'partial', 'is-blocked': node.status === 'blocked', 'is-failed': node.status === 'failed', 'is-current': node.status === 'executing', 'is-waiting': ['pending', 'skipped', 'queued', 'waiting', 'deferred'].includes(node.status) }"
         >
           <span class="plan-node-icon"><AppIcon :name="node.icon" /></span>
           <div><span>{{ stepNumber(index) }}</span><strong>{{ node.name }}</strong><code>{{ node.tool }}</code><small>{{ node.output }}</small></div>
-          <span class="plan-node-state" :title="executionStatus(node.status).label"><AppIcon :name="isRunning && index === currentNode ? 'loop' : executionStatus(node.status).icon" :class="{ spinning: isRunning && index === currentNode }" /></span>
+          <span class="plan-node-state" :title="executionStatus(node.status).label"><AppIcon :name="node.status === 'executing' ? 'loop' : executionStatus(node.status).icon" :class="{ spinning: node.status === 'executing' }" /></span>
         </article>
       </div>
     </section>

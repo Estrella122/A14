@@ -1,6 +1,9 @@
 import json
+import threading
 from datetime import datetime
+from uuid import uuid4
 
+from django.db import close_old_connections
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
@@ -8,6 +11,7 @@ from .services.agent_chat import chat
 from .services.expert_qa import coverage_summary
 from .services.pipeline import PipelineError, get_run
 from .skills import execute_skill_plan, get_skill_run, list_skills, plan_skills
+from .skills.runtime_events import RuntimeEventStore, get_runtime_event_store
 
 
 def _duration_ms(start, end):
@@ -25,6 +29,37 @@ def agent_chat(request):
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
         result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"), payload.get("previous_intents"))
         return JsonResponse({"ok": True, "data": result}, json_dumps_params={"ensure_ascii": False})
+    except (ValueError, PipelineError, json.JSONDecodeError) as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
+
+
+def _run_live_chat(payload, skill_run_id):
+    close_old_connections()
+    store = RuntimeEventStore(skill_run_id, payload.get("run_id"))
+    try:
+        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"),
+                      payload.get("previous_intents"), skill_run_id=skill_run_id, event_sink=store.emit)
+        store.finish("completed", result=result)
+    except Exception as exc:  # Background failures must remain observable to the polling client.
+        store.emit("run_failed", stage="runtime", status="failed", message=str(exc), metadata={"error_type": type(exc).__name__})
+        store.finish("failed", error=str(exc))
+    finally:
+        close_old_connections()
+
+
+@require_POST
+def agent_live_chat(request):
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+        message = str(payload.get("message", "")).strip()
+        if not message:
+            raise ValueError("聊天内容不能为空。")
+        if not get_run(payload.get("run_id")):
+            raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
+        skill_run_id = f"skillrun_{uuid4().hex[:12]}"
+        RuntimeEventStore(skill_run_id, payload.get("run_id"))
+        threading.Thread(target=_run_live_chat, args=(payload, skill_run_id), daemon=True, name=f"agent-live-{skill_run_id}").start()
+        return JsonResponse({"ok": True, "data": {"skill_run_id": skill_run_id, "run_id": payload.get("run_id"), "status": "running"}}, status=202, json_dumps_params={"ensure_ascii": False})
     except (ValueError, PipelineError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
@@ -71,6 +106,14 @@ def agent_skill_run_detail(request, skill_run_id):
 
 @require_GET
 def agent_skill_run_events(request, skill_run_id):
+    store = get_runtime_event_store(skill_run_id)
+    if store:
+        try:
+            after = max(0, int(request.GET.get("after", 0)))
+            limit = max(1, min(200, int(request.GET.get("limit", 100))))
+        except ValueError:
+            return JsonResponse({"ok": False, "message": "after 和 limit 必须是整数。"}, status=422, json_dumps_params={"ensure_ascii": False})
+        return JsonResponse({"ok": True, "data": store.snapshot(after=after, limit=limit)}, json_dumps_params={"ensure_ascii": False})
     result = get_skill_run(skill_run_id)
     if not result:
         return JsonResponse({"ok": False, "message": "Skill 运行记录不存在。"}, status=404, json_dumps_params={"ensure_ascii": False})

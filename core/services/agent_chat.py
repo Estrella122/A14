@@ -357,7 +357,9 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
     return answer, cards, suggestions
 
 
-def chat(message: str, run_id: str | None = None, previous_intent: str | None = None, previous_intents: list[str] | None = None) -> dict[str, Any]:
+def chat(message: str, run_id: str | None = None, previous_intent: str | None = None,
+         previous_intents: list[str] | None = None, *, skill_run_id: str | None = None,
+         event_sink=None) -> dict[str, Any]:
     message = str(message or "").strip()
     if not message:
         raise ValueError("聊天内容不能为空。")
@@ -369,10 +371,35 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     if not snapshot:
         raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
 
+    if event_sink:
+        event_sink("task_understanding_started", stage="task_understanding", status="executing", message="正在理解任务目标与执行边界")
+        event_sink("skill_resolution_started", stage="skill_resolution", status="executing", message="正在结合数据上下文解析 Skill 与 Capability")
     previous_semantic = [name for name, chat_intent in TASK_INTENT_TO_CHAT_INTENT.items() if chat_intent in set(previous_intents or ([previous_intent] if previous_intent else []))]
     previous_response_intents = list(previous_intents or ([previous_intent] if previous_intent else []))
     conversation_context = {"previous_task_spec": {"semantic_intents": previous_semantic, "response_intent": previous_intent, "response_intents": previous_response_intents}} if previous_semantic or previous_response_intents else None
     skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, conversation_context=conversation_context)
+    if event_sink:
+        analysis = skill_plan.get("analysis", {})
+        task = analysis.get("task_understanding", {})
+        event_sink("task_understanding_completed", stage="task_understanding", status="completed", message=f"任务理解完成：{task.get('objective') or message}", metadata={"task_kind": task.get("task_kind"), "execution_mode": task.get("execution_mode")})
+        resolution = analysis.get("capability_resolution", {})
+        for candidate in resolution.get("candidates", []):
+            status = "selected" if candidate.get("selected") else candidate.get("status", "skipped")
+            event_sink(f"capability_{status}", stage="skill_resolution", capability_id=candidate.get("candidate"), status=status,
+                       message=candidate.get("reason") or f"{candidate.get('candidate')} {status}", metadata={"candidate": candidate})
+        loaded = analysis.get("skill_runtime", {})
+        selected_skills = analysis.get("skill_resolution", {}).get("selected_skills", [])
+        for selected_skill in selected_skills:
+            event_sink("skill_selected", stage="skill_resolution", skill_id=selected_skill, status="selected", message=f"已选择 Skill：{selected_skill}")
+        if loaded.get("loaded") or selected_skills:
+            event_sink("skill_loaded", stage="skill_loading", skill_id=loaded.get("skill_name") or (selected_skills[0] if selected_skills else None), status="loaded",
+                       message="Skill 文档与运行约束已加载", metadata={"loaded_files": loaded.get("loaded_files", []), "capabilities": resolution.get("selected", [])})
+        core_plan = analysis.get("execution_plan", {}).get("core", {})
+        event_sink("execution_plan_created", stage="planning", status="completed", message=f"已生成 {len(core_plan.get('steps', []))} 个 Executor 节点", metadata={"execution_dag": core_plan})
+        for node in core_plan.get("steps", []):
+            waiting = node.get("readiness_status") in {"deferred", "waiting"}
+            event_sink("executor_waiting" if waiting else "executor_queued", stage="planning", executor=node.get("executor"), status="waiting" if waiting else "queued",
+                       message=node.get("readiness_reason") or f"{node.get('executor')} Executor 已入队", metadata={"missing_artifacts": node.get("missing_artifacts", []), "dependencies": node.get("dependencies", [])})
     if getattr(settings, "AGENT_RUNTIME_MODE", "hybrid") == "legacy":
         intent, confidence, keywords, matched_intents = _detect_intent(message, previous_intent, previous_intents)
     else:
@@ -470,7 +497,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         {"time": now, "level": "TOOL", "text": f"读取任务 {snapshot['run_id']} 的标准化、清洗、辨识和评审证据"},
         {"time": now, "level": "WARN" if blocked_reason else "BEST" if executed else "INFO", "text": blocked_reason if blocked_reason else f"已执行至 {execution_scope} 并刷新证据" if executed else "本次为只读分析，未修改运行产物"},
     ]
-    skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason)
+    skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason, skill_run_id=skill_run_id, event_sink=event_sink)
     skill_result = skill_run.get("skill_execution_result") or {}
     core_results = skill_run.get("core_skill_execution_results", [])
     core_success = [item for item in core_results if item.get("status") in {"success", "partial"}]
@@ -490,7 +517,9 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "level": "SKILL",
         "text": f"{item['name']} · {item.get('activity', item['status'])} · {item['duration_ms']} ms",
     } for item in skill_run["executions"])
-    return {
+    if event_sink:
+        event_sink("answer_generation_started", stage="answer", status="executing", message="正在整理执行证据与回答")
+    response = {
         "answer": answer,
         "run_id": snapshot["run_id"],
         "executed": executed,
@@ -520,3 +549,6 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "logs": logs,
         "snapshot": snapshot if executed else None,
     }
+    if event_sink:
+        event_sink("answer_generation_completed", stage="answer", status="completed", message="回答已生成")
+    return response

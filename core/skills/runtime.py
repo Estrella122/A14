@@ -332,9 +332,10 @@ def _summary(snapshot: dict[str, Any], handler: str) -> tuple[dict, list, list, 
     return metrics, related, evidence, warnings
 
 
-def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_reason: str | None = None) -> dict[str, Any]:
+def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_reason: str | None = None,
+                       *, skill_run_id: str | None = None, event_sink=None) -> dict[str, Any]:
     started = datetime.now().astimezone().isoformat(timespec="seconds")
-    skill_run_id = f"skillrun_{uuid4().hex[:12]}"
+    skill_run_id = skill_run_id or f"skillrun_{uuid4().hex[:12]}"
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
     industrial_result = None
     core_results: list[dict[str, Any]] = []
@@ -356,6 +357,10 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         if data is not None or data_path is not None:
             skill_runtime = plan.get("analysis", {}).get("skill_runtime", {})
             executor = get_executor("industrial-analysis")
+            if event_sink:
+                event_sink("executor_started", stage="execution", executor="industrial-analysis", status="executing", message="industrial-analysis Executor 已开始")
+                for item in analysis_plan.get("selected_capabilities", []):
+                    event_sink("capability_executing", stage="execution", capability_id=item.get("capability"), executor="industrial-analysis", status="executing", message=f"{item.get('capability')} 已开始执行")
             industrial_result = executor.execute(
                 "industrial-analysis",
                 [item["capability"] for item in analysis_plan.get("selected_capabilities", [])],
@@ -370,8 +375,13 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                 },
             )
             for decision, result in zip(analysis_plan.get("selected_capabilities", []), industrial_result["capability_executions"]):
+                if event_sink:
+                    status = result.get("status", "completed")
+                    event_sink("capability_completed" if status in {"success", "completed"} else f"capability_{status}", stage="execution", capability_id=decision.get("capability"), executor="industrial-analysis", status=status, message=result.get("reason") or f"{decision.get('capability')} 执行完成")
                 for skill_id in decision.get("selected_skill_ids", []):
                     capability_by_skill.setdefault(skill_id, []).append(result)
+            if event_sink:
+                event_sink("executor_completed", stage="execution", executor="industrial-analysis", status=industrial_result.get("status", "success"), message="industrial-analysis Executor 执行完成")
     core_plan = plan.get("analysis", {}).get("execution_plan", {}).get("core", {})
     if runtime_mode != "legacy" and plan.get("mode") == "execute" and not blocked_reason:
         parameters = {item.get("name"): item.get("value") for item in plan.get("analysis", {}).get("task_understanding", {}).get("parameters", [])}
@@ -403,8 +413,12 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                     core_results.append(result)
                     for selected_skill_id in node["skill_ids"]:
                         core_result_by_skill[selected_skill_id] = result
+                    if event_sink:
+                        event_sink("executor_blocked", stage="execution", executor=node["executor"], status="blocked", message=result["reason"], metadata={"missing_artifacts": readiness["missing_artifacts"]})
                     continue
                 try:
+                    if event_sink:
+                        event_sink("executor_started", stage="execution", executor=node["executor"], status="executing", message=f"{node['executor']} Executor 已开始", metadata={"skill_ids": node.get("skill_ids", [])})
                     result = executor.execute(node["executor"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
                                               plan.get("analysis", {}).get("data_context", {}),
                                               {"snapshot": snapshot, "parameters": parameters,
@@ -417,6 +431,16 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                     result["warnings"] = [type(exc).__name__]
                     result["execution_trace"] = [{"step": node["executor"], "status": "failed"}]
             core_results.append(result)
+            if event_sink:
+                result_status = result.get("status", "completed")
+                event_type = "executor_completed" if result_status in {"success", "completed"} else f"executor_{result_status}"
+                event_sink(event_type, stage="execution", executor=node["executor"], status=result_status,
+                           message=result.get("reason") or (result.get("limitations") or [f"{node['executor']} Executor 执行完成"])[0],
+                           metadata={"duration_ms": result.get("duration_ms"), "warnings": result.get("warnings", [])})
+                for artifact in result.get("artifacts", []):
+                    artifact_data = artifact if isinstance(artifact, dict) else {"key": str(artifact)}
+                    event_sink("artifact_produced", stage="artifact", executor=node["executor"], status="available",
+                               message=f"已产生 artifact：{artifact_data.get('artifact_type') or artifact_data.get('type') or artifact_data.get('key') or 'artifact'}", metadata={"artifact": artifact_data})
             for selected_skill_id in node["skill_ids"]:
                 core_result_by_skill[selected_skill_id] = result
     executions = []
