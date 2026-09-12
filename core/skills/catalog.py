@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from typing import Any
 
-SUPPORTED_SCENARIOS = ("blast_furnace", "debutanizer_column", "industrial_dryer")
+def available_scenario_ids() -> tuple[str, ...]:
+    root = Path(__file__).resolve().parents[2] / "integrations" / "standardization" / "standards" / "scenarios"
+    return tuple(sorted(path.parent.name for path in root.glob("*/template.json")))
+
+
+SUPPORTED_SCENARIOS = available_scenario_ids()
 
 
 WORK_REPAIR_TASK_TYPES = (

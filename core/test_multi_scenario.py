@@ -7,7 +7,7 @@ from core.skills.runtime import plan_skills
 class MultiScenarioSkillTests(SimpleTestCase):
     def test_every_skill_advertises_all_supported_scenarios(self):
         expected = set(SUPPORTED_SCENARIOS)
-        self.assertEqual(len(expected), 3)
+        self.assertTrue({"debutanizer_column", "thermal_power_boiler_long_tail", "vapor_pressure_soft_sensor", "steel_industry_energy"}.issubset(expected))
         for skill in SKILLS:
             self.assertEqual(set(skill.public()["supported_scenarios"]), expected)
 

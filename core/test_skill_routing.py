@@ -8,6 +8,8 @@ from django.test import SimpleTestCase
 from . import tests as original_tests
 from .skills.runtime import plan_skills, _with_dependencies, execute_skill_plan
 from .skills.catalog import SKILL_MAP
+from .skills.capability_resolver import resolve_capabilities, understand_task
+from .skills.context import build_data_context
 from .services.agent_chat import chat
 from .services import pipeline
 
@@ -110,3 +112,64 @@ class TrainedRoutingTests(SimpleTestCase):
             result=chat('训练系统辨识模型')
         self.assertEqual(rerun.call_args.kwargs['stop_after'],'modeling')
         self.assertEqual(result['execution_scope'],'modeling')
+
+
+class ContextAwareCapabilityResolutionTests(SimpleTestCase):
+    def context_snapshot(self, *, numeric=True, timestamp=True, rows=200, mapping_confidence=.95):
+        mappings = []
+        if timestamp:
+            mappings.append({"raw": "time", "standard": "timestamp", "status": "matched", "role": "time", "data_type": "datetime", "confidence": mapping_confidence})
+        if numeric:
+            mappings.extend([
+                {"raw": "x", "standard": "pressure", "status": "matched", "role": "state", "data_type": "float", "confidence": mapping_confidence},
+                {"raw": "y", "standard": "temperature", "status": "matched", "role": "controlled", "data_type": "float", "confidence": mapping_confidence},
+            ])
+        return {"run_id": "context_run", "project_scene": "debutanizer_column", "runtime_trace": {"confidence": .94, "status": "confirmed"}, "results": {"standardization": {"source_row_count": rows, "scenario": {"scenario_id": "thermal_power_boiler_long_tail", "industry": "工业锅炉", "process_unit": "锅炉", "sampling_seconds": 5}, "mapping": {"mappings": mappings}, "data_decision": {"status": "ready"}}, "cleaning": {"overall_score": 88}}, "artifacts": {"source_csv": "01_input/source.csv", "standardized_csv": "02_standardization/standardized.csv"}}
+
+    def test_five_anomaly_paraphrases_share_core_capabilities(self):
+        messages = ["帮我找异常", "这批数据有没有不正常的地方", "看看哪里和正常运行不一样", "哪些时间段值得重点检查", "这批数据波动是不是有问题"]
+        core = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "ANOMALY_DETECTION"}
+        for message in messages:
+            with self.subTest(message=message):
+                plan = plan_skills(message, snapshot=self.context_snapshot())
+                self.assertTrue(core.issubset(plan["analysis"]["capability_resolution"]["selected"]))
+
+    def test_knowledge_explanations_load_docs_without_analysis_or_execution(self):
+        cases = {"异常检测是什么意思？": "ANOMALY_DETECTION", "介绍一下趋势分析": "TREND_ANALYSIS", "相关性和因果有什么区别": "CORRELATION_ANALYSIS"}
+        for message, capability in cases.items():
+            with self.subTest(message=message):
+                plan = plan_skills(message, snapshot=self.context_snapshot())
+                self.assertEqual("knowledge_explanation", plan["analysis"]["task_understanding"]["task_kind"])
+                self.assertEqual([], plan["analysis"]["capability_resolution"]["selected"])
+                self.assertIn(capability, plan["analysis"]["capability_resolution"]["documentation"])
+                self.assertEqual("analyze", plan["mode"])
+
+    def test_anomaly_preconditions_block_missing_numeric_time_or_samples(self):
+        for kwargs, missing in (({"numeric": False}, "numeric_fields"), ({"timestamp": False}, "ordered_data"), ({"rows": 10}, "sufficient_samples")):
+            context = build_data_context(self.context_snapshot(**kwargs)).public()
+            resolved = resolve_capabilities(understand_task("帮我找异常"), context)
+            anomaly = next(item for item in resolved["candidates"] if item["candidate"] == "ANOMALY_DETECTION")
+            self.assertEqual("blocked", anomaly["status"])
+            self.assertIn(missing, anomaly["reason"])
+
+    def test_data_context_keeps_project_and_detected_scene_separate(self):
+        context = build_data_context(self.context_snapshot()).public()
+        self.assertEqual("debutanizer_column", context["project_context_scene"])
+        self.assertEqual("thermal_power_boiler_long_tail", context["detected_scene"])
+        self.assertEqual(2, context["numeric_field_count"])
+        self.assertTrue(context["regular_time_axis"])
+
+    def test_mapping_quality_and_dependency_readiness_are_scored(self):
+        low = build_data_context(self.context_snapshot(mapping_confidence=.4)).public()
+        resolved = resolve_capabilities(understand_task("分析产品质量"), low)
+        quality = next(item for item in resolved["candidates"] if item["candidate"] == "QUALITY_ANALYSIS")
+        self.assertEqual("blocked", quality["status"])
+        no_artifacts = build_data_context(self.context_snapshot()).public()
+        no_artifacts["available_artifacts"] = []
+        resolved = resolve_capabilities(understand_task("帮我找异常"), no_artifacts)
+        anomaly = next(item for item in resolved["candidates"] if item["candidate"] == "ANOMALY_DETECTION")
+        self.assertEqual(.7, anomaly["dependency_readiness_score"])
+
+    def test_non_industrial_task_does_not_load_industrial_skill(self):
+        plan = plan_skills("修改登录页面按钮颜色", snapshot=self.context_snapshot())
+        self.assertIsNone(plan["analysis"]["skill_runtime"]["selected_skill"])

@@ -3,10 +3,8 @@ import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase
-from pathlib import Path
-import json
-
 from core.skills.analysis_plan import CAPABILITIES, GENERIC_UNKNOWN_SAFE, build_analysis_plan
+from core.skills.capability_resolver import resolve_capabilities, understand_task
 from core.skills.catalog import identify_scene_from_text
 from core.skills.work_repair import route_work_repair_task
 
@@ -29,7 +27,17 @@ class WorkRepairSkillTests(SimpleTestCase):
             "blast_furnace": "分析高炉铁水硅含量质量与工况",
             "unknown_scene": "分析这份未知数据的趋势、相关和异常",
         }
-        plans = {scene: build_analysis_plan(text, scene=scene) for scene, text in cases.items()}
+        plans = {}
+        for scene, text in cases.items():
+            context = {
+                "run_id": "test-run", "detected_scene": None if scene == "unknown_scene" else scene,
+                "scene_confidence": 0.9, "numeric_field_count": 4, "sample_count": 100,
+                "timestamp": "timestamp", "ordered_data": True, "available_artifacts": ["standardization"],
+                "data_quality": 90, "semantic_types": ["energy", "quality"], "mapping_confidence": 0.95,
+            }
+            task = understand_task(text)
+            resolution = resolve_capabilities(task, context)
+            plans[scene] = build_analysis_plan(text, scene=scene, evidence=context, capability_resolution=resolution, task_understanding=task)
         for scene, plan in plans.items():
             self.assertEqual(scene, plan["scene"])
             self.assertTrue(plan["selected_capabilities"])
@@ -44,14 +52,17 @@ class WorkRepairSkillTests(SimpleTestCase):
         self.assertEqual("thermal_power_boiler_long_tail", identify_scene_from_text("锅炉长尾分析")[0])
 
     def test_low_mapping_confidence_blocks_domain_conclusion(self):
+        context = {
+            "run_id": "test-run", "detected_scene": "custom_scene", "scene_confidence": 0.8,
+            "numeric_field_count": 1, "sample_count": 100, "timestamp": "timestamp", "ordered_data": True,
+            "semantic_types": ["energy"], "mapping_confidence": 0.4, "available_artifacts": ["standardization"],
+        }
+        task = understand_task("分析设备故障根因和能耗")
+        resolution = resolve_capabilities(task, context)
         plan = build_analysis_plan(
             "分析设备故障根因和能耗",
             scene="custom_scene",
-            evidence={
-                "dataset_ref": "caller://dataset/1",
-                "mapping_confidence": 0.4,
-                "fields": [{"semantic_type": "energy", "data_type": "float", "mapping_confidence": 0.4}],
-            },
+            evidence=context, capability_resolution=resolution, task_understanding=task,
         )
         selected = {item["capability"] for item in plan["selected_capabilities"]}
         self.assertNotIn("ENERGY_ANALYSIS", selected)
@@ -71,6 +82,13 @@ class WorkRepairSkillTests(SimpleTestCase):
             "scene": "steel_industry_energy", "objective": "分析能耗趋势", "dataset_ref": "caller://data",
             "timestamp": "timestamp", "sample_size": 100,
             "fields": [{"semantic_type": "energy", "data_type": "float", "mapping_confidence": 0.98}],
+            "capability_resolution": {
+                "selected": ["ENERGY_ANALYSIS", "TREND_ANALYSIS"],
+                "candidates": [
+                    {"candidate": "ENERGY_ANALYSIS", "selected": True, "status": "selected", "final_score": 0.9, "reason": "resolver selected"},
+                    {"candidate": "TREND_ANALYSIS", "selected": True, "status": "selected", "final_score": 0.9, "reason": "resolver selected"},
+                ],
+            },
         }
         completed = subprocess.run(["python3", str(script)], input=json.dumps(payload), text=True, capture_output=True, check=True)
         plan = json.loads(completed.stdout)

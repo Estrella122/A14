@@ -43,7 +43,8 @@ def agent_skills(request):
 def agent_plan(request):
     try:
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
-        result = plan_skills(payload.get("message", ""), payload.get("run_id"))
+        run_id = payload.get("run_id")
+        result = plan_skills(payload.get("message", ""), run_id, snapshot=get_run(run_id) if run_id else None)
         return JsonResponse({"ok": True, "data": result}, status=201, json_dumps_params={"ensure_ascii": False})
     except (ValueError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
@@ -57,7 +58,7 @@ def agent_skill_run_collection(request):
         snapshot = get_run(payload.get("run_id"))
         if not snapshot:
             raise PipelineError("尚无可执行的流水线任务，请先上传 CSV。")
-        plan = payload.get("plan") or plan_skills(payload.get("message", "分析当前任务"), snapshot["run_id"])
+        plan = payload.get("plan") or plan_skills(payload.get("message", "分析当前任务"), snapshot["run_id"], snapshot=snapshot)
         result = execute_skill_plan(plan, snapshot)
         return JsonResponse({"ok": True, "data": result}, status=201, json_dumps_params={"ensure_ascii": False})
     except (ValueError, PipelineError, json.JSONDecodeError, KeyError) as exc:

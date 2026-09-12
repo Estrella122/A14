@@ -11,7 +11,9 @@ from uuid import uuid4
 from django.conf import settings
 
 from .analysis_plan import build_analysis_plan
+from .capability_resolver import resolve_capabilities, understand_task
 from .catalog import CATEGORIES, SKILLS, SKILL_MAP, identify_scene_from_text
+from .context import build_data_context
 from .routing import select
 from .skill_loader import default_skill_roots, load_skill_context
 
@@ -165,11 +167,12 @@ def _with_dependencies(selected: set[str]) -> list[str]:
     return ordered
 
 
-def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
+def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     text = str(message or "").strip()
     if not text:
         raise ValueError("规划指令不能为空。")
     analysis = _request_analysis(text)
+    task_understanding = understand_task(text)
     try:
         route = select(text, analysis, EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -177,31 +180,57 @@ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
                  "denied": set(), "needs_clarification": True, "unresolved_clauses": [text],
                  "source": "model_unavailable", "full_pipeline_requested": False,
                  "negative_clauses": [], "error": type(exc).__name__}
-    direct, relevance_scores = route["direct"], route["scores"]
-    candidates = [dict(candidate, reason="训练模型候选", selected=candidate["skill_id"] in direct)
-                 for decision in route["decisions"] for candidate in decision["candidates"]]
-    execution_mode = route["mode"]
-    detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
+    recalled_skill_ids, relevance_scores = route["direct"], route["scores"]
+    lexical_candidates = [candidate for decision in route["decisions"] for candidate in decision["candidates"]]
+    if snapshot is None and run_id:
+        from core.services.pipeline import get_run
+        snapshot = get_run(run_id)
+    data_context = build_data_context(snapshot, run_id).public()
+    capability_resolution = resolve_capabilities(task_understanding, data_context, recalled_skill_ids, lexical_candidates)
+    capability_skill_ids = set(capability_resolution["resolved_skill_ids"])
+    operational = set(recalled_skill_ids) if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} else set()
+    direct = capability_skill_ids | operational
+    execution_mode = "execute" if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} and route["mode"] == "execute" else "analyze"
+    detected_scene_id = data_context.get("detected_scene")
+    if not detected_scene_id:
+        detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
+    documents = capability_resolution["selected"] + capability_resolution["documentation"]
     skill_runtime = load_skill_context(
         text,
         default_skill_roots(),
         scene=detected_scene_id or "unknown_scene",
+        selected_capabilities=documents,
+        selected_skill_name="industrial-analysis" if documents else None,
+        task_kind=task_understanding["task_kind"],
     )
-    # SKILL.md 先完成发现和按需路由；声明的 ANALYSIS_PLAN 脚本继续通过兼容 adapter 调用。
-    analysis_plan = build_analysis_plan(text, list(direct), scene=detected_scene_id or "unknown_scene")
+    analysis_plan = build_analysis_plan(
+        text,
+        list(direct),
+        scene=detected_scene_id or "unknown_scene",
+        evidence=data_context,
+        capability_resolution=capability_resolution,
+        task_understanding=task_understanding,
+    )
+    needs_clarification = bool(
+        task_understanding["task_kind"] != "knowledge_explanation"
+        and not direct
+    )
     analysis.update({"mode": execution_mode, "routing_source": route["source"],
-                     "needs_clarification": route["needs_clarification"],
+                     "needs_clarification": needs_clarification,
                      "unresolved_clauses": route["unresolved_clauses"],
                      "routing_decisions": route["decisions"],
                      "excluded_skills": sorted(route["denied"]),
                      "full_pipeline_requested": route["full_pipeline_requested"],
                      "analysis_plan": analysis_plan,
+                     "task_understanding": task_understanding,
+                     "data_context": data_context,
+                     "capability_resolution": capability_resolution,
                      "skill_runtime": skill_runtime,
                      "agent_context": {
                          "base_agent_context": "ProcessPilot Agent Runtime",
                          "loaded_skill_context": skill_runtime["context"],
                          "task_context": {"objective": text, "run_id": run_id},
-                         "data_context": {"scene": detected_scene_id or "unknown_scene"},
+                         "data_context": data_context,
                      }})
     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
     if execution_mode == "execute":
@@ -235,7 +264,7 @@ def plan_skills(message: str, run_id: str | None = None) -> dict[str, Any]:
                                "unapplied_parameters": [k for k in parameters if k not in {"resample_seconds", "max_lag"}]},
         "constraints": {"local_execution": True, "auditable": True, "execution_scope": "bundled_pipeline_then_evidence_read"},
         "selected_count": len(steps), "direct_skill_ids": [skill.id for skill in SKILLS if skill.id in direct],
-        "direct_count": len(direct), "steps": steps, "candidates": candidates,
+        "direct_count": len(direct), "steps": steps, "candidates": capability_resolution["candidates"],
     }
 
 

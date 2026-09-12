@@ -10,7 +10,7 @@ from core.skills.skill_loader import default_skill_roots, discover_skills, load_
 
 class SkillLoaderTests(SimpleTestCase):
     def test_anomaly_loads_only_needed_capability_and_rules(self):
-        trace = load_skill_context("分析工业数据中的异常", default_skill_roots(), scene="custom_scene")
+        trace = load_skill_context("分析工业数据中的异常", default_skill_roots(), scene="custom_scene", selected_capabilities=["ANOMALY_DETECTION"], selected_skill_name="industrial-analysis")
         self.assertEqual("industrial-analysis", trace["selected_skill"])
         self.assertEqual(["ANOMALY_DETECTION"], trace["loaded_capabilities"])
         self.assertEqual(["generic-analysis"], trace["loaded_workflows"])
@@ -18,12 +18,12 @@ class SkillLoaderTests(SimpleTestCase):
         self.assertNotIn("ENERGY_ANALYSIS", trace["loaded_capabilities"])
 
     def test_energy_routes_from_skill_manifest(self):
-        trace = load_skill_context("分析工业能耗", default_skill_roots(), scene="custom_scene")
+        trace = load_skill_context("分析工业能耗", default_skill_roots(), scene="custom_scene", selected_capabilities=["ENERGY_ANALYSIS"], selected_skill_name="industrial-analysis")
         self.assertEqual(["ENERGY_ANALYSIS"], trace["loaded_capabilities"])
         self.assertIn("industrial-semantics", trace["loaded_references"])
 
     def test_unknown_scene_excludes_equipment_fault_capability(self):
-        trace = load_skill_context("分析未知工业数据异常和设备故障", default_skill_roots(), scene="unknown_scene")
+        trace = load_skill_context("分析未知工业数据异常和设备故障", default_skill_roots(), scene="unknown_scene", selected_capabilities=["ANOMALY_DETECTION", "EQUIPMENT_HEALTH"], selected_skill_name="industrial-analysis")
         self.assertIn("ANOMALY_DETECTION", trace["loaded_capabilities"])
         self.assertNotIn("EQUIPMENT_HEALTH", trace["loaded_capabilities"])
         self.assertIn("unknown-scene", trace["loaded_workflows"])
@@ -39,7 +39,7 @@ class SkillLoaderTests(SimpleTestCase):
             root = Path(directory)
             self._write_skill(root, "first", ["分析", "异常"])
             self._write_skill(root, "second", ["分析", "能耗", "能源"])
-            trace = load_skill_context("分析能源能耗", (root,))
+            trace = load_skill_context("分析能源能耗", (root,), selected_capabilities=["ANOMALY_DETECTION"], selected_skill_name="second")
             self.assertEqual("second", trace["selected_skill"])
             self.assertEqual(2, trace["performance"]["skill_count"])
 
@@ -53,13 +53,14 @@ class SkillLoaderTests(SimpleTestCase):
         with TemporaryDirectory() as directory:
             root = Path(directory)
             self._write_skill(root, "broken", ["异常"], capability_path="capabilities/missing.md")
-            trace = load_skill_context("异常", (root,))
+            trace = load_skill_context("异常", (root,), selected_capabilities=["ANOMALY_DETECTION"], selected_skill_name="broken")
             self.assertEqual("broken", trace["selected_skill"])
             self.assertEqual([], trace["loaded_capabilities"])
             self.assertTrue(any(item["resource"] == "capabilities/ANOMALY_DETECTION" for item in trace["errors"]))
 
     def test_runtime_injects_skill_context_and_trace(self):
-        trace = plan_skills("分析工业数据中的异常")["analysis"]["skill_runtime"]
+        snapshot = {"run_id": "run", "results": {"standardization": {"source_row_count": 100, "scenario": {"scenario_id": "custom_scene", "sampling_seconds": 10}, "mapping": {"mappings": [{"raw": "time", "standard": "timestamp", "status": "matched", "role": "time", "data_type": "datetime", "confidence": 1}, {"raw": "x", "standard": "x", "status": "matched", "role": "state", "data_type": "float", "confidence": .9}]}}, "cleaning": {}}, "artifacts": {"source_csv": "source.csv"}}
+        trace = plan_skills("分析工业数据中的异常", snapshot=snapshot)["analysis"]["skill_runtime"]
         self.assertEqual("industrial-analysis", trace["selected_skill"])
         self.assertIn("SKILL.md", trace["sources"])
         self.assertGreater(trace["performance"]["context_characters"], 0)

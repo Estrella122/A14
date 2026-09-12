@@ -354,9 +354,9 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
 
     intent, confidence, keywords, matched_intents = _detect_intent(message, previous_intent, previous_intents)
-    skill_plan = plan_skills(message, snapshot["run_id"])
+    skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
     if skill_plan["analysis"].get("needs_clarification") and previous_intent == intent and intent not in {"conversation", "capability", "clarification", "overview"} and not keywords:
-        skill_plan = plan_skills("解释" + INTENT_LABELS[intent] + "结果", snapshot["run_id"])
+        skill_plan = plan_skills("解释" + INTENT_LABELS[intent] + "结果", snapshot["run_id"], snapshot=snapshot)
         skill_plan["objective"] = message
         skill_plan["mode"] = skill_plan["analysis"]["mode"] = "analyze"
         skill_plan["analysis"]["context_intent"] = intent
@@ -394,7 +394,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         snapshot = rerun_pipeline(snapshot["run_id"], **rerun_kwargs)
         execution_scope = stop_after
         executed = True
-        skill_plan = plan_skills(message, snapshot["run_id"])
+        skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
 
     answer, cards, suggestions = _answer(snapshot, intent, message, matched_intents)
     # A broad multi-topic summary should retain its complete overview.  A single

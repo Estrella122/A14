@@ -175,8 +175,8 @@ class AgentChatTests(SimpleTestCase):
         self.assertIn('联锁', result['answer'])
 
     def test_professional_questions_route_to_distinct_skill_sets(self):
-        leakage = {item['skill_id'] for item in plan_skills('如何避免时间序列数据泄漏')['steps']}
-        frequency = {item['skill_id'] for item in plan_skills('伯德图和奈奎斯特图说明了什么')['steps']}
+        leakage = {item['skill_id'] for item in plan_skills('如何避免时间序列数据泄漏', snapshot=self.snapshot())['steps']}
+        frequency = {item['skill_id'] for item in plan_skills('伯德图和奈奎斯特图说明了什么', snapshot=self.snapshot())['steps']}
         self.assertIn('modeling_dataset_assembler', leakage)
         self.assertNotIn('engineering_visualization_builder', leakage)
         self.assertIn('engineering_visualization_builder', frequency)
@@ -209,7 +209,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_compound_expert_question_uses_minimal_precise_skill_set(self):
         question = '当前模型测试集R²不错，如何证明没有时序数据泄漏和过拟合？请结合残差自相关、模型阶次和独立工况验证说明，不要直接给出可上线结论。'
-        plan = plan_skills(question, 'run_test')
+        plan = plan_skills(question, 'run_test', snapshot=self.snapshot())
         skill_ids = {item['skill_id'] for item in plan['steps']}
         self.assertEqual(plan['mode'], 'analyze')
         self.assertEqual(plan['analysis']['question_type'], 'compound')
@@ -296,7 +296,7 @@ class AgentChatTests(SimpleTestCase):
     def test_every_expert_topic_example_has_a_matching_runtime_route(self):
         for topic in coverage_summary():
             with self.subTest(topic=topic['key']):
-                plan = plan_skills(f"请分析{topic['examples'][0]}")
+                plan = plan_skills(f"请分析{topic['examples'][0]}", snapshot=self.snapshot())
                 self.assertIn(topic['key'], plan['analysis']['topics'])
                 self.assertGreater(len(plan['steps']), 4)
 

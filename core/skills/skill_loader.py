@@ -69,24 +69,6 @@ def discover_skills(roots: Iterable[Path]) -> tuple[list[DiscoveredSkill], dict[
     return discovered, {"skill_count": len(discovered), "scan_ms": elapsed, "errors": errors}
 
 
-def _terms(value: Any) -> tuple[str, ...]:
-    return tuple(str(item).lower() for item in value or ())
-
-
-def resolve_skill(message: str, skills: Iterable[DiscoveredSkill]) -> tuple[DiscoveredSkill | None, list[dict[str, Any]]]:
-    normalized = message.lower()
-    candidates = []
-    for skill in skills:
-        hits = [term for term in _terms(skill.manifest.get("triggers")) if term and term in normalized]
-        score = len(hits)
-        candidates.append({"name": skill.name, "score": score, "matched_triggers": hits})
-    candidates.sort(key=lambda item: (-item["score"], item["name"]))
-    if not candidates or candidates[0]["score"] == 0:
-        return None, candidates
-    selected_name = candidates[0]["name"]
-    return next(skill for skill in skills if skill.name == selected_name), candidates
-
-
 def _load_declared(skill: DiscoveredSkill, group: str, names: Iterable[str], errors: list[dict[str, str]]) -> list[dict[str, str]]:
     loaded = []
     declarations = skill.manifest.get(group, {})
@@ -103,10 +85,24 @@ def _load_declared(skill: DiscoveredSkill, group: str, names: Iterable[str], err
     return loaded
 
 
-def load_skill_context(message: str, roots: Iterable[Path], *, scene: str | None = None, selected_capabilities: Iterable[str] = ()) -> dict[str, Any]:
+def load_skill_context(
+    message: str,
+    roots: Iterable[Path],
+    *,
+    scene: str | None = None,
+    selected_capabilities: Iterable[str] = (),
+    selected_skill_name: str | None = None,
+    task_kind: str = "data_analysis",
+) -> dict[str, Any]:
     started = perf_counter()
     skills, discovery = discover_skills(roots)
-    selected_skill, candidates = resolve_skill(message, skills)
+    requested = set(selected_capabilities)
+    selected_skill = None
+    candidates = []
+    if selected_skill_name:
+        selected_skill = next((skill for skill in skills if skill.name == selected_skill_name), None)
+    elif requested:
+        selected_skill = next((skill for skill in skills if requested & set(skill.manifest.get("capabilities", {}))), None)
     empty = {
         "discovered_skills": [skill.name for skill in skills], "selected_skill": None,
         "loaded_capabilities": [], "loaded_workflows": [], "loaded_references": [], "invoked_scripts": [],
@@ -118,18 +114,13 @@ def load_skill_context(message: str, roots: Iterable[Path], *, scene: str | None
         return empty
 
     errors = list(discovery["errors"])
-    requested = set(selected_capabilities)
-    if not requested:
-        for name, declaration in selected_skill.manifest.get("capabilities", {}).items():
-            if any(term in message.lower() for term in _terms(declaration.get("triggers"))):
-                requested.add(name)
     unknown = (scene or "").lower() in {"unknown", "unknown_scene"}
     safe_unknown = {"DATA_PROFILING", "DATA_QUALITY_ANALYSIS", "TREND_ANALYSIS", "CORRELATION_ANALYSIS", "ANOMALY_DETECTION", "MISSING_DATA_ANALYSIS"}
     if unknown:
         requested &= safe_unknown
     capabilities = _load_declared(selected_skill, "capabilities", sorted(requested), errors)
-    workflow_names = ["generic-analysis"] if capabilities else []
-    if unknown:
+    workflow_names = ["generic-analysis"] if capabilities and task_kind != "knowledge_explanation" else []
+    if unknown and task_kind != "knowledge_explanation":
         workflow_names.append("unknown-scene")
     if any(term in message.lower() for term in ("验证", "审计", "测试")):
         workflow_names.append("validation")
