@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { applyRuntimeEvents, mergeRuntimeEvents, visibleRuntimeEvents } from '../src/utils/runtimeEvents.js'
+import { applyRuntimeEvents, compactRuntimeEvents, mergeRuntimeEvents, runtimeEventIsActive, visibleRuntimeEvents } from '../src/utils/runtimeEvents.js'
 
 test('replay and incremental batches do not duplicate events', () => {
   const first = [{ sequence: 1, event_type: 'task_understanding_started' }, { sequence: 2, event_type: 'skill_selected' }]
@@ -25,4 +25,17 @@ test('timeline keeps operational reasons and omits noisy recall events', () => {
   ])
   assert.deepEqual(events.map((event) => event.sequence), [2, 3])
   assert.equal(events[1].message, 'missing objective')
+})
+
+test('completed timelines never animate historical running events', () => {
+  const started = { sequence: 1, event_type: 'executor_started', status: 'executing' }
+  assert.equal(runtimeEventIsActive(started, 'running'), true)
+  assert.equal(runtimeEventIsActive(started, 'completed'), false)
+})
+
+test('compact timeline stays bounded and keeps the terminal event', () => {
+  const events = Array.from({ length: 8 }, (_, index) => ({ sequence: index + 1, event_type: index === 7 ? 'answer_generation_completed' : 'executor_started', status: index === 7 ? 'completed' : 'executing' }))
+  const compact = compactRuntimeEvents(events, 4)
+  assert.equal(compact.length, 4)
+  assert.equal(compact.at(-1).event_type, 'answer_generation_completed')
 })

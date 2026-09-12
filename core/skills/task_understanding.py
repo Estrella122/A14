@@ -38,6 +38,7 @@ class TaskUnderstandingProvider(ABC):
 
 
 INTENT_PATTERNS = {
+    "scene_identification": r"(?:这个|这批|当前|上传)?数据.{0,12}(?:什么|哪个|哪种).{0,8}场景|(?:什么|哪个|哪种).{0,8}工业场景|(?:属于|识别为).{0,8}(?:什么|哪个|哪种).{0,8}场景",
     "anomaly_detection": r"异常|不正常|不一样|偏离正常|重点检查|波动.{0,8}(?:问题|异常)|忽高忽低",
     "process_stability": r"稳定|正常运行|波动|漂移|越来越",
     "trend_analysis": r"趋势|走势|变化|越来越|上升|下降",
@@ -53,6 +54,7 @@ INTENT_PATTERNS = {
 }
 
 INTENT_CAPABILITIES = {
+    "scene_identification": "DATA_PROFILING",
     "anomaly_detection": "ANOMALY_DETECTION", "process_stability": "PROCESS_STABILITY",
     "trend_analysis": "TREND_ANALYSIS", "time_window_analysis": "TIME_SERIES_ANALYSIS",
     "relationship_analysis": "CORRELATION_ANALYSIS", "missing_data_analysis": "MISSING_DATA_ANALYSIS",
@@ -62,6 +64,7 @@ INTENT_CAPABILITIES = {
 }
 
 OBJECTIVE_LABELS = {
+    "scene_identification": "识别当前数据的工业场景",
     "anomaly_detection": "识别异常波动", "process_stability": "评估过程稳定性",
     "trend_analysis": "分析变化趋势", "time_window_analysis": "定位重点时间段",
     "relationship_analysis": "分析变量关系", "missing_data_analysis": "检查数据完整性",
@@ -73,7 +76,7 @@ OBJECTIVE_LABELS = {
 RESPONSE_INTENT_PATTERNS = (
     ("standardization", r"字段|映射|标准|单位|场景|变量角色"),
     ("cleaning", r"清洗|缺失|异常值|数据质量|插值|采样周期|采样频率|混叠"),
-    ("selection", r"动态段|动态数据|高信噪比|信噪比|筛选|优选|稳态|持续激励|可辨识"),
+    ("selection", r"动态段|动态数据|高信噪比|信噪比|噪声比|筛选|优选|稳态|持续激励|可辨识"),
     ("lag", r"时滞|延迟|滞后|补偿|互相关"),
     ("collinearity", r"共线|vif|冗余|相关变量|降维"),
     ("modeling", r"模型|建模|辨识|arx|拟合|r2|r²|rmse|mae|预测|残差|白噪声|稳定性|极点|伯德|奈奎斯特|频响|过拟合|泛化|数据泄漏|阶次|aic|bic"),

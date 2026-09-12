@@ -18,6 +18,7 @@ test('xinan data remains independent from the project scene', () => {
   assert.equal(state.data_scene.id, 'thermal_power_boiler_long_tail')
   assert.equal(state.data_scene.display_name, '热电锅炉长尾数据')
   assert.equal(state.is_mismatch, true)
+  assert.match(state.mismatch_text, /两者独立，不影响本次分析/)
 })
 
 test('vapor pressure scene replaces the prior run data scene', () => {

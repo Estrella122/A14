@@ -36,3 +36,16 @@ export function visibleRuntimeEvents(events = []) {
   const keyTypes = new Set(['task_understanding_started', 'task_understanding_completed', 'skill_selected', 'skill_loaded', 'execution_plan_created', 'executor_waiting', 'executor_started', 'executor_completed', 'executor_partial', 'executor_blocked', 'executor_failed', 'artifact_produced', 'answer_generation_started', 'answer_generation_completed', 'run_failed'])
   return events.filter((event) => keyTypes.has(event.event_type) || event.event_type.startsWith('capability_') && ['selected', 'blocked', 'deferred'].includes(event.status))
 }
+
+export function runtimeEventIsActive(event, runStatus) {
+  return runStatus === 'running' && ['executing', 'queued', 'waiting'].includes(event?.status)
+}
+
+export function compactRuntimeEvents(events = [], limit = 4) {
+  const rows = visibleRuntimeEvents(events)
+  if (rows.length <= limit) return rows
+  const terminal = [...rows].reverse().find((event) => ['answer_generation_completed', 'run_failed'].includes(event.event_type))
+  const latest = rows.slice(-limit)
+  if (!terminal || latest.includes(terminal)) return latest
+  return [...latest, terminal].slice(-limit)
+}

@@ -184,9 +184,15 @@ onBeforeUnmount(() => {
               <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.shortName }} · {{ project.target }}</option>
             </select>
           </label>
-        <div v-if="isDataSceneMismatch" class="topbar-mismatch">场景提示：{{ dataSceneMismatchText }}</div>
-        <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>项目场景：{{ projectSceneText }}</StatusPill>
-        <StatusPill tone="brand">当前数据场景：{{ dataSceneText }} · {{ dataSceneStatus }}</StatusPill>
+          <div class="topbar-scene-pills" aria-label="项目预设与数据识别场景">
+            <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>项目预设：{{ projectSceneText }}</StatusPill>
+            <AppIcon name="arrow" :size="13" />
+            <StatusPill tone="brand">本次数据：{{ dataSceneText }} · {{ dataSceneStatus }}</StatusPill>
+          </div>
+          <div v-if="isDataSceneMismatch" class="topbar-mismatch" role="status">
+            <AppIcon name="info" :size="13" />
+            <span><strong>场景不同（正常）</strong>{{ dataSceneMismatchText }}</span>
+          </div>
         </div>
         <div class="topbar-actions">
           <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>

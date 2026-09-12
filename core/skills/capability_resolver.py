@@ -67,6 +67,7 @@ def evidence_flags(context: dict[str, Any]) -> set[str]:
 
 def resolve_capabilities(task: dict[str, Any], context: dict[str, Any], recalled_skill_ids=(), lexical_candidates=()) -> dict[str, Any]:
     intent_aliases = {
+        "scene_identification": "inspect_data",
         "anomaly_detection": "locate_abnormal_behavior", "process_stability": "compare_normal_operation",
         "trend_analysis": "inspect_variation", "time_window_analysis": "prioritize_time_windows",
         "relationship_analysis": "analyze_relationships", "missing_data_analysis": "inspect_missing_data",

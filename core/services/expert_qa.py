@@ -6,7 +6,7 @@ from typing import Any
 
 EXPERT_TOPICS = [
     {"key": "sampling", "name": "采样与混叠", "terms": ("采样周期", "采样频率", "奈奎斯特频率", "混叠", "aliasing")},
-    {"key": "snr", "name": "信噪比与动态段", "terms": ("信噪比", "snr", "噪声水平")},
+    {"key": "snr", "name": "信噪比与动态段", "terms": ("信噪比", "噪声比", "snr", "噪声水平")},
     {"key": "excitation", "name": "持续激励与可辨识性", "terms": ("持续激励", "激励充分", "可辨识", "阶跃激励", "输入激励")},
     {"key": "degraded_modeling", "name": "候选段降级建模", "terms": ("候选段降级", "降级建模", "严格优质动态段", "0个严格", "参数可信度", "候选模型")},
     {"key": "leakage", "name": "时序数据泄漏", "terms": ("数据泄漏", "未来信息", "时间穿越", "泄露")},

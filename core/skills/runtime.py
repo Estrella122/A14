@@ -30,7 +30,7 @@ RUNS_DIR = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "agent_skill_runs"
 # data-science and deployment terminology used during reviews.
 EXPERT_ROUTING_RULES = [
     (("采样周期", "采样频率", "奈奎斯特频率", "混叠", "aliasing"), ("time_axis_alignment_resampler",)),
-    (("信噪比", "snr", "噪声水平", "滤波"), ("signal_noise_ratio_estimator", "high_snr_dynamic_segment_extractor")),
+    (("信噪比", "噪声比", "snr", "噪声水平", "滤波"), ("signal_noise_ratio_estimator", "high_snr_dynamic_segment_extractor")),
     (("持续激励", "激励充分", "可辨识", "阶跃激励", "输入激励"), ("steady_transient_state_detector", "segment_quality_scorer_ranker", "modeling_dataset_assembler")),
     (("候选段降级", "降级建模", "严格优质动态段", "0个严格", "参数可信度", "候选模型"), ("segment_quality_scorer_ranker", "modeling_dataset_assembler", "model_diagnostics_evaluator", "engineering_result_interpreter")),
     (("数据泄漏", "未来信息", "时间穿越", "泄露"), ("modeling_dataset_assembler", "evidence_audit_reproducer")),

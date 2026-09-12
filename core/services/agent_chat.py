@@ -267,6 +267,18 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
 
     if intent == "standardization":
         matched = sum(item.get("status") == "matched" for item in mapping.get("mappings", []))
+        if re.search(r"(?:什么|哪个|哪种).{0,8}场景|场景.{0,8}(?:是什么|是哪个|是哪种)", message):
+            scenario = standard.get("scenario", {})
+            scene_name = scenario.get("scenario_name") or scenario.get("display_name") or scenario.get("scenario_id") or "未知场景"
+            status = scenario.get("status") or standard.get("runtime_trace", {}).get("scene_status") or "已识别"
+            confidence = scenario.get("confidence")
+            confidence_text = f"，置信度 {float(confidence):.1%}" if isinstance(confidence, (int, float)) else ""
+            return (
+                f"当前上传数据识别为【{scene_name}】，场景状态为 {status}{confidence_text}。"
+                f"这是本次数据的自动识别结果，与 Web 顶部的项目预设场景独立。",
+                [{"label": "数据场景", "value": scene_name}, {"label": "识别状态", "value": status}, {"label": "字段匹配", "value": f"{matched}/{len(mapping.get('mappings', []))}"}],
+                ["这个场景的判定依据是什么", "查看字段统一结果", "分析当前数据质量"],
+            )
         answer = (
             f"2号Agent将当前数据识别为{standard.get('scenario', {}).get('scenario_name', '未知场景')}，"
             f"共自动匹配 {matched}/{len(mapping.get('mappings', []))} 个字段，必需字段覆盖率 {float(mapping.get('required_coverage') or 0):.1%}。"
@@ -510,7 +522,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         elif any(item.get("status") == "blocked" for item in core_results):
             action_note = "独立 Executor 因前置条件不足而阻断；没有回退到 synthetic data 或重跑 Pipeline。"
             answer = action_note + answer
-    if skill_result and not core_results and not executed and not blocked_reason:
+    if skill_result and not core_results and not executed and not blocked_reason and not expert_answer and intent != "standardization":
         answer = DeterministicResponseRenderer().render(skill_plan["analysis"]["task_understanding"], skill_result)
     logs.extend({
         "time": now,

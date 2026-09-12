@@ -56,6 +56,27 @@ class AgentSkillRuntimeArchitectureTests(SimpleTestCase):
         self.assertEqual("execute", execution["execution_mode"])
         self.assertIn("anomaly_detection", follow_up["semantic_intents"])
 
+    def test_explicit_scene_question_does_not_inherit_previous_anomaly_intent(self):
+        previous = understand_task("哪些时间段值得重点检查")
+        task = understand_task("这个数据是什么场景的工业数据", {"previous_task_spec": previous})
+        self.assertEqual(["scene_identification"], task["semantic_intents"])
+        self.assertEqual("识别当前数据的工业场景", task["objective"])
+        self.assertEqual("standardization", task["response_intent"])
+
+    @override_settings(AGENT_RUNTIME_MODE="skill_runtime")
+    def test_scene_and_colloquial_snr_questions_keep_their_direct_answers(self):
+        snapshot = self.snapshot()
+        snapshot["results"]["standardization"]["scenario"].update({
+            "scenario_name": "热电锅炉长尾数据", "status": "confirmed", "confidence": .948,
+        })
+        with TemporaryDirectory() as directory, patch("core.services.agent_chat.get_run", return_value=snapshot), patch("core.skills.runtime.RUNS_DIR", Path(directory)):
+            scene = chat("这个数据是什么场景的工业数据")
+            snr = chat("它的噪声比是多少")
+        self.assertIn("当前上传数据识别为【热电锅炉长尾数据】", scene["answer"])
+        self.assertEqual("识别当前数据的工业场景", scene["skill_plan"]["analysis"]["task_understanding"]["objective"])
+        self.assertEqual("snr", snr["expert_topic"])
+        self.assertIn("信噪比", snr["answer"])
+
     def test_unknown_scene_blocks_specific_but_allows_generic(self):
         context = build_data_context(self.snapshot(scene=None)).public()
         resolution = resolve_capabilities(understand_task("检查异常和设备故障"), context)

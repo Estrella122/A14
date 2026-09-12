@@ -73,6 +73,10 @@ defineProps({
       <path d="M12 3 2.8 19h18.4L12 3Z" />
       <path d="M12 9v4M12 17h.01" />
     </template>
+    <template v-else-if="name === 'info'">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6M12 7h.01" />
+    </template>
     <template v-else-if="name === 'play'">
       <circle cx="12" cy="12" r="9" />
       <path d="m10 8 6 4-6 4V8Z" />
