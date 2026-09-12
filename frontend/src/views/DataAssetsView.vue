@@ -98,7 +98,7 @@ async function runPipelineFile(file, pending = createPendingFile(file)) {
   if (!files.value.some((item) => item.id === pending.id)) files.value.unshift(pending)
   uploading.value = true
   try {
-    latestRun.value = await uploadPipelineFile(file, { scenarioId: 'auto', instruction: '请根据上传数据识别工业场景并执行APC建模', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
+    latestRun.value = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景并执行APC建模', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     const standard = latestRun.value.results?.standardization
     const quality = latestRun.value.results?.cleaning?.overall_score
     pending.rows = latestRun.value.results?.cleaning?.cleaned_row_count ?? standard?.source_row_count ?? 0

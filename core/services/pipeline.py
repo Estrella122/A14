@@ -127,6 +127,12 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         effective_scene_id = result["scenario"]["scenario_id"]
         effective_template = repository.get(effective_scene_id)
         template_path = repository.root / "scenarios" / effective_scene_id / "template.json"
+        loaded_scenes = [template.scenario_id for template in repository.list()]
+        point_semantics_scenes = sorted({
+            row.get("point_resolution", {}).get("scene")
+            for row in result["mapping"]["mappings"]
+            if row.get("point_resolution", {}).get("scene")
+        })
         recognition_required_features = list(effective_template.recognition["required_features"])
         modeling_required_features = [
             field.standard_name for field in effective_template.fields if field.required
@@ -158,6 +164,8 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
             "confidence": result["detection"].get("confidence"),
             "confidence_margin": result["detection"].get("auto_confidence_margin"),
             "registry_scene_id": effective_scene_id,
+            "loaded_scenes": loaded_scenes,
+            "point_semantics_scenes": point_semantics_scenes,
             "template_path": str(template_path),
             "required_features_source": f"{template_path.parent / 'fields.csv'}#required=true",
             "required_features": modeling_required_features,
@@ -236,7 +244,16 @@ def _select_modeling_rows(cleaned: pd.DataFrame, segments: pd.DataFrame, top_k: 
     return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index()
 
 
-def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir: Path, resample_rule: str, max_lag_for_split: int = 60, primary_output: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+def _clean(
+    standardized: pd.DataFrame,
+    dictionary: list[dict[str, Any]],
+    run_dir: Path,
+    resample_rule: str,
+    max_lag_for_split: int = 60,
+    primary_output: str | None = None,
+    selection_window: int = 30,
+    selection_step: int = 15,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "data_cleaning" / "src"
     with _module_path(module_dir):
         from data_cleaning_agent import DataCleaningSelectionAgent
@@ -246,7 +263,13 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
             raise PipelineError("标准化结果缺少 timestamp，无法执行时序清洗。")
         if not any(item["role"] == "output" for item in spec.values()):
             raise PipelineError("没有识别到可用于建模的被控输出变量。")
-        agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output)
+        agent = DataCleaningSelectionAgent(
+            spec,
+            resample_rule=resample_rule,
+            primary_output=primary_output,
+            selection_window=selection_window,
+            selection_step=selection_step,
+        )
         # Freeze the chronological partitions before cleaning or scoring.
         ordered = standardized.sort_values("timestamp").reset_index(drop=True)
         requested_rule = resample_rule
@@ -262,7 +285,13 @@ def _clean(standardized: pd.DataFrame, dictionary: list[dict[str, Any]], run_dir
         for label, part in (("train", ordered.iloc[:boundaries[0]]),
                             ("validation", ordered.iloc[boundaries[0]:boundaries[1]]),
                             ("test", ordered.iloc[boundaries[1]:])):
-            part_agent = DataCleaningSelectionAgent(spec, resample_rule=resample_rule, primary_output=primary_output)
+            part_agent = DataCleaningSelectionAgent(
+                spec,
+                resample_rule=resample_rule,
+                primary_output=primary_output,
+                selection_window=selection_window,
+                selection_step=selection_step,
+            )
             aligned = part_agent.align_timestamp(part)
             processed = part_agent.process_missing_values(aligned)
             frame = part_agent.detect_and_repair_anomalies(processed)
@@ -836,7 +865,7 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
             'path': _artifact(run_dir, report_path), 'summary': review['conclusion']}
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -852,6 +881,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             "status": "running",
             "current_stage": "standardization",
             "original_name": original_name,
+            "project_scene": project_scene or None,
             "scenario_request": scenario_id or "auto",
             "instruction": instruction,
             "mapping_overrides": overrides or {},
@@ -1093,6 +1123,7 @@ def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, s
         temporary,
         original_name=previous.get("original_name", "source.csv"),
         scenario_id=scenario_id or previous.get("scenario_request", "auto"),
+        project_scene=previous.get("project_scene") or "",
         instruction=previous.get("instruction", ""),
         resample_rule=resample_rule,
         max_lag=max_lag,

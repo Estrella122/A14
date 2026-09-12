@@ -178,7 +178,7 @@ async function handleCsv(event) {
   clearInterval(runTimer)
   runTimer = window.setInterval(() => { runProgress.value = Math.min(90, runProgress.value + 5) }, 300)
   try {
-    const snapshot = await uploadPipelineFile(file, { scenarioId: 'auto', instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
+    const snapshot = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     // A successfully created CSV run starts a fresh evidence conversation.
     // Failed uploads keep the previous conversation so troubleshooting context is not lost.
     prompt.value = ''

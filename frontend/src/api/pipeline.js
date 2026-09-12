@@ -4,6 +4,7 @@ export async function uploadPipelineFile(file, options = {}) {
   const form = new FormData()
   form.append('file', file)
   form.append('scenario_id', options.scenarioId ?? 'auto')
+  form.append('project_scene', options.projectSceneId ?? '')
   form.append('instruction', options.instruction ?? '')
   form.append('resample_rule', options.resampleRule ?? '10s')
   form.append('max_lag', String(options.maxLag ?? 60))

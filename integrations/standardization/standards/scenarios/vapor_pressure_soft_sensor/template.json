@@ -1,0 +1,24 @@
+{
+  "scenario_id": "vapor_pressure_soft_sensor",
+  "scenario_name": "蒸气压力软测量实验",
+  "industry": "流程工业实验装置",
+  "process_unit": "再沸与冷凝压力估计",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["vapor pressure", "vapour pressure", "antoine estimate", "蒸气压", "再沸器"],
+  "sampling_seconds": 3600,
+  "time_axis_type": "elapsed_hours",
+  "timestamp_field": "timestamp",
+  "primary_output": "vapour_pressure_kpa",
+  "recognition": {
+    "required_features": ["hours_elapsed", "reboiler_temperature_average", "condenser_pressure_inverse", "antoine_pressure_estimate", "current_pressure_estimate", "vapour_pressure_kpa"],
+    "supporting_features": ["temperature_01", "temperature_04", "temperature_10", "valve_output_01", "flow_01", "pressure_01", "analyzer_01", "reboiler_temperature_rise"],
+    "conflicting_features": ["bottom_butane_content", "boiler_outlet_steam_temperature", "energy_usage", "hot_metal_si"],
+    "priority": 75,
+    "minimum_evidence": 6,
+    "minimum_confidence": 0.58,
+    "minimum_required_field_coverage": 0.80
+  },
+  "source": {"dataset": "user-provided vapor-pressure.csv", "provenance_status": "needs_source_metadata"},
+  "notes": "根据真实文件字段结构登记。温度按摄氏度、目标压力按kPa解释；flow/pres原始通道单位仍需数据提供方确认。缺少绝对时间戳且目标值高度缺失时只能进入复核。"
+}

@@ -1,0 +1,14 @@
+{
+  "scenario_id": "steel_industry_energy",
+  "scenario_name": "钢铁工业能源监测",
+  "industry": "冶金能源管理",
+  "process_unit": "钢铁企业用电负荷",
+  "version": "1.0.0",
+  "dictionary": "fields.csv",
+  "keywords": ["钢铁用电", "工业能耗", "能源监测", "energy consumption", "Usage_kWh", "Load_Type"],
+  "sampling_seconds": 900,
+  "time_axis_type": "wall_clock",
+  "timestamp_field": "timestamp",
+  "primary_output": "energy_usage",
+  "notes": "字段依据 UCI Steel Industry Energy Consumption 数据集 851 建立；用于能耗回归和数据质量分析，不代表生产控制变量或特定工厂上线验收。"
+}

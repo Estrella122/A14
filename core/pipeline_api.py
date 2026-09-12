@@ -61,6 +61,7 @@ def pipeline_collection(request):
             temporary,
             original_name=upload.name,
             scenario_id=request.POST.get("scenario_id", "auto"),
+            project_scene=request.POST.get("project_scene", ""),
             instruction=request.POST.get("instruction", ""),
             resample_rule=request.POST.get("resample_rule", "10s"),
             max_lag=int(request.POST.get("max_lag", "60")),
