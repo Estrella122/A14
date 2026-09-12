@@ -49,7 +49,6 @@ const files = ref(buildFiles(props.project))
 watch(() => props.project.id, () => { files.value = buildFiles(props.project) })
 
 const totalRows = computed(() => files.value.reduce((sum, file) => sum + Number(file.rows || 0), 0))
-const issueCount = computed(() => Math.round((props.project.missing + props.project.abnormal) * 480))
 const liveStandard = computed(() => latestRun.value?.results?.standardization ?? null)
 const liveCleaning = computed(() => latestRun.value?.results?.cleaning ?? null)
 const liveFieldCount = computed(() => liveStandard.value?.mapping?.mappings?.length ?? props.project.variables)

@@ -27,7 +27,7 @@ function csvCell(value) {
   return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
 }
 
-// TODO(mock): 仅用于可控压力测试；高炉答辩主流程使用项目内置的 Mendeley 真实数据切片。
+// 仅用于明确标识的可控仿真压力测试；高炉主流程使用项目内置的 Mendeley 真实数据切片。
 export function buildBlastFurnaceSimulationCsv(config = {}) {
   const steady = Math.min(75, Math.max(20, Number(config.steady) || 45))
   const step = Math.min(35, Math.max(5, Number(config.step) || 18))
@@ -92,7 +92,7 @@ export function buildBlastFurnaceSimulationCsv(config = {}) {
     csv: `\ufeff${csv}`,
     name: `sim_BF-SI_${configLabel}.csv`,
     rowCount,
-    variableCount: headers.length - 1,
+    variableCount: blastFurnaceHeaders.length - 1,
     period: '90 d · 1 h 采样',
     summary: `高炉仿真压力测试 · 稳态 ${steady}% · 激励 ${step}% · 噪声 ${noiseSigma}σ · 异常 ${anomalyCount} 点`,
   }
@@ -187,7 +187,7 @@ export function buildDebutanizerSimulationCsv(config = {}) {
   }
 }
 
-// TODO(mock): 工业干燥器生成数据用于接口验收；真实投运需接入带授权和仪表溯源信息的现场数据。
+// 工业干燥器仿真数据仅用于接口验收；真实投运需接入带授权和仪表溯源信息的现场数据。
 export function buildIndustrialDryerSimulationCsv(config = {}) {
   const step = Math.min(35, Math.max(5, Number(config.step) || 18))
   const noiseSigma = Math.min(6, Math.max(1, Number(config.noise) || 3))

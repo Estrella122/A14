@@ -12,6 +12,9 @@ PROCESSPILOT_REQUIRE_AUTH=1
 PROCESSPILOT_SECURE_SSL_REDIRECT=1
 PROCESSPILOT_HSTS_SECONDS=31536000
 PROCESSPILOT_SIMPLEUI=0
+PROCESSPILOT_RUNTIME_ROOT=/var/lib/processpilot/runtime
+PROCESSPILOT_MAX_CSV_ROWS=1000000
+PROCESSPILOT_MAX_CSV_COLUMNS=500
 ```
 
 数据库凭据应由部署平台注入，不要写进 `.env` 或版本库。需要 MySQL 时设置 `APC_DB_ENGINE=mysql` 以及 `APC_DB_NAME`、`APC_DB_USER`、`APC_DB_PASSWORD`、`APC_DB_HOST`、`APC_DB_PORT`。
@@ -50,4 +53,3 @@ npm run runtime:prune -- --keep 100 --days 30
 ```
 
 人工确认后才添加 `--apply`。命令只会处理项目定义的运行产物目录，并始终保留最新一次流水线结果。
-

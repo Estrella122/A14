@@ -7,7 +7,7 @@ import { requirementCoverage } from '../data/projectData'
 import { artifactUrl } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
-const props = defineProps({ project: { type: Object, required: true } })
+defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
 const { latestRun } = useLatestPipelineRun()
 const results = computed(() => latestRun.value?.results ?? {})

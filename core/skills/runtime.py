@@ -22,7 +22,7 @@ from .executor import get_executor
 from .execution_plan import build_execution_plan
 
 
-RUNS_DIR = Path(settings.BASE_DIR) / "runtime" / "agent_skill_runs"
+RUNS_DIR = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "agent_skill_runs"
 
 # Expert questions rarely use the exact wording of a feature button. This semantic
 # coverage table keeps the 30 skills stable while accepting control-engineering,
@@ -200,6 +200,8 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
     routed_business_skills = set(recalled_skill_ids) if task_understanding["task_kind"] != "knowledge_explanation" else set()
     operational = set(recalled_skill_ids) if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} else set()
     direct = capability_skill_ids | routed_business_skills | operational
+    if task_understanding["task_kind"] == "execute_pipeline" and any(term in text for term in ("重规划", "失败后重试")):
+        direct.add("execution_supervisor_replanner")
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
     execution_mode = route["mode"] if runtime_mode == "legacy" else task_understanding["execution_mode"]
     if route.get("source") == "model_unavailable":
@@ -443,19 +445,19 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             metrics, artifacts, evidence, warnings = _summary(snapshot, skill.handler)
         if skill.handler in {"intent", "entity", "parameter", "matcher", "planner"}:
             activity = "planned"
-        if skill.handler == "supervisor":
+        if skill.handler == "supervisor" and core_result is None:
             metrics = {"pipeline_status": snapshot.get("status"), "automatic_replanning": False}
-            warnings = ["仅读取流水线阶段状态；未实现独立自动重规划"]
+            warnings = ["当前为分析模式，未触发执行监督。"]
         checks = {
             "signal_noise_ratio_estimator": bool(snapshot.get("results", {}).get("cleaning", {}).get("snr")),
             "high_snr_dynamic_segment_extractor": bool(snapshot.get("results", {}).get("cleaning", {}).get("snr")),
             "arx_structure_order_selector": bool(snapshot.get("results", {}).get("modeling", {}).get("order_search")),
             "multi_model_benchmark": bool(snapshot.get("results", {}).get("modeling", {}).get("order_search")),
             "model_diagnostics_evaluator": bool(snapshot.get("results", {}).get("modeling", {}).get("diagnostics")),
-            "engineering_visualization_builder": False,
-            "industrial_simulation_generator": False,
-            "experiment_tracker_comparator": False,
-            "execution_supervisor_replanner": False,
+            "engineering_visualization_builder": bool(core_result),
+            "industrial_simulation_generator": bool(core_result),
+            "experiment_tracker_comparator": bool(core_result),
+            "execution_supervisor_replanner": bool(core_result),
         }
         if core_result is None and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"

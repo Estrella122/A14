@@ -38,7 +38,7 @@ export function sceneFromRun(run) {
     ],
   ]
   const candidateEntries = rawCandidateEntries
-    .map(([source, item]) => {
+    .map(([, item]) => {
       if (typeof item === 'string') return item
       if (typeof item === 'object' && item?.scenario_id) return item.scenario_id
       if (typeof item === 'object' && item?.id) return item.id

@@ -3,9 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
-from core.skills.core_executors import OptimizationExecutor, ReportExecutor, ReviewExecutor, StandardizationExecutor
+from core.skills.core_executors import (ExperimentExecutor, OptimizationExecutor, ReportExecutor, ReviewExecutor,
+                                        SimulationExecutor, StandardizationExecutor, SupervisionExecutor,
+                                        VisualizationExecutor)
 from core.skills.execution_plan import build_execution_plan
 from core.skills.executor import EXECUTOR_DESCRIPTORS, executor_status, get_executor
 from core.skills.runtime import plan_skills
@@ -60,6 +62,10 @@ class CoreExecutionPlanTests(SimpleTestCase):
             with self.subTest(message=message):
                 self.assertEqual(plan_skills(message)["analysis"]["execution_plan"]["core"]["target_groups"], expected)
 
+    def test_explicit_replanning_request_selects_supervisor_executor(self):
+        groups = plan_skills("重新执行失败任务并自动重规划")["analysis"]["execution_plan"]["core"]["target_groups"]
+        self.assertEqual(groups, ["supervision"])
+
 
 class ExecutorRegistryTests(SimpleTestCase):
     def test_industrial_executor_available(self):
@@ -82,6 +88,12 @@ class ExecutorRegistryTests(SimpleTestCase):
 
     def test_segmentation_is_reader_only(self):
         self.assertEqual(EXECUTOR_DESCRIPTORS["segmentation"]["status"], "reader_only")
+
+    def test_previously_unavailable_product_skills_are_executable(self):
+        for executor in ("simulation", "visualization", "experiment", "supervision"):
+            with self.subTest(executor=executor):
+                self.assertEqual(executor_status(executor), "executable")
+                self.assertIsNotNone(get_executor(executor))
 
     def test_unknown_executor_is_unavailable(self):
         self.assertEqual(executor_status("unknown"), "unavailable")
@@ -135,3 +147,45 @@ class ExecutorBoundaryTests(SimpleTestCase):
             result = StandardizationExecutor().execute("standardization", ["dataset_scenario_profiler"], {}, {}, {"snapshot": {"_dataframe": frame}}, {"output_dir": self.output, "state": {}})
         service.assert_called_once()
         self.assertEqual(result["status"], "success")
+
+    def test_simulation_writes_reproducible_csv(self):
+        context = {"output_dir": self.output}
+        inputs = {"parameters": {"rows": 160, "seed": 7}}
+        first = SimulationExecutor().execute("simulation", ["industrial_simulation_generator"], {}, {}, inputs, context)
+        content = Path(first["artifacts"][0]).read_bytes()
+        second = SimulationExecutor().execute("simulation", ["industrial_simulation_generator"], {}, {}, inputs, context)
+        self.assertEqual(first["status"], "success")
+        self.assertEqual(content, Path(second["artifacts"][0]).read_bytes())
+        self.assertTrue(first["metrics"]["synthetic"])
+
+    def test_visualization_uses_real_prediction_rows(self):
+        snapshot = {"run_id": "r1", "results": {"modeling": {"prediction_preview": [
+            {"y_true": 1.0, "y_pred": .9}, {"y_true": 2.0, "y_pred": 2.1},
+        ]}}}
+        result = VisualizationExecutor().execute("visualization", ["engineering_visualization_builder"], {}, {}, {"snapshot": snapshot}, {"output_dir": self.output})
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(Path(result["artifacts"][0]).exists())
+
+    def test_experiment_comparison_reads_registry(self):
+        runs = [{"run_id": "a", "results": {"modeling": {"config": {"family": "ARX"}, "metrics": {"test": {"r2": .7, "rmse": 1, "mae": .8}}}}},
+                {"run_id": "b", "results": {"modeling": {"config": {"family": "AR"}, "metrics": {"test": {"r2": .8, "rmse": .9, "mae": .7}}}}}]
+        with patch("core.services.pipeline.list_runs", return_value=runs):
+            result = ExperimentExecutor().execute("experiment", ["experiment_tracker_comparator"], {}, {}, {}, {"output_dir": self.output})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metrics"]["best_run_id"], "b")
+
+    def test_supervisor_generates_replan_for_failed_executor(self):
+        result = SupervisionExecutor().execute("supervision", ["execution_supervisor_replanner"], {}, {}, {"snapshot": {"run_id": "r1"}},
+                                               {"output_dir": self.output, "results": [{"skill_id": "modeling", "status": "failed"}]})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["metrics"]["decision"], "replan")
+        self.assertTrue(result["metrics"]["automatic_replanning"])
+
+
+class UploadResourceLimitTests(SimpleTestCase):
+    @override_settings(PROCESSPILOT_MAX_CSV_COLUMNS=2, PROCESSPILOT_MAX_CSV_ROWS=10)
+    def test_standardization_rejects_oversized_shape_before_agent_execution(self):
+        from core.services.pipeline import PipelineError, _standardize
+        with tempfile.TemporaryDirectory() as directory, patch("core.services.pipeline._read_csv", return_value=pd.DataFrame({"a": [1], "b": [2], "c": [3]})):
+            with self.assertRaisesRegex(PipelineError, "列数"):
+                _standardize(Path(directory) / "source.csv", Path(directory), "auto", "")

@@ -4,8 +4,9 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from .industrial_executor import execute_analysis
-from .core_executors import (CleaningExecutor, ModelingExecutor, OptimizationExecutor,
-                             ReportExecutor, ReviewExecutor, StandardizationExecutor)
+from .core_executors import (CleaningExecutor, ExperimentExecutor, ModelingExecutor, OptimizationExecutor,
+                             ReportExecutor, ReviewExecutor, SimulationExecutor, StandardizationExecutor,
+                             SupervisionExecutor, VisualizationExecutor)
 
 
 class SkillExecutor(ABC):
@@ -33,6 +34,10 @@ EXECUTOR_DESCRIPTORS = {
     "optimization": {"status": "executable", "executor": OptimizationExecutor()},
     "review": {"status": "executable", "executor": ReviewExecutor()},
     "report": {"status": "executable", "executor": ReportExecutor()},
+    "simulation": {"status": "executable", "executor": SimulationExecutor()},
+    "visualization": {"status": "executable", "executor": VisualizationExecutor()},
+    "experiment": {"status": "executable", "executor": ExperimentExecutor()},
+    "supervision": {"status": "executable", "executor": SupervisionExecutor()},
 }
 EXECUTORS = {key: value["executor"] for key, value in EXECUTOR_DESCRIPTORS.items() if value["executor"] is not None}
 

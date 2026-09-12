@@ -9,7 +9,7 @@ def generate_demo(scenario_id: str, rows: int = 240, seed: int = 2026) -> pd.Dat
     time = pd.date_range("2026-01-01 08:00:00", periods=rows, freq="min")
     x = np.arange(rows)
     if scenario_id == "blast_furnace":
-        # TODO(mock): 仅用于接口联调和压力测试；正式演示请使用内置的 Mendeley 真实高炉数据。
+        # 仅用于明确标识的接口联调和压力测试；正式演示请使用内置的 Mendeley 真实高炉数据。
         time = pd.date_range("2026-01-01", periods=rows, freq="h")
         blast = 4000 + 180 * np.sin(x / 31) + rng.normal(0, 35, rows)
         oxygen = 9200 + 0.9 * (blast - 4000) + rng.normal(0, 110, rows)

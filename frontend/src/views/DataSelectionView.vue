@@ -20,18 +20,9 @@ const weights = ref({ dynamic: 38, snr: 27, integrity: 20, coverage: 15 })
 const selectedIds = ref([])
 const scoringApplied = ref(false)
 const segmentFilter = ref('all')
-const demoSegments = [
-  { id: 'SEG-018', time: '07-01 08:12:20 — 08:28:45', duration: '16.4 min', type: '阶跃响应', dynamic: 96, snr: 93, integrity: 95, score: 94.2, reason: '煤气流量阶跃完整，目标响应清晰' },
-  { id: 'SEG-031', time: '07-01 13:40:00 — 14:02:00', duration: '22.0 min', type: '强动态', dynamic: 98, snr: 95, integrity: 97, score: 96.5, reason: '主变量时滞特征清晰，无异常干扰' },
-  { id: 'SEG-052', time: '07-02 17:02:15 — 17:20:40', duration: '18.4 min', type: '协同变化', dynamic: 93, snr: 91, integrity: 92, score: 91.6, reason: '多变量协同变化，覆盖高负荷工况' },
-  { id: 'SEG-061', time: '07-03 02:16:05 — 02:31:35', duration: '15.5 min', type: '扰动响应', dynamic: 90, snr: 94, integrity: 89, score: 90.8, reason: '钢坯速度扰动引起可辨识输出响应' },
-  { id: 'SEG-024', time: '07-01 10:01:10 — 10:12:58', duration: '11.8 min', type: '中动态', dynamic: 82, snr: 78, integrity: 86, score: 81.7, reason: '目标变量响应较弱，建议作为候选' },
-  { id: 'SEG-047', time: '07-02 16:18:30 — 16:27:06', duration: '8.6 min', type: '异常扰动', dynamic: 86, snr: 51, integrity: 59, score: 62.4, reason: '压力尖峰超工艺边界，不建议入选' },
-]
-
 const segments = computed(() => {
   const rows = liveCleaning.value.segments_preview ?? []
-  if (!rows.length) return latestRun.value ? [] : demoSegments
+  if (!rows.length) return []
   return rows.map((row, index) => {
     const start = new Date(row.start_time)
     const end = new Date(row.end_time)
@@ -111,6 +102,7 @@ const modelingRate = computed(() => Number(liveCleaning.value.modeling_row_count
 const averageScore = computed(() => scoredSegments.value.length ? scoredSegments.value.reduce((sum, item) => sum + item.score, 0) / scoredSegments.value.length : 0)
 
 function rescoreSegments() {
+  if (!latestRun.value) { emit('notify', { tone: 'warning', title: '尚无真实任务', message: '请先上传并运行 CSV；系统不会用演示片段替代真实结果。' }); return }
   scoringApplied.value = true
   emit('notify', { tone: 'success', title: '动态段已重新评分', message: `已按 ${weights.value.dynamic}/${weights.value.snr}/${weights.value.integrity}/${weights.value.coverage} 权重重算并排序。` })
 }
@@ -125,6 +117,7 @@ function toggleSegment(id) {
 }
 
 function freezeDataset() {
+  if (!latestRun.value) { emit('notify', { tone: 'warning', title: '无法冻结', message: '当前没有真实优选结果。' }); return }
   emit('notify', { tone: 'success', title: '当前优选结果已确认', message: `任务 ${latestRun.value?.run_id ?? '—'} 的 ${selectedCount.value} 个训练达标窗口已记录。` })
 }
 </script>
@@ -137,8 +130,9 @@ function freezeDataset() {
       description="在无标签时序数据中自动识别阶跃与扰动响应，剔除低信息稳态段，并按动态性、信噪比、完整性和工况覆盖度进行排序。"
     >
       <template #actions>
-        <button class="btn btn-secondary" type="button" @click="rescoreSegments"><AppIcon name="spark" />重新智能评分</button>
-        <button class="btn btn-primary" type="button" @click="freezeDataset"><AppIcon name="check" />冻结优选数据集</button>
+        <StatusPill :tone="latestRun ? 'success' : 'neutral'" dot>{{ latestRun ? '真实任务数据' : '等待真实数据' }}</StatusPill>
+        <button class="btn btn-secondary" type="button" :disabled="!latestRun" @click="rescoreSegments"><AppIcon name="spark" />重新智能评分</button>
+        <button class="btn btn-primary" type="button" :disabled="!latestRun" @click="freezeDataset"><AppIcon name="check" />冻结优选数据集</button>
       </template>
     </PageHeader>
 

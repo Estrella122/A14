@@ -15,6 +15,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROCESSPILOT_RUNTIME_ROOT = Path(os.getenv('PROCESSPILOT_RUNTIME_ROOT', str(BASE_DIR / 'runtime'))).expanduser().resolve()
 
 
 # Quick-start development settings - unsuitable for production
@@ -159,6 +160,8 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_UPLOAD_MEMORY_BYTES', str(5 * 1024 * 1024)))
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_FILE_UPLOAD_MEMORY_BYTES', str(2_621_440)))
+PROCESSPILOT_MAX_CSV_ROWS = int(os.getenv('PROCESSPILOT_MAX_CSV_ROWS', '1000000'))
+PROCESSPILOT_MAX_CSV_COLUMNS = int(os.getenv('PROCESSPILOT_MAX_CSV_COLUMNS', '500'))
 
 
 SIMPLEUI_HOME_INFO = False

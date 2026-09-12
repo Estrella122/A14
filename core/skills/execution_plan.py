@@ -4,6 +4,7 @@ from typing import Any
 
 
 GROUP_SKILLS = {
+    "simulation": ("industrial_simulation_generator",),
     "standardization": ("dataset_scenario_profiler", "semantic_field_unit_standardizer"),
     "cleaning": ("time_axis_alignment_resampler", "missing_anomaly_cleaner"),
     "segmentation": ("steady_transient_state_detector", "signal_noise_ratio_estimator", "high_snr_dynamic_segment_extractor", "segment_quality_scorer_ranker"),
@@ -11,6 +12,9 @@ GROUP_SKILLS = {
     "optimization": ("closed_loop_preprocessing_optimizer",),
     "review": ("engineering_result_interpreter",),
     "report": ("expert_report_writer",),
+    "visualization": ("engineering_visualization_builder",),
+    "experiment": ("experiment_tracker_comparator",),
+    "supervision": ("execution_supervisor_replanner",),
 }
 SKILL_GROUP = {skill_id: group for group, skill_ids in GROUP_SKILLS.items() for skill_id in skill_ids}
 
@@ -52,10 +56,11 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
     if "modeling" in targets:
         targets.update(("standardization", "cleaning", "review"))
 
-    order = ("standardization", "cleaning", "segmentation", "modeling", "optimization", "review", "report")
+    order = ("simulation", "standardization", "cleaning", "segmentation", "modeling", "optimization", "review", "report", "visualization", "experiment", "supervision")
     dependencies = {
-        "standardization": [], "cleaning": ["standardization"], "segmentation": ["cleaning"],
+        "simulation": [], "standardization": [], "cleaning": ["standardization"], "segmentation": ["cleaning"],
         "modeling": ["cleaning"], "optimization": [], "review": ["modeling"], "report": [],
+        "visualization": [], "experiment": [], "supervision": [],
     }
     steps = []
     for group in order:
@@ -67,6 +72,7 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
             "skill_ids": list(GROUP_SKILLS[group]),
             "dependencies": [item for item in dependencies[group] if item in targets],
             "inputs": {
+                "simulation": ["scenario", "generation_parameters"],
                 "standardization": ["source_csv|dataframe"],
                 "cleaning": ["standardized_data", "dictionary"],
                 "segmentation": ["cleaning_result"],
@@ -74,6 +80,9 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str])
                 "optimization": ["objective", "model", "bounds", "constraints", "real_data"],
                 "review": ["standardization_result", "cleaning_result", "modeling_result"],
                 "report": ["prior_skill_results|pipeline_snapshot"],
+                "visualization": ["pipeline_snapshot|prediction_artifact"],
+                "experiment": ["pipeline_run_registry"],
+                "supervision": ["prior_skill_results", "pipeline_snapshot"],
             }[group],
             "expected_outputs": [group + "_result"],
             "blocking_rules": ["missing_required_inputs", "failed_dependency"],

@@ -20,7 +20,7 @@ from django.conf import settings
 
 BASE_DIR = Path(settings.BASE_DIR)
 INTEGRATIONS_DIR = BASE_DIR / "integrations"
-RUNS_DIR = BASE_DIR / "runtime" / "pipeline_runs"
+RUNS_DIR = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "pipeline_runs"
 LATEST_PATH = RUNS_DIR / "latest.json"
 MAX_PREVIEW_ROWS = 12
 _RUN_LOCK = threading.Lock()
@@ -117,6 +117,12 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         from standard_agent import ScenarioRepository, StandardizationAgent
 
         frame = _read_csv(source_path)
+        max_rows = int(settings.PROCESSPILOT_MAX_CSV_ROWS)
+        max_columns = int(settings.PROCESSPILOT_MAX_CSV_COLUMNS)
+        if len(frame) > max_rows:
+            raise PipelineError(f"CSV 行数 {len(frame)} 超过上限 {max_rows}。")
+        if len(frame.columns) > max_columns:
+            raise PipelineError(f"CSV 列数 {len(frame.columns)} 超过上限 {max_columns}。")
         repository = ScenarioRepository()
         result = StandardizationAgent(repository).standardize(
             frame,

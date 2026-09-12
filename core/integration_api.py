@@ -35,9 +35,7 @@ def _read_csv(relative_path: str, limit: int = 12):
 
 
 def _response(payload, status=200):
-    response = JsonResponse(payload, status=status, json_dumps_params={"ensure_ascii": False})
-    response["Access-Control-Allow-Origin"] = "*"
-    return response
+    return JsonResponse(payload, status=status, json_dumps_params={"ensure_ascii": False})
 
 
 def standardization_payload():

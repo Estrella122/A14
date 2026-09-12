@@ -6,10 +6,10 @@ import time
 from pathlib import Path
 
 
-def retention_candidates(base_dir: Path, keep: int = 100, days: int = 30) -> list[Path]:
+def retention_candidates(base_dir: Path, keep: int = 100, days: int = 30, runtime_root: Path | None = None) -> list[Path]:
     if keep < 1 or days < 1:
         raise ValueError("keep 和 days 必须大于 0")
-    runtime = Path(base_dir).resolve() / "runtime"
+    runtime = Path(runtime_root).resolve() if runtime_root is not None else Path(base_dir).resolve() / "runtime"
     cutoff = time.time() - days * 86400
     candidates: list[Path] = []
 
@@ -42,8 +42,8 @@ def retention_candidates(base_dir: Path, keep: int = 100, days: int = 30) -> lis
     return candidates
 
 
-def prune_runtime(base_dir: Path, keep: int = 100, days: int = 30, apply: bool = False) -> dict:
-    targets = retention_candidates(base_dir, keep=keep, days=days)
+def prune_runtime(base_dir: Path, keep: int = 100, days: int = 30, apply: bool = False, runtime_root: Path | None = None) -> dict:
+    targets = retention_candidates(base_dir, keep=keep, days=days, runtime_root=runtime_root)
     removed_bytes = sum(path.stat().st_size if path.is_file() else sum(item.stat().st_size for item in path.rglob("*") if item.is_file()) for path in targets)
     if apply:
         for path in targets:

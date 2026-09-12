@@ -1,6 +1,5 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
-import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
 import { useEChart } from '../composables/useEChart'
 import { sceneStateFromProject, sceneFromRun } from '../composables/useSceneBinding'

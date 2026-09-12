@@ -646,5 +646,4 @@ def study_export(request, study_id):
     else:
         return api_response({'ok': False, 'message': 'format 仅支持 json 或 csv'}, status=400)
 
-    response['Access-Control-Allow-Origin'] = '*'
     return response

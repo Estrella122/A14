@@ -120,7 +120,7 @@ function saveTemplate() {
     return
   }
   const name = `流水线模板 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`
-  const snapshot = { id: `template-${Date.now()}`, name, nodes: nodes.value.map(({ status, ...node }) => ({ ...node, config: { ...node.config } })), edges: edges.value.map((edge) => ({ ...edge })) }
+  const snapshot = { id: `template-${Date.now()}`, name, nodes: nodes.value.map(({ status: _status, ...node }) => ({ ...node, config: { ...node.config } })), edges: edges.value.map((edge) => ({ ...edge })) }
   templates.value = [snapshot, ...templates.value].slice(0, 12)
   window.localStorage.setItem('processpilot-pipeline-templates', JSON.stringify(templates.value))
   activeTemplate.value = snapshot.id

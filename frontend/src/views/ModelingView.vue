@@ -8,7 +8,7 @@ import FrequencyAnalysisPanel from '../components/FrequencyAnalysisPanel.vue'
 import { announcePipelineUpdate, rerunPipeline } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
-const props = defineProps({ project: { type: Object, required: true } })
+defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
 
 const modelType = computed(() => liveModel.value?.config?.family ?? '等待运行')
@@ -27,23 +27,8 @@ const modelComparisons = computed(() => {
   if (!liveModel.value) return []
   return [{ round: '当前', r2: liveMetrics.value?.r2, rmse: liveMetrics.value?.rmse, mae: liveMetrics.value?.mae, selected: true }]
 })
-const demoMatrixLabels = [props.project.targetTag, props.project.mvTag, 'AIR_RATIO', 'ZONE_PRESS', props.project.disturbanceTag]
-const demoMatrix = [
-  [1, 0.82, 0.76, 0.44, -0.69],
-  [0.82, 1, 0.91, 0.35, -0.41],
-  [0.76, 0.91, 1, 0.38, -0.36],
-  [0.44, 0.35, 0.38, 1, -0.22],
-  [-0.69, -0.41, -0.36, -0.22, 1],
-]
-const matrixLabels = computed(() => liveModel.value?.collinearity?.labels?.length ? liveModel.value.collinearity.labels : demoMatrixLabels)
-const matrix = computed(() => liveModel.value?.collinearity?.matrix?.length ? liveModel.value.collinearity.matrix : demoMatrix)
-
-const demoLagRows = computed(() => [
-  { input: props.project.mvTag, output: props.project.targetTag, lagSamples: 24, lag: '24 点', corr: 0.82, method: '段内历史输入补偿', action: '保留主变量' },
-  { input: 'AIR_FUEL_RATIO', output: props.project.targetTag, lagSamples: 18, lag: '18 点', corr: 0.76, method: '段内历史输入补偿', action: '保留' },
-  { input: 'ZONE_PRESSURE', output: props.project.targetTag, lagSamples: 10, lag: '10 点', corr: 0.44, method: '低权重补偿', action: '降权' },
-  { input: props.project.disturbanceTag, output: props.project.targetTag, lagSamples: 31, lag: '31 点', corr: -0.69, method: '段内历史输入补偿', action: '保留扰动' },
-])
+const matrixLabels = computed(() => liveModel.value?.collinearity?.labels ?? [])
+const matrix = computed(() => liveModel.value?.collinearity?.matrix ?? [])
 const lagRows = computed(() => liveModel.value?.lags?.length ? liveModel.value.lags.map((row) => ({
   input: row.input,
   output: row.output,
@@ -52,7 +37,7 @@ const lagRows = computed(() => liveModel.value?.lags?.length ? liveModel.value.l
   corr: Number(row.correlation).toFixed(3),
   method: Number(row.delay_samples) >= 0 ? '使用历史输入，段内对齐' : '历史任务负时滞，需重跑',
   action: row.boundary_hit ? '命中上界，复核' : '训练段估计',
-})) : demoLagRows.value)
+})) : [])
 const lagAxisMax = computed(() => Math.max(
   1,
   Number(liveModel.value?.config?.max_lag ?? 0),
@@ -127,6 +112,7 @@ async function showFrequencyAnalysis() {
       description="自动估算多变量时间滞后、检测共线性并执行智能降维，使用优选数据完成模型训练、验证与可解释评价。"
     >
       <template #actions>
+        <StatusPill :tone="liveModel ? 'success' : 'neutral'" dot>{{ liveModel ? '真实任务结果' : '等待真实数据' }}</StatusPill>
         <button class="btn btn-secondary" type="button" :aria-expanded="comparisonOpen" @click="comparisonOpen = !comparisonOpen">{{ comparisonOpen ? '收起模型对比' : '比较模型版本' }}</button>
         <button class="btn btn-primary" type="button" :disabled="training" @click="trainModel"><AppIcon :name="training ? 'loop' : 'play'" :class="{ spinning: training }" />{{ training ? '训练与验证中…' : '训练并验证模型' }}</button>
       </template>
@@ -169,8 +155,8 @@ async function showFrequencyAnalysis() {
     </section>
     <div class="content-grid content-grid-5-7">
       <section class="panel correlation-panel">
-        <div class="section-heading compact"><div><span class="section-kicker">变量相关性热力图</span><h2>共线性结构</h2></div><StatusPill tone="warning">2 对高共线</StatusPill></div>
-        <div class="heatmap-wrap" role="table" aria-label="变量相关性矩阵">
+        <div class="section-heading compact"><div><span class="section-kicker">变量相关性热力图</span><h2>共线性结构</h2></div><StatusPill :tone="matrix.length ? 'success' : 'neutral'">{{ matrix.length ? '真实矩阵' : '暂无数据' }}</StatusPill></div>
+        <div v-if="matrix.length" class="heatmap-wrap" role="table" aria-label="变量相关性矩阵">
           <div class="heatmap-corner"></div>
           <div v-for="label in matrixLabels" :key="`col-${label}`" class="heatmap-label col-label" role="columnheader">{{ label }}</div>
           <template v-for="(row, rowIndex) in matrix" :key="`row-${rowIndex}`">
@@ -178,18 +164,20 @@ async function showFrequencyAnalysis() {
             <div v-for="(value, colIndex) in row" :key="`${rowIndex}-${colIndex}`" class="heatmap-cell" role="cell" :style="{ background: heatColor(value), color: Math.abs(value) > .56 ? '#fff' : '#1e293b' }">{{ value.toFixed(2) }}</div>
           </template>
         </div>
+        <p v-else class="empty-state">当前任务没有真实相关矩阵；不展示示例矩阵。</p>
         <div class="heatmap-scale"><span>-1.0 负相关</span><i></i><span>0</span><b></b><span>+1.0 正相关</span></div>
         <div class="agent-tip"><span><AppIcon name="spark" /></span><p><strong>Agent 发现</strong>本次任务从 {{ liveModel?.input_cols?.length ?? 0 }} 个候选输入中保留 {{ liveModel?.selected_inputs?.length ?? 0 }} 个特征；具体共线性证据已写入模型产物。</p></div>
       </section>
 
       <section class="panel lag-panel">
         <div class="section-heading compact"><div><span class="section-kicker">多变量时滞估算</span><h2>相对 {{ project.targetTag }} 的最佳补偿</h2></div><button class="text-button" type="button" :aria-expanded="correlationDetailOpen" @click="correlationDetailOpen = !correlationDetailOpen">{{ correlationDetailOpen ? '收起相关证据' : '查看互相关证据' }} <AppIcon name="arrow" :size="15" /></button></div>
-        <div class="lag-visual">
+        <div v-if="lagRows.length" class="lag-visual">
           <div class="lag-axis"><span v-for="tick in lagAxisTicks" :key="tick">{{ tick }}</span></div>
           <div v-for="row in lagRows" :key="row.input" class="lag-row">
             <span>{{ row.input }}</span><div><i :style="{ left: lagPercent(row) }"></i><b :style="{ width: lagPercent(row) }"></b></div><strong>{{ row.lag }}</strong>
           </div>
         </div>
+        <p v-else class="empty-state">当前任务没有真实时滞结果；不展示预置时滞。</p>
         <div class="table-wrap compact-table-wrap">
           <table class="data-table">
             <caption class="visually-hidden">变量时滞估算与补偿方案</caption>

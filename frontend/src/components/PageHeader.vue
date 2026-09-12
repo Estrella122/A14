@@ -1,6 +1,4 @@
 <script setup>
-import AppIcon from './AppIcon.vue'
-
 defineProps({
   eyebrow: { type: String, default: '' },
   title: { type: String, required: true },

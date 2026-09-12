@@ -187,7 +187,6 @@ const isCompleted = computed(() => ['completed', 'accepted'].includes(study.valu
 const isTerminal = computed(() => ['completed', 'accepted', 'failed'].includes(study.value?.status))
 const isAccepted = computed(() => study.value?.status === 'accepted')
 const isLegacy = computed(() => Boolean(study.value?.is_legacy))
-const executionBusy = computed(() => creating.value || running.value)
 const operationBusy = computed(() => loading.value || creating.value || running.value || accepting.value)
 const settingsLocked = computed(() => operationBusy.value || Boolean(study.value && !isTerminal.value))
 const normalizedRandomSeed = computed(() => {

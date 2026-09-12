@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -16,7 +17,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         try:
-            result = prune_runtime(settings.BASE_DIR, keep=options["keep"], days=options["days"], apply=options["apply"])
+            result = prune_runtime(settings.BASE_DIR, keep=options["keep"], days=options["days"], apply=options["apply"], runtime_root=Path(settings.PROCESSPILOT_RUNTIME_ROOT))
         except ValueError as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(json.dumps(result, ensure_ascii=False, indent=2))
