@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import AppIcon from './AppIcon.vue'
 import StatusPill from './StatusPill.vue'
+import { executionStatus } from '../utils/executionStatus'
 
 const props = defineProps({
   catalog: { type: Object, default: null },
@@ -21,11 +22,13 @@ const visibleSkills = computed(() => {
     return categoryMatch && textMatch
   })
 })
-const activeCount = computed(() => props.executions.filter((item) => item.status === 'success').length)
+const activeCount = computed(() => props.executions.filter((item) => ['success', 'partial'].includes(item.status)).length)
 function activityText(item) {
-  if (item?.status === 'unavailable') return '未执行/缺证据'
-  if (item?.status === 'blocked') return '已阻断'
+  if (['success', 'partial', 'blocked', 'failed', 'skipped', 'unavailable'].includes(item?.status)) return executionStatus(item.status).label
   return item?.activity === 'executed' ? '旧版记录，未核验' : item?.activity === 'read' ? '读取证据' : item?.activity === 'planned' ? '已规划' : '已调用'
+}
+function evidenceText(item) {
+  return (item?.evidence ?? []).map((entry) => typeof entry === 'string' ? entry : entry?.artifact_type || entry?.source || '结构化证据').join(' · ')
 }
 </script>
 
@@ -57,22 +60,21 @@ function activityText(item) {
       </div>
 
       <div v-if="visibleSkills.length" class="skill-grid">
-        <details v-for="skill in visibleSkills" :key="skill.id" class="skill-card" :class="{ selected: executionMap[skill.id]?.status === 'success', blocked: executionMap[skill.id]?.status === 'blocked' }">
+        <details v-for="skill in visibleSkills" :key="skill.id" class="skill-card" :class="{ selected: ['success', 'partial'].includes(executionMap[skill.id]?.status), blocked: executionMap[skill.id]?.status === 'blocked', failed: executionMap[skill.id]?.status === 'failed' }">
           <summary>
             <span class="skill-index">{{ String((catalog?.skills ?? []).findIndex((item) => item.id === skill.id) + 1).padStart(2, '0') }}</span>
             <span class="skill-copy"><strong>{{ skill.name }}</strong><code>{{ skill.id }}</code></span>
-            <span v-if="executionMap[skill.id]" class="skill-hit" :class="{ 'is-blocked': ['blocked', 'unavailable'].includes(executionMap[skill.id].status) }"><AppIcon :name="['blocked', 'unavailable'].includes(executionMap[skill.id].status) ? 'alert' : 'check'" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
+            <span v-if="executionMap[skill.id]" class="skill-hit" :class="`is-${executionStatus(executionMap[skill.id].status).tone}`"><AppIcon :name="executionStatus(executionMap[skill.id].status).icon" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
             <span v-else class="skill-ready">READY</span>
           </summary>
           <p>{{ skill.description }}</p>
           <dl>
             <div><dt>依赖</dt><dd>{{ skill.depends_on.join(' → ') || '无' }}</dd></div>
             <div><dt>触发词</dt><dd>{{ skill.triggers.join(' · ') }}</dd></div>
-            <div v-if="executionMap[skill.id]"><dt>本轮证据</dt><dd>{{ executionMap[skill.id].evidence.join(' · ') }}</dd></div>
+            <div v-if="executionMap[skill.id]"><dt>本轮证据</dt><dd>{{ evidenceText(executionMap[skill.id]) || '无独立证据' }}</dd></div>
             <div v-if="executionMap[skill.id]?.relevance_score"><dt>匹配度</dt><dd>{{ Math.round(executionMap[skill.id].relevance_score * 100) }}%</dd></div>
             <div v-if="executionMap[skill.id]"><dt>耗时</dt><dd>{{ executionMap[skill.id].duration_ms }} ms</dd></div>
           </dl>
-          <pre v-if="executionMap[skill.id]">{{ JSON.stringify(executionMap[skill.id].metrics, null, 2) }}</pre>
         </details>
       </div>
       <div v-else class="skill-state">没有匹配的 Skill。</div>
@@ -99,6 +101,7 @@ function activityText(item) {
 .skill-card:hover { border-color: #aac8fa; transform: translateY(-1px); box-shadow: 0 6px 16px rgba(31, 78, 145, .08); }
 .skill-card.selected { border-color: #73a9ff; background: linear-gradient(135deg, #f7fbff, #eef6ff); box-shadow: inset 3px 0 #2f6fed; }
 .skill-card.blocked { border-color: #f5c26b; background: #fffbeb; box-shadow: inset 3px 0 #f59e0b; }
+.skill-card.failed { border-color: #fecaca; background: #fff7f7; box-shadow: inset 3px 0 #dc2626; }
 .skill-card summary { display: flex; align-items: center; gap: 9px; padding: 11px; list-style: none; cursor: pointer; }
 .skill-card summary::-webkit-details-marker { display: none; }
 .skill-index { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; color: #2563eb; background: #eaf2ff; font-weight: 800; font-size: 9px; }
@@ -108,14 +111,15 @@ function activityText(item) {
 .skill-copy code { margin-top: 2px; color: #94a3b8; font-size: 7px; }
 .skill-hit, .skill-ready { flex: 0 0 auto; font-size: 7px; font-weight: 800; }
 .skill-hit { display: flex; align-items: center; gap: 2px; color: #047857; }
-.skill-hit.is-blocked { color: #b45309; }
+.skill-hit.is-warning { color: #b45309; }
+.skill-hit.is-danger { color: #b91c1c; }
+.skill-hit.is-neutral { color: #64748b; }
 .skill-ready { color: #94a3b8; }
 .skill-card > p { margin: 0; padding: 0 12px 9px 47px; color: #64748b; font-size: 9px; line-height: 1.55; }
 .skill-card dl { margin: 0 10px 10px; padding: 8px; border-radius: 7px; background: rgba(241, 245, 249, .8); font-size: 8px; }
 .skill-card dl div { display: grid; grid-template-columns: 52px 1fr; gap: 6px; margin: 3px 0; }
 .skill-card dt { color: #94a3b8; }
 .skill-card dd { margin: 0; color: #334155; overflow-wrap: anywhere; }
-.skill-card pre { max-height: 150px; margin: 0 10px 10px; padding: 8px; overflow: auto; border-radius: 7px; color: #dbeafe; background: #10233f; font-size: 7px; }
 .skill-state { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 100px; color: #64748b; font-size: 11px; }
 .skill-state.is-error { color: #b45309; }
 @media (max-width: 1000px) { .skill-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .skill-heading { flex-direction: column; } }

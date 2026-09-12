@@ -109,6 +109,12 @@ class AgentSkillRuntimeArchitectureTests(SimpleTestCase):
             result = chat("执行异常检测")
         rerun.assert_not_called()
         self.assertGreater(result["skill_summary"]["executed"], 0)
+        observability = result["runtime_observability"]
+        self.assertTrue(observability["capabilities"])
+        self.assertIn("steps", observability["execution_dag"])
+        self.assertEqual(observability["skill_loading"]["selected_skill"], "industrial-analysis")
+        self.assertIn("executor_results", observability)
+        self.assertIn("artifacts", observability)
 
     def test_selected_skill_document_policy_controls_executor(self):
         source = Path(__file__).parent / "skills" / "industrial-analysis"

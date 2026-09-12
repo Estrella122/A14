@@ -507,6 +507,13 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "skill_run_id": skill_run["skill_run_id"],
         "skill_executions": skill_run["executions"],
         "skill_summary": skill_run["summary"],
+        "runtime_observability": {
+            "capabilities": skill_plan.get("analysis", {}).get("capability_resolution", {}).get("candidates", []),
+            "execution_dag": skill_plan.get("analysis", {}).get("execution_plan", {}).get("core", {}),
+            "skill_loading": skill_plan.get("analysis", {}).get("skill_runtime", {}),
+            "executor_results": core_results,
+            "artifacts": skill_run.get("artifact_registry", []),
+        },
         "deliverables": _deliverables(snapshot) if (executed or "final_artifact_exporter" in direct) and not blocked_reason else [],
         "expert_topic": expert_answer["topic"] if expert_answer else None,
         "expert_topics": expert_answer.get("topics", []) if expert_answer else [],

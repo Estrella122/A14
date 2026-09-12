@@ -21,8 +21,11 @@ export async function getLatestPipelineRun() {
 }
 
 // TODO(api): 当前 GET 已返回运行摘要；后续数据量增大时补充服务端分页，接口失败则使用集中 mock 降级。
-export async function listPipelineRuns({ signal, scenarioId } = {}) {
-  const query = scenarioId ? `?scenario_id=${encodeURIComponent(scenarioId)}` : ''
+export async function listPipelineRuns({ signal, scenarioId, limit } = {}) {
+  const params = new URLSearchParams()
+  if (scenarioId) params.set('scenario_id', scenarioId)
+  if (limit) params.set('limit', String(limit))
+  const query = params.size ? `?${params}` : ''
   const payload = await apiRequest(`/pipeline/runs/${query}`, { signal })
   return payload.data
 }

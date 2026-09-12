@@ -1,4 +1,7 @@
 export const EXECUTION_STATUS = {
+  selected: { label: '已选择', tone: 'success', icon: 'check' },
+  deferred: { label: '等待上游依赖', tone: 'warning', icon: 'clock' },
+  executable: { label: '可执行', tone: 'brand', icon: 'arrow' },
   success: { label: '成功', tone: 'success', icon: 'check' },
   partial: { label: '已完成，但存在约束未满足', tone: 'warning', icon: 'alert' },
   blocked: { label: '前置条件不足', tone: 'warning', icon: 'clock' },

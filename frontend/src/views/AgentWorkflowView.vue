@@ -7,10 +7,12 @@ import { executionStatus } from '../utils/executionStatus'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
-import { getAgentSkills, sendAgentMessage } from '../api/agent'
-import { announcePipelineUpdate, artifactUrl, uploadPipelineFile } from '../api/pipeline'
+import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
+import { getAgentSkillRun, getAgentSkills, sendAgentMessage } from '../api/agent'
+import { announcePipelineUpdate, artifactUrl, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
+import { buildRuntimeObservability } from '../utils/runtimeObservability'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
@@ -35,6 +37,9 @@ const chatThread = ref(null)
 const fileInput = ref(null)
 const uploading = ref(false)
 const responseState = ref(savedChat?.responseState ?? null)
+const runtimeHistory = ref(savedChat?.runtimeHistory ?? {})
+const recentRuns = ref([])
+const selectedRun = ref(null)
 const skillCatalog = ref(null)
 const skillCatalogLoading = ref(true)
 const skillCatalogError = ref('')
@@ -44,7 +49,9 @@ const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
 const { latestRun } = useLatestPipelineRun()
 let runTimer
-const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
+const activeRun = computed(() => selectedRun.value ?? latestRun.value)
+const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
+const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
 
 const promptTemplates = computed(() => ({
   blast_furnace: ['提取高炉高信噪比动态数据并评估铁水硅模型', '判断矿焦比和鼓风流量是否存在共线性', '以稳健性优先重新执行闭环寻优'],
@@ -67,23 +74,42 @@ const planNodes = computed(() => {
       icon: skillCategoryIcon[step.category] ?? 'loop',
     }))
   }
-  return (responseState.value?.plan ?? latestRun.value?.stages?.map((stage) => ({ key: stage.key, name: stage.label, tool: stage.key, output: stage.message, status: stage.status })) ?? []).map((node) => ({ ...node, icon: iconMap[node.key] ?? 'loop' }))
+  return (responseState.value?.plan ?? activeRun.value?.stages?.map((stage) => ({ key: stage.key, name: stage.label, tool: stage.key, output: stage.message, status: stage.status })) ?? []).map((node) => ({ ...node, icon: iconMap[node.key] ?? 'loop' }))
 })
 const intent = computed(() => responseState.value?.intent ?? { key: 'overview', confidence: 0, keywords: [] })
-const contextRunId = computed(() => responseState.value?.run_id ?? latestRun.value?.run_id ?? '尚无任务')
-const reportUrl = computed(() => latestRun.value?.artifacts?.analysis_report_md ? artifactUrl(latestRun.value.run_id, 'analysis_report_md') : '')
+const contextRunId = computed(() => responseState.value?.run_id ?? activeRun.value?.run_id ?? '尚无任务')
+const reportUrl = computed(() => activeRun.value?.artifacts?.analysis_report_md ? artifactUrl(activeRun.value.run_id, 'analysis_report_md') : '')
 
-watch([messages, responseState, liveLogs, prompt], () => {
+watch([messages, responseState, runtimeHistory, liveLogs, prompt], () => {
   try {
     const persistedResponse = responseState.value ? { ...responseState.value, snapshot: null } : null
     window.localStorage.setItem(chatStorageKey, JSON.stringify({
       prompt: prompt.value,
       messages: messages.value.slice(-60),
       responseState: persistedResponse,
+      runtimeHistory: runtimeHistory.value,
+      selectedRunId: selectedRun.value?.run_id ?? activeRun.value?.run_id ?? null,
       liveLogs: liveLogs.value.slice(0, 20),
     }))
   } catch { /* Conversation persistence is best effort. */ }
 }, { deep: true })
+
+watch(() => activeRun.value?.run_id, (runId) => {
+  if (runId && responseState.value?.run_id !== runId && runtimeHistory.value[runId]) responseState.value = runtimeHistory.value[runId]
+  else if (runId && responseState.value?.run_id !== runId) responseState.value = null
+})
+
+function rememberRuntime(result) {
+  if (!result?.run_id) return
+  runtimeHistory.value = {
+    ...runtimeHistory.value,
+    [result.run_id]: {
+      run_id: result.run_id,
+      skill_run_id: result.skill_run_id,
+      runtime_observability: buildRuntimeObservability(result),
+    },
+  }
+}
 
 function setTemplate(text) {
   prompt.value = text
@@ -119,8 +145,9 @@ async function runWorkflow() {
     currentNode.value = Math.min(planNodes.value.length - 1, Math.floor((runProgress.value / 100) * planNodes.value.length))
   }, 240)
   try {
-    const result = await sendAgentMessage(userText, latestRun.value?.run_id, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [])
+    const result = await sendAgentMessage(userText, activeRun.value?.run_id, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [])
     responseState.value = result
+    rememberRuntime(result)
     liveLogs.value = [...result.logs, ...liveLogs.value].slice(0, 12)
     messages.value.push({
       id: Date.now() + 1,
@@ -136,11 +163,12 @@ async function runWorkflow() {
     })
     if (result.snapshot) {
       latestRun.value = result.snapshot
+      selectedRun.value = result.snapshot
       announcePipelineUpdate(result.snapshot)
     }
     runProgress.value = 100
     currentNode.value = Math.max(planNodes.value.length - 1, 0)
-    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : result.executed ? 'Agent 已执行并刷新任务' : 'Agent 分析完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key} · 规则匹配分 ${(result.intent.confidence * 100).toFixed(0)}%` })
+    emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : result.executed ? 'Agent 已执行并刷新任务' : 'Agent 分析完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key} · 任务理解置信度 ${(result.intent.confidence * 100).toFixed(0)}%` })
   } catch (error) {
     messages.value.push({ id: Date.now() + 1, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'Agent 请求失败', message: error.message })
@@ -188,9 +216,11 @@ async function handleCsv(event) {
     responseState.value = null
     liveLogs.value = []
     latestRun.value = snapshot
+    selectedRun.value = snapshot
     announcePipelineUpdate(snapshot)
     const result = await sendAgentMessage('总结刚刚上传的CSV，说明数据质量、模型效果、评审结论和报告产物', snapshot.run_id)
     responseState.value = result
+    rememberRuntime(result)
     liveLogs.value = [
       ...result.logs,
       ...snapshot.stages.map((stage) => ({ time: stage.finished_at ?? snapshot.updated_at, level: stage.status === 'completed' ? 'TOOL' : 'WARN', text: `${stage.label}：${stage.message}` })),
@@ -223,10 +253,27 @@ async function handleCsv(event) {
 onMounted(async () => {
   await Promise.allSettled([
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
+    listPipelineRuns({ limit: 20 }).then((payload) => {
+      recentRuns.value = (Array.isArray(payload) ? payload : payload?.results ?? payload?.runs ?? []).slice(0, 20)
+      const restored = recentRuns.value.find((run) => run.run_id === savedChat?.selectedRunId)
+      if (restored) selectedRun.value = restored
+    }),
   ])
+  if (responseState.value?.skill_run_id) {
+    try {
+      const skillRun = await getAgentSkillRun(responseState.value.skill_run_id)
+      responseState.value = { ...responseState.value, runtime_observability: buildRuntimeObservability(skillRun) }
+      rememberRuntime(responseState.value)
+    } catch { /* Persisted observability remains usable if the runtime record expired. */ }
+  }
   scrollToLatest()
 })
 onBeforeUnmount(() => clearInterval(runTimer))
+
+function switchRun(event) {
+  const run = recentRuns.value.find((item) => item.run_id === event.target.value)
+  if (run) selectedRun.value = run
+}
 </script>
 
 <template>
@@ -237,6 +284,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
       description="用工业自然语言描述目标，Agent 自动拆解意图、组装算法流水线，并以辨识指标驱动预处理策略持续自演进。"
     >
       <template #actions>
+        <label class="run-switcher"><span>最近运行</span><select :value="activeRun?.run_id ?? ''" aria-label="切换最近运行" @change="switchRun"><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
         <input ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
         <button class="btn btn-primary" type="button" :disabled="uploading" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" />{{ uploading ? `子Agent执行中 ${runProgress}%` : '上传CSV并全流程运行' }}</button>
         <StatusPill tone="success" dot>证据 Agent 在线</StatusPill>
@@ -252,6 +300,8 @@ onBeforeUnmount(() => clearInterval(runTimer))
       :loading="skillCatalogLoading"
       :error="skillCatalogError"
     />
+
+    <RuntimeObservabilityPanel :runtime="runtimeObservation" />
 
     <div class="agent-layout">
       <section class="panel chat-panel">
@@ -287,14 +337,14 @@ onBeforeUnmount(() => clearInterval(runTimer))
         <div class="prompt-templates">
           <button v-for="item in (responseState?.suggestions ?? promptTemplates)" :key="item" type="button" @click="setTemplate(item)">{{ item }}</button>
         </div>
-        <div v-if="latestRun?.status === 'completed'" class="agent-delivery-bar">
-          <span><AppIcon name="check" :size="15" />任务 {{ latestRun.run_id }} 已完成</span>
-          <a :href="artifactUrl(latestRun.run_id, 'standardized_csv')">标准化CSV</a>
-          <a :href="artifactUrl(latestRun.run_id, 'cleaned_csv')">清洗CSV</a>
-          <a v-if="latestRun.artifacts?.segments_csv" :href="artifactUrl(latestRun.run_id, 'segments_csv')">动态段CSV</a>
-          <a v-if="latestRun.artifacts?.modeling_csv" :href="artifactUrl(latestRun.run_id, 'modeling_csv')">建模数据CSV</a>
-          <a :href="artifactUrl(latestRun.run_id, 'metrics_json')">模型指标</a>
-          <a :href="artifactUrl(latestRun.run_id, 'optimization_json')">寻优记录</a>
+        <div v-if="activeRun?.status === 'completed'" class="agent-delivery-bar">
+          <span><AppIcon name="check" :size="15" />任务 {{ activeRun.run_id }} 已完成</span>
+          <a :href="artifactUrl(activeRun.run_id, 'standardized_csv')">标准化CSV</a>
+          <a :href="artifactUrl(activeRun.run_id, 'cleaned_csv')">清洗CSV</a>
+          <a v-if="activeRun.artifacts?.segments_csv" :href="artifactUrl(activeRun.run_id, 'segments_csv')">动态段CSV</a>
+          <a v-if="activeRun.artifacts?.modeling_csv" :href="artifactUrl(activeRun.run_id, 'modeling_csv')">建模数据CSV</a>
+          <a :href="artifactUrl(activeRun.run_id, 'metrics_json')">模型指标</a>
+          <a :href="artifactUrl(activeRun.run_id, 'optimization_json')">寻优记录</a>
           <a v-if="reportUrl" class="report-link" :href="reportUrl"><AppIcon name="download" :size="14" />分析报告</a>
         </div>
         <div class="prompt-composer" :class="{ 'is-running': isRunning }">
@@ -312,11 +362,11 @@ onBeforeUnmount(() => clearInterval(runTimer))
 
       <aside class="agent-side-stack">
         <section class="panel intent-panel">
-          <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">规则匹配分 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
+          <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">任务理解 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
           <dl class="intent-list">
             <div><dt>当前任务</dt><dd><code>{{ contextRunId }}</code></dd></div>
             <div><dt>识别意图</dt><dd>{{ intentLabels[intent.key] ?? intent.key }}</dd></div>
-            <div><dt>命中关键词</dt><dd>{{ intent.keywords?.join(' · ') || '通用问答' }}</dd></div>
+            <div><dt>候选召回线索</dt><dd>{{ intent.keywords?.join(' · ') || '语义与上下文' }}</dd></div>
             <div><dt>执行模式</dt><dd>{{ responseState?.blocked ? '设备门禁阻断' : responseState?.executed ? '真实重跑' : '只读证据分析' }}</dd></div>
             <div><dt>页面焦点</dt><dd>{{ intentLabels[intent.key] ?? '任务总览' }}</dd></div>
           </dl>
@@ -364,6 +414,7 @@ onBeforeUnmount(() => clearInterval(runTimer))
 </template>
 
 <style scoped>
+.run-switcher { display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid #dbe3ef;border-radius:8px;background:#fff }.run-switcher span { color:#64748b;font-size:8px }.run-switcher select { max-width:185px;border:0;outline:0;color:#334155;background:transparent;font-size:8px }
 .agent-delivery-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px 17px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
 .agent-delivery-bar span { display: inline-flex; align-items: center; gap: 5px; margin-right: auto; color: #166534; font-size: 9px; }
 .agent-delivery-bar a { padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff; text-decoration: none; font-size: 8px; }
