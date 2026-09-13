@@ -1,0 +1,26 @@
+# 3D model assets
+
+`industrial_dryer.glb` is the production asset used by the ProcessPilot digital twin page. It incorporates the detailed **Industrial Rotary Dryer** CAD model by **Alibre Design** from [3D Warehouse](https://3dwarehouse.sketchup.com/model/ec181059cdc3036a5970eada872fb5c/Industrial-Rotary-Dryer) into the ProcessPilot combined work under the [3D Warehouse General Model License](https://3dwarehouse.sketchup.com/tos).
+
+The repository does not redistribute the source Collada file. The checked-in GLB is an adapted runtime asset: 5,931 source meshes are grouped into eight stable semantic systems, coordinates and materials are normalized, and geometry is Draco-compressed. The surrounding application, live data bindings, interaction, interface, registry, labels and operational behavior are original ProcessPilot content.
+
+To rebuild after downloading the licensed source model from 3D Warehouse:
+
+```bash
+npm run import:dryer-cad -- /absolute/path/to/model.dae
+```
+
+The stable semantic nodes are `dryer_drum`, `feed_hopper`, `air_heater`, `supply_fan`, `exhaust_outlet`, `product_outlet`, `process_piping`, and `maintenance_platform`. `air_heater` represents the source model's real air preparation inlet (filter and damper); this CAD does not contain a separate burner shell. Renaming these nodes breaks field-to-mesh binding.
+
+These assets remain intentionally absent. The UI reports `missing_3d_asset` until a licensed, compatible model is installed:
+
+- `blast_furnace.glb`
+- `thermal_power_boiler.glb`
+- `debutanizer_column.glb`
+- `steel_industry_energy.glb`
+- `vapor_pressure_soft_sensor.glb`
+
+Product-photo references used to visually check the assembled equipment layout:
+
+- [FEECO rotary dryers](https://feeco.com/equipment/thermal-processing/rotary-dryers/)
+- [Xuye industrial rotary drum dryer line](https://xuyemachinery.en.made-in-china.com/product/YdrAJVOCZSha/China-Industrial-Rotary-Drum-Dryer-Machine-Line-Feather-Dryer.html)

@@ -1,31 +1,56 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { buildScene3DState, getScene3DDescriptor, UNKNOWN_SCENE_3D } from '../src/data/scene3dRegistry.js'
+import { buildScene3DState, getScene3DDescriptor, listMissingSceneAssets, UNKNOWN_SCENE_3D } from '../src/data/scene3dRegistry.js'
 
-test('five requested scene cases resolve from detected data scene', () => {
+test('detected data scene selects the 3D descriptor independently from project scene', () => {
   for (const id of ['debutanizer_column', 'thermal_power_boiler_long_tail', 'industrial_dryer', 'blast_furnace']) {
     const state = buildScene3DState({ project_scene: { id: 'debutanizer_column' }, data_scene: { id } })
     assert.equal(state.descriptor.id, id)
     assert.equal(state.isKnown, true)
-    assert.ok(state.descriptor.nodes.length >= 3)
-    assert.ok(state.descriptor.flows.length >= 2)
   }
   const unknown = buildScene3DState({ project_scene: { id: 'debutanizer_column' }, data_scene: { id: 'new_industrial_scene' } })
   assert.equal(unknown.descriptor, UNKNOWN_SCENE_3D)
   assert.equal(unknown.isKnown, false)
+  assert.equal(unknown.status, 'missing_3d_asset')
 })
 
-test('boiler and debutanizer have independent semantic node bindings', () => {
+test('industrial dryer uses an installed GLB with semantic mesh bindings and LOD', () => {
+  const dryer = getScene3DDescriptor('industrial_dryer')
+  assert.equal(dryer.engine, 'three-webgl')
+  assert.equal(dryer.asset_status, 'installed')
+  assert.match(dryer.model_url, /\.glb$/)
+  assert.ok(dryer.semantic_nodes.length >= 5)
+  assert.ok(dryer.semantic_nodes.every((node) => node.mesh_name && Array.isArray(node.fields)))
+  assert.ok(dryer.semantic_nodes.some((node) => node.fields.includes('hot_air_temperature')))
+  assert.ok(dryer.semantic_nodes.some((node) => node.fields.includes('drying_air_flow')))
+  assert.equal(dryer.lod.mode, 'component_visibility')
+  assert.equal(buildScene3DState({ data_scene: { id: 'industrial_dryer' } }).hasAsset, true)
+})
+
+test('boiler and debutanizer retain independent semantic field bindings', () => {
   const boiler = getScene3DDescriptor('thermal_power_boiler_long_tail')
   const column = getScene3DDescriptor('debutanizer_column')
-  assert.ok(boiler.nodes.some((node) => node.fields.includes('secondary_fan_outlet_flow')))
-  assert.ok(column.nodes.some((node) => node.fields.includes('bottom_butane_content')))
-  assert.equal(boiler.nodes.some((node) => node.fields.includes('bottom_butane_content')), false)
+  assert.ok(boiler.semantic_nodes.some((node) => node.fields.includes('secondary_fan_outlet_flow')))
+  assert.ok(column.semantic_nodes.some((node) => node.fields.includes('bottom_butane_content')))
+  assert.equal(boiler.semantic_nodes.some((node) => node.fields.includes('bottom_butane_content')), false)
 })
 
-test('registry uses the existing 3D runtime for every scene', () => {
-  for (const id of ['debutanizer_column', 'thermal_power_boiler_long_tail', 'industrial_dryer', 'blast_furnace', 'steel_industry_energy', 'vapor_pressure_soft_sensor']) {
-    assert.equal(getScene3DDescriptor(id).engine, 'dom-css3d')
-  }
+test('scenes without installed models expose explicit missing asset contracts', () => {
+  const missing = listMissingSceneAssets()
+  assert.ok(missing.some((item) => item.scene_id === 'blast_furnace' && item.required_asset === 'blast_furnace.glb'))
+  assert.ok(missing.some((item) => item.scene_id === 'thermal_power_boiler_long_tail'))
+  assert.equal(buildScene3DState({ data_scene: { id: 'debutanizer_column' } }).hasAsset, false)
+})
+
+test('runtime source loads GLB and never constructs primitive equipment', async () => {
+  const source = await readFile(new URL('../src/components/SceneModel3D.vue', import.meta.url), 'utf8')
+  assert.match(source, /GLTFLoader/)
+  assert.match(source, /OrbitControls/)
+  assert.match(source, /DRACOLoader/)
+  assert.match(source, /MeshoptDecoder/)
+  assert.match(source, /disposeObject/)
+  assert.doesNotMatch(source, /(Box|Cylinder|Sphere|Capsule)Geometry/)
+  assert.doesNotMatch(source, /dom-css3d|shape-/)
 })
