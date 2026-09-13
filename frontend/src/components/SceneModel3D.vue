@@ -90,6 +90,65 @@ function configureSemanticObjects() {
     object.traverse((child) => { child.userData.semanticNodeId = node.id })
     semanticObjects.set(node.id, object)
   }
+  applyEquipmentPalette()
+}
+function eachMaterial(object, visit) {
+  const seen = new Set()
+  object?.traverse((child) => {
+    if (!child.isMesh) return
+    for (const material of (Array.isArray(child.material) ? child.material : [child.material])) {
+      if (!material || seen.has(material)) continue
+      seen.add(material)
+      visit(material)
+    }
+  })
+}
+function applyEquipmentPalette() {
+  for (const node of descriptor.value.semantic_nodes) {
+    const object = semanticObjects.get(node.id)
+    if (!object || !node.palette) continue
+    const equipmentColor = new THREE.Color(node.palette.base)
+    eachMaterial(object, (material) => {
+      if (!material.color) return
+      const original = material.color.clone()
+      const hsl = {}; original.getHSL(hsl)
+      const safetyColor = node.id !== 'maintenance_platform' && hsl.s > .62 && (hsl.h < .18 || hsl.h > .95)
+      const color = equipmentColor.clone().lerp(original, safetyColor ? .58 : .14)
+      color.multiplyScalar(safetyColor ? .78 : .9 + hsl.l * .18)
+      material.color.copy(color)
+      material.metalness = node.palette.metalness
+      material.roughness = node.palette.roughness
+      if (material.emissive) material.emissive.set(0x000000)
+      material.emissiveIntensity = 0
+      material.userData.runtimeBaseColor = material.color.getHex()
+    })
+  }
+}
+function resetRuntimeMaterials() {
+  for (const object of semanticObjects.values()) eachMaterial(object, (material) => {
+    if (material.userData.runtimeBaseColor !== undefined) material.color.setHex(material.userData.runtimeBaseColor)
+    if (material.emissive) material.emissive.set(0x000000)
+    material.emissiveIntensity = 0
+  })
+}
+function applySelectionContrast() {
+  if (!selectedNodeId.value) return
+  for (const node of descriptor.value.semantic_nodes) {
+    const object = semanticObjects.get(node.id)
+    const isSelected = node.id === selectedNodeId.value
+    const highlight = new THREE.Color(node.palette?.highlight || descriptor.value.accent)
+    eachMaterial(object, (material) => {
+      if (!material.color) return
+      if (isSelected) {
+        material.color.lerp(highlight, .52)
+        if (material.emissive) material.emissive.copy(highlight)
+        material.emissiveIntensity = .72
+      } else {
+        material.color.multiplyScalar(.28)
+        material.emissiveIntensity *= .08
+      }
+    })
+  }
 }
 function setCamera(config = descriptor.value.camera) {
   if (!camera || !controls) return
@@ -200,7 +259,9 @@ function applyDistanceLod() {
   if (detailObject) detailObject.visible = camera.position.distanceTo(controls.target) <= lod.hide_beyond
 }
 function renderLoop(now) {
+  resetRuntimeMaterials()
   applyDataDynamics(clock.getElapsedTime())
+  applySelectionContrast()
   applyDistanceLod()
   updateCameraTween(now)
   controls?.update()
