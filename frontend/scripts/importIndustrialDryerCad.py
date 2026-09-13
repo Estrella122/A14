@@ -17,6 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import bpy
+import numpy as np
 from mathutils import Vector
 
 
@@ -90,6 +91,7 @@ bpy.ops.wm.collada_import(filepath=str(source_path))
 instance_map = source_instances(source_path)
 grouped = defaultdict(list)
 component_counts = defaultdict(int)
+floor_points = []
 for obj in list(bpy.data.objects):
     if obj.type != "MESH":
         continue
@@ -101,6 +103,8 @@ for obj in list(bpy.data.objects):
     obj.matrix_world = world_matrix
     base_name = re.sub(r"\.\d{3}$", "", obj.name)
     component = instance_map.get(base_name, "")
+    if component == "BASES_Y_EDIFICIO":
+        floor_points.extend(tuple(obj.matrix_world @ vertex.co) for vertex in obj.data.vertices)
     group = semantic_group(component)
     grouped[group].append(obj)
     component_counts[component or "unclassified"] += 1
@@ -117,6 +121,22 @@ for obj in list(bpy.data.objects):
 
 if not merged:
     raise RuntimeError("Collada import produced no semantic meshes")
+
+# The source assembly uses a plant-local up axis that differs from Collada's
+# declared axis. Recover the factory floor normal from its broad base geometry
+# and align it with Blender Z before exporting to Three.js Y-up coordinates.
+if floor_points:
+    samples = np.asarray(floor_points)
+    covariance = np.cov(samples - samples.mean(axis=0), rowvar=False)
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    floor_normal = Vector(eigenvectors[:, int(np.argmin(eigenvalues))].tolist()).normalized()
+    # The base plate normal is sign-ambiguous; choose the side opposite its
+    # imported positive-Z component so the building posts rise above the slab.
+    if floor_normal.z > 0:
+        floor_normal.negate()
+    orientation = floor_normal.rotation_difference(Vector((0, 0, 1))).to_matrix().to_4x4()
+    for obj in merged:
+        obj.matrix_world = orientation @ obj.matrix_world
 
 # Normalize the plant to a predictable runtime footprint while preserving proportions.
 low, high = bounds(merged)
