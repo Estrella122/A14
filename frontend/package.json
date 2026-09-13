@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "generate:industrial-scenes": "node scripts/generateIndustrialSceneAssets.mjs",
     "import:dryer-cad": "bash scripts/importIndustrialDryerCad.sh",
     "preview": "vite preview",
     "lint": "eslint src tests vite.config.js && node scripts/lint.mjs",

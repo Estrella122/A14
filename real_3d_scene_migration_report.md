@@ -80,9 +80,16 @@
 - `frontend/package.json`
 - `frontend/package-lock.json`
 
+## 高炉与脱丁烷塔补充资产
+
+- 高炉场景新增 `blast_furnace.glb`（约 1.4 MB），包含高炉炉壳、炉顶料斗与斜桥、四路煤气导出管、三座热风炉、热风总管与十二支风口、重力除尘、出铁场和铁水运输轨道。
+- 脱丁烷塔场景新增 `debutanizer_column.glb`（约 1.3 MB），包含带塔盘环和检修平台的塔本体、卧式塔顶冷凝器、回流罐与双泵、釜式再沸器、进料管廊及阀组。
+- 两个资产都是 ProcessPilot 原创的参考型工程场景，由 `generateIndustrialSceneAssets.mjs` 离线生成；没有复制或再分发候选网站的模型数据。结构选型参考 3D Warehouse 的 CASE WESTERN 高炉和 Sketchfab 的 Cellier-Blumenthal 工业蒸馏塔公开页面。
+- 生成资产是 ProcessPilot 原创项目内容，根节点已经按运行时字段绑定划分，可在没有 Blender、网站账号或临时下载链接的情况下复现。
+
 ## 剩余边界
 
-当前只有工业干燥器具备可核验来源的真实 GLB。高炉、锅炉、脱丁烷塔、钢铁能源和蒸气压力场景仍明确标记缺少资产，需要分别取得合法模型后按同一 Registry 接口安装。本次没有用程序化几何冒充这些场景。
+三个项目入口（高炉、脱丁烷塔、工业干燥器）现在均有可加载 GLB。锅炉、钢铁能源和蒸气压力等非项目入口场景仍明确标记缺少资产，需要后续按同一 Registry 接口安装。
 
 ## 点击特写与初始视角补充修复
 

@@ -16,13 +16,18 @@ test('detected data scene selects the 3D descriptor independently from project s
   assert.equal(unknown.status, 'missing_3d_asset')
 })
 
-test('industrial dryer uses an installed GLB with semantic mesh bindings and LOD', () => {
+test('all three project scenes use installed GLBs with semantic mesh bindings', () => {
+  for (const id of ['blast_furnace', 'debutanizer_column', 'industrial_dryer']) {
+    const descriptor = getScene3DDescriptor(id)
+    assert.equal(descriptor.engine, 'three-webgl')
+    assert.equal(descriptor.asset_status, 'installed')
+    assert.match(descriptor.model_url, /\.glb$/)
+    assert.ok(descriptor.asset_source)
+    assert.ok(descriptor.semantic_nodes.length >= 4)
+    assert.ok(descriptor.semantic_nodes.every((node) => node.mesh_name && node.description && node.palette?.base && node.palette?.highlight && Array.isArray(node.fields)))
+    assert.equal(buildScene3DState({ data_scene: { id } }).hasAsset, true)
+  }
   const dryer = getScene3DDescriptor('industrial_dryer')
-  assert.equal(dryer.engine, 'three-webgl')
-  assert.equal(dryer.asset_status, 'installed')
-  assert.match(dryer.model_url, /\.glb$/)
-  assert.ok(dryer.semantic_nodes.length >= 5)
-  assert.ok(dryer.semantic_nodes.every((node) => node.mesh_name && node.description && node.palette?.base && node.palette?.highlight && Array.isArray(node.fields)))
   assert.ok(dryer.semantic_nodes.some((node) => node.fields.includes('hot_air_temperature')))
   assert.ok(dryer.semantic_nodes.some((node) => node.fields.includes('drying_air_flow')))
   assert.equal(dryer.lod.mode, 'component_visibility')
@@ -52,9 +57,10 @@ test('boiler and debutanizer retain independent semantic field bindings', () => 
 
 test('scenes without installed models expose explicit missing asset contracts', () => {
   const missing = listMissingSceneAssets()
-  assert.ok(missing.some((item) => item.scene_id === 'blast_furnace' && item.required_asset === 'blast_furnace.glb'))
   assert.ok(missing.some((item) => item.scene_id === 'thermal_power_boiler_long_tail'))
-  assert.equal(buildScene3DState({ data_scene: { id: 'debutanizer_column' } }).hasAsset, false)
+  assert.equal(missing.some((item) => item.scene_id === 'blast_furnace'), false)
+  assert.equal(missing.some((item) => item.scene_id === 'debutanizer_column'), false)
+  assert.equal(buildScene3DState({ data_scene: { id: 'debutanizer_column' } }).hasAsset, true)
 })
 
 test('runtime source loads GLB and never constructs primitive equipment', async () => {

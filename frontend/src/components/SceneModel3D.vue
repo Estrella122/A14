@@ -235,6 +235,26 @@ function dynamicValue(nodeId, field) {
   return Number.isFinite(Number(row?.value)) ? Number(row.value) : null
 }
 function applyDataDynamics(elapsed) {
+  if (descriptor.value.id === 'blast_furnace') {
+    const pressureDrop = dynamicValue('furnace_body', 'total_pressure_drop')
+    if (pressureDrop !== null) materialVisual(semanticObjects.get('furnace_body'), 0xff5c32, .08 + Math.min(.42, Math.abs(pressureDrop) * .08))
+    const blastTemperature = dynamicValue('hot_blast', 'hot_blast_temperature')
+    if (blastTemperature !== null) materialVisual(semanticObjects.get('hot_blast'), 0xff7a2e, .12 + Math.min(.62, Math.abs(blastTemperature) / 1800))
+    const topPressure = dynamicValue('burden_system', 'top_gas_pressure')
+    if (topPressure !== null) materialVisual(semanticObjects.get('burden_system'), 0xf3c74f, .08 + .1 * (1 + Math.sin(elapsed * 1.8)))
+    const silicon = dynamicValue('hearth', 'hot_metal_silicon_content')
+    if (silicon !== null) materialVisual(semanticObjects.get('hearth'), 0xff3d21, .12 + Math.min(.55, Math.abs(silicon) * .3))
+  }
+  if (descriptor.value.id === 'debutanizer_column') {
+    const topTemperature = dynamicValue('column_shell', 'top_temperature')
+    if (topTemperature !== null) materialVisual(semanticObjects.get('column_shell'), 0x55b8ff, .08 + Math.min(.32, Math.abs(topTemperature) / 500))
+    const refluxFlow = dynamicValue('reflux_drum', 'reflux_flow')
+    if (refluxFlow !== null) materialVisual(semanticObjects.get('reflux_drum'), 0x43c8ff, .09 + .1 * (1 + Math.sin(elapsed * 2.2)))
+    const bottomTemperature = dynamicValue('reboiler', 'bottom_temperature_a') ?? dynamicValue('reboiler', 'bottom_temperature_b')
+    if (bottomTemperature !== null) materialVisual(semanticObjects.get('reboiler'), 0xff762e, .1 + Math.min(.52, Math.abs(bottomTemperature) / 380))
+    const feedFlow = dynamicValue('feed_line', 'next_process_flow')
+    if (feedFlow !== null) materialVisual(semanticObjects.get('feed_line'), 0x45b8ef, .08 + .1 * (1 + Math.sin(elapsed * 1.7)))
+  }
   const heaterTemperature = dynamicValue('air_heater', 'hot_air_temperature')
   if (heaterTemperature !== null) materialVisual(semanticObjects.get('air_heater'), 0xff6b2e, .12 + Math.min(1, Math.abs(heaterTemperature) / 240) * .55)
   const exhaustTemperature = dynamicValue('exhaust_outlet', 'exhaust_temperature')
