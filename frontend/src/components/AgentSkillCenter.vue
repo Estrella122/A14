@@ -22,8 +22,12 @@ const visibleSkills = computed(() => {
     return categoryMatch && textMatch
   })
 })
-const activeCount = computed(() => props.executions.filter((item) => ['success', 'partial'].includes(item.status)).length)
+const activeCount = computed(() => props.executions.filter((item) => item.execution_state === 'executed').length)
 function activityText(item) {
+  if (item?.execution_state) {
+    const suffix = item.executor_selection_kind === 'stage_support' ? ' · 阶段共用' : item.executor_selection_kind === 'direct' ? ' · 直接命中' : ''
+    return `${executionStatus(item.execution_state).label}${suffix}`
+  }
   if (['success', 'partial', 'blocked', 'failed', 'skipped', 'unavailable'].includes(item?.status)) return executionStatus(item.status).label
   return item?.activity === 'executed' ? '旧版记录，未核验' : item?.activity === 'read' ? '读取证据' : item?.activity === 'planned' ? '已规划' : '已调用'
 }
@@ -60,17 +64,20 @@ function evidenceText(item) {
       </div>
 
       <div v-if="visibleSkills.length" class="skill-grid">
-        <details v-for="skill in visibleSkills" :key="skill.id" class="skill-card" :class="{ selected: ['success', 'partial'].includes(executionMap[skill.id]?.status), blocked: executionMap[skill.id]?.status === 'blocked', failed: executionMap[skill.id]?.status === 'failed' }">
+        <details v-for="skill in visibleSkills" :key="skill.id" class="skill-card" :class="{ selected: executionMap[skill.id]?.execution_state === 'executed', blocked: executionMap[skill.id]?.execution_state === 'blocked', failed: executionMap[skill.id]?.execution_state === 'failed' }">
           <summary>
             <span class="skill-index">{{ String((catalog?.skills ?? []).findIndex((item) => item.id === skill.id) + 1).padStart(2, '0') }}</span>
             <span class="skill-copy"><strong>{{ skill.name }}</strong><code>{{ skill.id }}</code></span>
-            <span v-if="executionMap[skill.id]" class="skill-hit" :class="`is-${executionStatus(executionMap[skill.id].status).tone}`"><AppIcon :name="executionStatus(executionMap[skill.id].status).icon" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
+            <span v-if="executionMap[skill.id]" class="skill-hit" :class="`is-${executionStatus(executionMap[skill.id].execution_state || executionMap[skill.id].status).tone}`"><AppIcon :name="executionStatus(executionMap[skill.id].execution_state || executionMap[skill.id].status).icon" :size="13" /> {{ activityText(executionMap[skill.id]) }}</span>
             <span v-else class="skill-ready">READY</span>
           </summary>
           <p>{{ skill.description }}</p>
           <dl>
             <div><dt>依赖</dt><dd>{{ skill.depends_on.join(' → ') || '无' }}</dd></div>
             <div><dt>触发词</dt><dd>{{ skill.triggers.join(' · ') }}</dd></div>
+            <div v-if="skill.execution_contract"><dt>能力</dt><dd>{{ skill.execution_contract.capability }}</dd></div>
+            <div v-if="skill.execution_contract"><dt>执行器</dt><dd>{{ skill.execution_contract.executor }} · {{ skill.execution_contract.execution_mode }}</dd></div>
+            <div v-if="executionMap[skill.id]"><dt>调用方式</dt><dd>{{ executionMap[skill.id].executor_selection_kind === 'stage_support' ? '阶段共用执行（非独立算法实例）' : executionMap[skill.id].executor_selection_kind === 'direct' ? '用户意图直接命中' : '规划或证据读取' }}</dd></div>
             <div v-if="executionMap[skill.id]"><dt>本轮证据</dt><dd>{{ evidenceText(executionMap[skill.id]) || '无独立证据' }}</dd></div>
             <div v-if="executionMap[skill.id]?.relevance_score"><dt>匹配度</dt><dd>{{ Math.round(executionMap[skill.id].relevance_score * 100) }}%</dd></div>
             <div v-if="executionMap[skill.id]"><dt>耗时</dt><dd>{{ executionMap[skill.id].duration_ms }} ms</dd></div>

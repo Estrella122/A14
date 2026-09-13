@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .artifacts import ArtifactType, EXECUTOR_ARTIFACT_CONTRACTS, EXECUTOR_INPUT_CONTRACTS, canonical_artifact_types
+from .contracts import get_skill_contract
 
 
 GROUP_SKILLS = {
@@ -24,7 +25,7 @@ SKILL_GROUP = {skill_id: group for group, skill_ids in GROUP_SKILLS.items() for 
 def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str], data_context: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build the minimal executor DAG. Catalog dependencies remain planning metadata."""
     if task_spec.get("execution_mode") in {"analyze", "explain"}:
-        return {"version": "core-executor-dag-v1", "steps": [], "target_groups": []}
+        return {"version": "core-executor-dag-v2", "steps": [], "target_groups": []}
     direct = set(direct_skill_ids)
     data_context = data_context or {}
     available_artifacts = canonical_artifact_types(data_context.get("available_artifacts") or ())
@@ -96,7 +97,17 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
         steps.append({
             "id": group,
             "executor": group,
+            "dispatch_mode": "shared_stage",
             "skill_ids": list(GROUP_SKILLS[group]),
+            "requested_skill_ids": [skill_id for skill_id in GROUP_SKILLS[group] if skill_id in direct],
+            "capability_dispatch": [
+                {
+                    "skill_id": skill_id,
+                    "capability": get_skill_contract(skill_id).capability,
+                    "selection_kind": "direct" if skill_id in direct else "stage_support",
+                }
+                for skill_id in GROUP_SKILLS[group]
+            ],
             "dependencies": dependencies,
             "requires_artifacts": list(contract["requires"]),
             "produces_artifacts": list(contract["produces"]),
@@ -121,4 +132,4 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
             "expected_outputs": [group + "_result"],
             "blocking_rules": ["missing_required_inputs", "failed_dependency"],
         })
-    return {"version": "core-executor-dag-v1", "steps": steps, "target_groups": [item["id"] for item in steps]}
+    return {"version": "core-executor-dag-v2", "steps": steps, "target_groups": [item["id"] for item in steps]}

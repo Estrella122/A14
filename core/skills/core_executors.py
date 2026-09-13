@@ -12,6 +12,7 @@ from typing import Any
 import pandas as pd
 
 from .artifacts import ArtifactType, LEGACY_ARTIFACT_TYPES, RuntimeArtifactResolver
+from .contracts import execution_state_for, get_skill_contract
 
 
 VALID_EXECUTION_STATUSES = {"success", "partial", "blocked", "failed", "skipped"}
@@ -32,12 +33,25 @@ def _result(skill_id: str, started: float, *, status: str = "success", capabilit
     if status not in VALID_EXECUTION_STATUSES:
         raise ValueError(f"Unsupported SkillExecutionResult status: {status}")
     limitations = limitations or []
+    invoked = status in {"success", "partial"}
+    capability_dispatch = []
+    for capability_skill_id in capabilities or []:
+        contract = get_skill_contract(capability_skill_id)
+        capability_dispatch.append({
+            "skill_id": capability_skill_id,
+            "capability": contract.capability if contract else capability_skill_id,
+            "executor": skill_id,
+            "execution_state": execution_state_for(status=status, invoked=invoked),
+        })
     return {
-        "status": status, "skill_id": skill_id, "executor": skill_id,
+        "schema_version": "skill-execution-result-v2",
+        "status": status, "execution_state": execution_state_for(status=status, invoked=invoked),
+        "algorithm_invoked": invoked, "skill_id": skill_id, "executor": skill_id,
         "reason": reason or (limitations[0] if limitations else "Executor 执行完成"),
         "inputs": inputs or [], "outputs": outputs or artifacts or [],
         "missing_requirements": missing_requirements or [], "missing_artifacts": missing_artifacts or [],
         "provenance": provenance or {}, "capabilities_executed": capabilities or [],
+        "capability_dispatch": capability_dispatch,
         "facts": facts or [], "findings": findings or [], "hypotheses": hypotheses or [],
         "limitations": limitations, "metrics": metrics or {}, "artifacts": artifacts or [],
         "evidence": evidence or [], "warnings": warnings or [], "execution_trace": trace or [],

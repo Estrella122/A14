@@ -1,4 +1,6 @@
 export const EXECUTION_STATUS = {
+  executed: { label: '已执行', tone: 'success', icon: 'check' },
+  evidence_only: { label: '仅读取证据', tone: 'brand', icon: 'database' },
   selected: { label: '已选择', tone: 'success', icon: 'check' },
   deferred: { label: '等待上游依赖', tone: 'warning', icon: 'clock' },
   executable: { label: '可执行', tone: 'brand', icon: 'arrow' },

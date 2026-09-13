@@ -21,6 +21,7 @@ from .skill_resolver import resolve_skills
 from .executor import get_executor
 from .execution_plan import build_execution_plan
 from .artifacts import RuntimeArtifactResolver
+from .contracts import execution_state_for, get_skill_contract
 
 
 RUNS_DIR = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "agent_skill_runs"
@@ -361,6 +362,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     core_results: list[dict[str, Any]] = []
     state: dict[str, Any] = {}
     core_result_by_skill: dict[str, dict[str, Any]] = {}
+    core_dispatch_by_skill: dict[str, dict[str, Any]] = {}
     capability_by_skill: dict[str, list[dict[str, Any]]] = {}
     analysis_plan = plan.get("analysis", {}).get("analysis_plan", {})
     task_kind = plan.get("analysis", {}).get("task_understanding", {}).get("task_kind")
@@ -403,6 +405,13 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             if event_sink:
                 event_sink("executor_completed", stage="execution", executor="industrial-analysis", status=industrial_result.get("status", "success"), message="industrial-analysis Executor 执行完成")
     core_plan = plan.get("analysis", {}).get("execution_plan", {}).get("core", {})
+    for node in core_plan.get("steps", []):
+        for dispatch in node.get("capability_dispatch", []):
+            core_dispatch_by_skill[dispatch["skill_id"]] = {
+                **dispatch,
+                "executor": node.get("executor"),
+                "dispatch_mode": node.get("dispatch_mode", "shared_stage"),
+            }
     if runtime_mode != "legacy" and plan.get("mode") == "execute" and not blocked_reason:
         parameters = {item.get("name"): item.get("value") for item in plan.get("analysis", {}).get("task_understanding", {}).get("parameters", [])}
         parameters.update(plan.get("parameters", {}))
@@ -411,9 +420,15 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         for node in core_plan.get("steps", []):
             executor = get_executor(node["executor"])
             def blocked_result(reason, missing_artifacts=None, missing_requirements=None, status="blocked"):
-                return {"status": status, "skill_id": node["executor"], "executor": node["executor"], "reason": reason,
+                dispatch = [{**item, "executor": node["executor"],
+                             "execution_state": execution_state_for(status=status), "algorithm_invoked": False}
+                            for item in node.get("capability_dispatch", [])]
+                return {"schema_version": "skill-execution-result-v2", "status": status,
+                        "execution_state": execution_state_for(status=status), "algorithm_invoked": False,
+                        "skill_id": node["executor"], "executor": node["executor"], "reason": reason,
                         "inputs": [], "outputs": [], "missing_requirements": missing_requirements or [],
                         "missing_artifacts": missing_artifacts or [], "provenance": {}, "capabilities_executed": [],
+                        "capability_dispatch": dispatch,
                         "facts": [], "findings": [], "hypotheses": [], "limitations": [reason],
                         "metrics": {}, "artifacts": [], "evidence": [],
                         "warnings": ["没有生成或回退到 synthetic data。"] if node["executor"] == "optimization" else [],
@@ -430,6 +445,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                 if readiness["missing_artifacts"]:
                     result = blocked_result("上游执行完成后仍缺少 artifact：" + "、".join(readiness["missing_artifacts"]),
                                             readiness["missing_artifacts"])
+                    result["dispatch_mode"] = node.get("dispatch_mode", "shared_stage")
+                    result["requested_skill_ids"] = node.get("requested_skill_ids", [])
                     core_results.append(result)
                     for selected_skill_id in node["skill_ids"]:
                         core_result_by_skill[selected_skill_id] = result
@@ -450,6 +467,13 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                     result = blocked_result(str(exc), status="failed")
                     result["warnings"] = [type(exc).__name__]
                     result["execution_trace"] = [{"step": node["executor"], "status": "failed"}]
+            result["capability_dispatch"] = [
+                {**item, "executor": node["executor"], "execution_state": result.get("execution_state"),
+                 "algorithm_invoked": result.get("algorithm_invoked", False)}
+                for item in node.get("capability_dispatch", result.get("capability_dispatch", []))
+            ]
+            result["dispatch_mode"] = node.get("dispatch_mode", "shared_stage")
+            result["requested_skill_ids"] = node.get("requested_skill_ids", [])
             core_results.append(result)
             if event_sink:
                 result_status = result.get("status", "completed")
@@ -466,11 +490,15 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     executions = []
     for step in plan.get("steps", []):
         skill = SKILL_MAP[step["skill_id"]]
+        contract = get_skill_contract(skill.id)
         tick = perf_counter()
         is_blocked = bool(blocked_reason) and skill.category != "orchestration"
         if is_blocked:
             executions.append({
-                **step, "status": "blocked", "activity": "blocked", "duration_ms": 0,
+                **step, "status": "blocked", "execution_state": "blocked", "activity": "blocked", "duration_ms": 0,
+                "algorithm_invoked": False, "executor_selection_kind": "blocked", "dispatch_mode": "none",
+                "execution_contract": contract.public() if contract else None,
+                "executor": contract.executor if contract else None, "capability": contract.capability if contract else None,
                 "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
                 "metrics": {}, "artifacts": [], "evidence": [], "warnings": [blocked_reason], "suggested_next_skills": [],
             })
@@ -525,8 +553,29 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         if core_result is None and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"
             warnings = warnings or ["此能力未执行或缺少独立产物，不能标记完成"]
+        algorithm_invoked = bool(
+            (core_result and core_result.get("algorithm_invoked"))
+            or capability_executions
+            or (skill.category == "orchestration" and activity == "planned")
+        )
+        execution_state = execution_state_for(
+            status=status,
+            invoked=algorithm_invoked,
+            evidence_read=activity == "read",
+        )
+        dispatch = core_dispatch_by_skill.get(skill.id)
+        if capability_executions and not dispatch:
+            dispatch = {"skill_id": skill.id, "executor": "industrial-analysis", "capability": contract.capability if contract else None,
+                        "selection_kind": "direct", "dispatch_mode": "capability"}
         executions.append({
-            **step, "status": status, "activity": activity, "duration_ms": round((perf_counter() - tick) * 1000),
+            **step, "status": status, "execution_state": execution_state,
+            "algorithm_invoked": algorithm_invoked,
+            "activity": activity, "duration_ms": round((perf_counter() - tick) * 1000),
+            "execution_contract": contract.public() if contract else None,
+            "executor": dispatch.get("executor") if dispatch else contract.executor if contract else None,
+            "capability": contract.capability if contract else None,
+            "executor_selection_kind": dispatch.get("selection_kind") if dispatch else "orchestration" if skill.category == "orchestration" else "evidence",
+            "dispatch_mode": dispatch.get("dispatch_mode") if dispatch else "orchestration" if skill.category == "orchestration" else "evidence_read",
             "execution_scope": "skill_executor" if core_result is not None or activity == "executed" else "plan" if activity == "planned" else "pipeline_evidence_read",
             "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
             "metrics": metrics, "artifacts": artifacts, "evidence": evidence, "warnings": warnings,
@@ -556,6 +605,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "skipped": sum(item["activity"] == "skipped" for item in executions),
             "executor_invocations": (1 if industrial_result else 0) + sum(item.get("status") not in {"unavailable"} for item in core_results),
             "capabilities_executed": len((industrial_result or {}).get("capability_executions", [])) + sum(len(item.get("capabilities_executed", [])) for item in core_results),
+            "execution_states": {state_name: sum(item.get("execution_state") == state_name for item in executions)
+                                 for state_name in ("executed", "evidence_only", "blocked", "skipped", "failed")},
             "fallback_used": bool(fallback.get("used")),
             "fallback_reason": fallback.get("reason"),
         },

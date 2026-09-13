@@ -5,6 +5,8 @@ from pathlib import Path
 
 from typing import Any
 
+from .contracts import get_skill_contract
+
 def available_scenario_ids() -> tuple[str, ...]:
     root = Path(__file__).resolve().parents[2] / "integrations" / "standardization" / "standards" / "scenarios"
     return tuple(sorted(path.parent.name for path in root.glob("*/template.json")))
@@ -101,23 +103,10 @@ class SkillDefinition:
         payload["references"] = list(self.references)
         payload["related_references"] = list(self.related_references)
         payload["overlaps_with"] = list(self.overlaps_with)
-        payload["input_contract"] = [
-            "run_id",
-            "scenario",
-            "equipment_id",
-            "dataset_ref",
-            "objective",
-            "parameters",
-            "constraints",
-        ]
-        payload["output_contract"] = [
-            "status",
-            "metrics",
-            "artifacts",
-            "evidence",
-            "warnings",
-            "suggested_next_skills",
-        ]
+        contract = get_skill_contract(self.id)
+        payload["execution_contract"] = contract.public() if contract else None
+        payload["input_contract"] = list(contract.requires) if contract else []
+        payload["output_contract"] = list(contract.produces) if contract else []
         return payload
 
 

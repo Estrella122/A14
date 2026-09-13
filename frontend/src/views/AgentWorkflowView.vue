@@ -125,6 +125,10 @@ function stepNumber(index) {
 }
 
 function skillActivityText(skill) {
+  if (skill.execution_state) {
+    const suffix = skill.executor_selection_kind === 'stage_support' ? '（阶段共用）' : skill.executor_selection_kind === 'direct' ? '（直接命中）' : ''
+    return `${executionStatus(skill.execution_state).label}${suffix}`
+  }
   if (['success', 'partial', 'blocked', 'failed', 'skipped', 'unavailable'].includes(skill.status)) return executionStatus(skill.status).label
   return skill.activity === 'executed' ? '旧版执行记录，未核验' : skill.activity === 'read' ? '取证' : skill.activity === 'planned' ? '规划' : '调用'
 }
@@ -166,7 +170,7 @@ function appendAgentResult(result, prefix = '') {
   liveLogs.value = [...(result.logs ?? []), ...liveLogs.value].slice(0, 18)
   messages.value.push({
     id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
-    skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity })) ?? [],
+    skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity, execution_state: item.execution_state, executor_selection_kind: item.executor_selection_kind })) ?? [],
     skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
     runId: result.run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   })
