@@ -15,7 +15,9 @@ const { latestRun } = useLatestPipelineRun()
 const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 const modeling = computed(() => latestRun.value?.results?.modeling ?? {})
 const cleaning = computed(() => latestRun.value?.results?.cleaning ?? {})
-const sceneContent = computed(() => getScene3DDescriptor(sceneState.value.data_scene.id))
+const sceneContent = computed(() => getScene3DDescriptor(
+  sceneState.value.data_scene.id || sceneState.value.project_scene.id,
+))
 const sceneNodesById = computed(() => Object.fromEntries(sceneContent.value.semantic_nodes.map((node) => [node.id, node])))
 const processFlow = computed(() => sceneContent.value.flows.map(([from, to]) => ({
   label: `${sceneNodesById.value[from]?.label || from} → ${sceneNodesById.value[to]?.label || to}`,

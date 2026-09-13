@@ -27,6 +27,19 @@ test('industrial dryer uses an installed GLB with semantic mesh bindings and LOD
   assert.ok(dryer.semantic_nodes.some((node) => node.fields.includes('drying_air_flow')))
   assert.equal(dryer.lod.mode, 'component_visibility')
   assert.equal(buildScene3DState({ data_scene: { id: 'industrial_dryer' } }).hasAsset, true)
+  const projectPreview = buildScene3DState({ project_scene: { id: 'industrial_dryer' }, data_scene: { id: null } })
+  assert.equal(projectPreview.descriptor.id, 'industrial_dryer')
+  assert.equal(projectPreview.hasAsset, true)
+  assert.equal(projectPreview.source, 'project_preview')
+})
+
+test('detected data scene overrides the project preview scene', () => {
+  const state = buildScene3DState({
+    project_scene: { id: 'industrial_dryer' },
+    data_scene: { id: 'blast_furnace' },
+  })
+  assert.equal(state.descriptor.id, 'blast_furnace')
+  assert.equal(state.source, 'data_scene')
 })
 
 test('boiler and debutanizer retain independent semantic field bindings', () => {

@@ -78,13 +78,17 @@ export function getScene3DDescriptor(sceneId) {
 }
 
 export function buildScene3DState(sceneState) {
-  const requestedId = sceneState?.data_scene?.id
+  // Before a CSV run exists there is no data-scene evidence yet. In that
+  // state, preview the explicitly selected project scene instead of showing
+  // an unrelated "unknown scene" canvas. A detected data scene always wins.
+  const requestedId = sceneState?.data_scene?.id || sceneState?.project_scene?.id
   const descriptor = getScene3DDescriptor(requestedId)
   return {
     descriptor,
     isKnown: descriptor !== UNKNOWN_SCENE_3D,
     hasAsset: descriptor.asset_status === 'installed' && Boolean(descriptor.model_url),
     requestedId: requestedId || null,
+    source: sceneState?.data_scene?.id ? 'data_scene' : sceneState?.project_scene?.id ? 'project_preview' : 'unresolved',
     status: descriptor.asset_status,
   }
 }
