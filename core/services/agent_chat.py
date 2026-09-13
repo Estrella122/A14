@@ -468,7 +468,13 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     # A broad multi-topic summary should retain its complete overview.  A single
     # expert keyword such as “评审结论” must not replace the other requested areas.
     broad_summary = intent == "overview" and message.strip().startswith(("总结", "整体总结", "全部总结"))
-    expert_answer = answer_expert_question(message, snapshot) if intent not in {"conversation", "clarification"} and not broad_summary else None
+    task_understanding = skill_plan.get("analysis", {}).get("task_understanding", {})
+    answer_intent = task_understanding.get("answer_intent") or {}
+    response_domains = task_understanding.get("response_intents") or []
+    topic_hints = ["snr"] if "selection" in response_domains else []
+    expert_answer = answer_expert_question(
+        message, snapshot, answer_intent=answer_intent, topic_hints=topic_hints,
+    ) if intent not in {"conversation", "clarification"} and not broad_summary else None
     if expert_answer:
         answer = expert_answer["answer"]
         cards = expert_answer["cards"]
@@ -558,6 +564,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "deliverables": _deliverables(snapshot) if (executed or "final_artifact_exporter" in direct) and not blocked_reason else [],
         "expert_topic": expert_answer["topic"] if expert_answer else None,
         "expert_topics": expert_answer.get("topics", []) if expert_answer else [],
+        "answer_intent": expert_answer.get("answer_intent", answer_intent) if expert_answer else answer_intent,
         "logs": logs,
         "snapshot": snapshot if executed else None,
     }

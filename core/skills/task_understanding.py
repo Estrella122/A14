@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
+from .answer_intent import resolve_answer_intent
+
 
 @dataclass
 class TaskSpec:
@@ -26,6 +28,7 @@ class TaskSpec:
     provider: str = "legacy_rule"
     response_intent: str = "overview"
     response_intents: list[str] = field(default_factory=list)
+    answer_intent: dict[str, Any] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
@@ -92,10 +95,11 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
     def understand(self, message: str, conversation_context: dict[str, Any] | None = None) -> TaskSpec:
         text = str(message or "").strip()
         normalized = text.lower()
+        answer_intent = resolve_answer_intent(text, conversation_context)
         if re.search(r"你好|您好|在吗|嗨|\bhello\b|\bhi\b", normalized):
-            return TaskSpec("进行自然对话", "conversation", execution_mode="explain", confidence=.99, response_intent="conversation", response_intents=["conversation"])
+            return TaskSpec("进行自然对话", "conversation", execution_mode="explain", confidence=.99, response_intent="conversation", response_intents=["conversation"], answer_intent=answer_intent)
         if re.search(r"你是谁|你能做什么|怎么用|有什么功能|能干什么", normalized):
-            return TaskSpec("说明 Agent 能力和使用方式", "knowledge_explanation", requested_outputs=["explanation"], execution_mode="explain", confidence=.98, response_intent="capability", response_intents=["capability"])
+            return TaskSpec("说明 Agent 能力和使用方式", "knowledge_explanation", requested_outputs=["explanation"], execution_mode="explain", confidence=.98, response_intent="capability", response_intents=["capability"], answer_intent=answer_intent)
         knowledge = bool(re.search(r"(?:解释|介绍|说明).{0,20}(?:是什么|什么意思|概念|区别)|^(?:解释|介绍|说明)(?:一下)?(?:异常检测|趋势分析|相关性|因果)|(?:异常检测|趋势分析|相关性|因果).{0,12}(?:是什么|什么意思|有什么区别)[？?]?$", normalized))
         artifact = bool(re.search(r"导出|下载|打包|产物|生成.{0,8}报告", normalized))
         question = bool(re.search(r"为什么|为何|怎么|如何|是否|能否|什么|哪些|[？?吗呢]$", normalized))
@@ -113,7 +117,7 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         if negations:
             intents = [name for name in intents if not any(re.search(INTENT_PATTERNS[name], clause.lower()) for clause in negations)]
         previous = (conversation_context or {}).get("previous_task_spec") or {}
-        follow_up = bool(re.search(r"这个|它|那|刚才|继续|具体|然后", normalized))
+        follow_up = bool(re.search(r"这个|该结果|它|那|刚才|继续|具体|然后|这么|靠谱|可靠", normalized))
         if not intents and follow_up:
             intents = list(previous.get("semantic_intents") or [])
         capabilities = [INTENT_CAPABILITIES[item] for item in intents]
@@ -168,6 +172,7 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             clarification_reason="未识别出工业数据目标" if requires_clarification else None,
             confidence=round(min(0.92, 0.58 + 0.08 * len(intents) + 0.05 * bool(previous and follow_up)), 2),
             response_intent=response_intent, response_intents=response_intents or [response_intent],
+            answer_intent=answer_intent,
         )
 
 
@@ -189,6 +194,7 @@ class LLMTaskUnderstandingProvider(TaskUnderstandingProvider):
         allowed = set(TaskSpec.__dataclass_fields__)
         data = {key: value for key, value in payload.items() if key in allowed}
         data["provider"] = "llm"
+        data.setdefault("answer_intent", resolve_answer_intent(message, conversation_context))
         return TaskSpec(**data)
 
 

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import csv
 import re
+from statistics import median
 from typing import Any
+
+from core.skills.answer_intent import resolve_answer_intent
 
 
 EXPERT_TOPICS = [
@@ -43,10 +47,108 @@ def _matches(message: str) -> list[str]:
     return [item[2] for item in sorted(matches)]
 
 
-def answer_expert_question(message: str, snapshot: dict[str, Any]) -> dict[str, Any] | None:
+def _snr_rows(snapshot: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+    run_id = snapshot.get("run_id")
+    if not run_id or not snapshot.get("artifacts", {}).get("snr_csv"):
+        return [], None
+    try:
+        from .pipeline import resolve_artifact
+        path, name = resolve_artifact(run_id, "snr_csv")
+        with path.open(encoding="utf-8-sig", newline="") as handle:
+            rows = []
+            for raw in csv.DictReader(handle):
+                try:
+                    snr_db = float(raw.get("snr_db", ""))
+                except (TypeError, ValueError):
+                    continue
+                rows.append({**raw, "snr_db": snr_db})
+        return rows, name
+    except (OSError, ValueError, KeyError):
+        return [], None
+
+
+def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any]) -> dict[str, Any]:
+    results = snapshot.get("results", {})
+    cleaning = results.get("cleaning", {})
+    snr_meta = cleaning.get("snr", {})
+    rows, provenance = _snr_rows(snapshot)
+    ranked = sorted(rows, key=lambda row: row["snr_db"], reverse=True)
+    values = [row["snr_db"] for row in rows]
+    best = ranked[0] if ranked else {}
+    kind = answer_intent.get("kind", "INTERPRETATION_QUERY")
+    threshold = float(snr_meta.get("threshold_db") or 10)
+    method = snr_meta.get("method") or "robust_second_difference_white_noise_proxy"
+    method_cn = "稳健二阶差分白噪声代理估计"
+    window = f"{best.get('start_time', '—')} 至 {best.get('end_time', '—')}"
+    field = best.get("variable") or "—"
+    if kind == "VALUE_QUERY":
+        if values:
+            answer = (f"当前任务保存了 {len(values)} 个有效窗口—字段 SNR："
+                      f"中位数 {median(values):.2f} dB，范围 {min(values):.2f}–{max(values):.2f} dB。"
+                      f"最高值是 {field} 在 {window} 的 {best['snr_db']:.2f} dB。"
+                      "SNR 是分窗估计，因此没有一个能代表整份数据的唯一值。")
+        else:
+            answer = "当前任务没有可读的窗口级信噪比（SNR）产物，因此不能给出真实数值。"
+    elif kind in {"METHOD_QUERY", "FORMULA_QUERY"}:
+        answer = (
+            f"当前代码实际使用 `{method}`，也就是{method_cn}。"
+            "对每个时间窗口先计算二阶差分 Δ²x，再用 "
+            "σ̂ = MAD(Δ²x) / (0.67448975 × √6) 估计噪声标准差；"
+            "噪声功率 = σ̂²，信号功率 = max(Var(x) − σ̂², 10⁻¹²)，"
+            "SNR = 10 log₁₀(信号功率 / 噪声功率)。"
+            "这是本工程的实际实现，不是从教科书套用的通用说法。")
+    elif kind == "CAUSE_QUERY":
+        answer = (f"之所以用{method_cn}，是因为二阶差分能在局部平滑前提下压低慢趋势，"
+                  "MAD 又比普通标准差更不容被少量尖峰拉偏。"
+                  "它适合在没有仪表标定噪声的情况下做窗口筛选；"
+                  f"前提是“{snr_meta.get('assumptions') or '局部信号平滑且噪声近似白噪声'}”。")
+    elif kind == "EVIDENCE_QUERY":
+        answer = (f"这个 SNR 可用于当前数据的候选窗口排序，但不能当作已标定的仪表信噪比。"
+                  f"快照明确记录 calibrated={bool(snr_meta.get('calibrated', False))}，方法是 {method}，"
+                  f"当前有 {len(values)} 条可读估计，原始证据来自 {provenance or '未找到 snr_estimates.csv'}。"
+                  "有色噪声、快速曲率、量化误差和重叠窗口会降低可靠性，需要仪表噪声标定和阈值敏感性试验才能升级证据。")
+    elif kind == "COMPARISON_QUERY":
+        if ranked:
+            top = "；".join(f"{row.get('variable', '—')} @ {row.get('start_time', '—')}–{row.get('end_time', '—')}: {row['snr_db']:.2f} dB" for row in ranked[:3])
+            answer = f"当前 SNR 最高的窗口是 {field} 在 {window}，{best['snr_db']:.2f} dB。排名前 3 条：{top}。"
+        else:
+            answer = "当前没有可读的 snr_estimates.csv，无法比较哪个时间窗口最高。"
+    elif kind == "RECOMMENDATION_QUERY":
+        answer = (f"建议保留高于 {threshold:g} dB 的窗口作为候选，再用完整性、异常率、输出响应和重叠去重共同复核。"
+                  "下一步应做阈值敏感性对比，并用空载或稳态段估计仪表噪声基线。")
+    else:
+        answer = (f"SNR 高表示在当前{method_cn}口径下，估计的有效动态方差相对局部噪声更大。"
+                  f"本任务用 {threshold:g} dB 作为窗口筛选阈值。"
+                  "它不直接说明设备健康、模型可靠或工况正常，这些还要结合语义、时滞、残差和工艺证据。")
+
+    return {
+        "topic": "snr", "topics": ["snr"], "topic_name": "信噪比与动态段",
+        "answer_intent": answer_intent, "answer": answer,
+        "cards": [
+            {"label": "回答方式", "value": kind},
+            {"label": "有效估计", "value": len(values)},
+            {"label": "阈值", "value": f"{threshold:g} dB"},
+            {"label": "证据", "value": provenance or "未找到"},
+        ],
+        "suggestions": {
+            "VALUE_QUERY": ["哪个时间段最高", "这个结果可靠吗", "信噪比高说明什么"],
+            "METHOD_QUERY": ["为什么这么算", "给出公式", "这个方法的假设是什么"],
+            "EVIDENCE_QUERY": ["还缺哪些验证证据", "阈值敏感性怎么做", "查看最高 SNR 窗口"],
+        }.get(kind, ["信噪比怎么算", "这个结果可靠吗", "哪个时间段信噪比最高"]),
+    }
+
+
+def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_intent: dict[str, Any] | None = None,
+                           topic_hints: list[str] | None = None) -> dict[str, Any] | None:
     topics = _matches(message)
+    if "snr" in (topic_hints or []) and topics in ([], ["deployment"]):
+        topics = ["snr"]
+    topics = list(dict.fromkeys(topics + list(topic_hints or [])))
     if not topics:
         return None
+    answer_intent = answer_intent or resolve_answer_intent(message)
+    if topics == ["snr"]:
+        return _snr_answer(snapshot, answer_intent)
     results = snapshot.get("results", {})
     cleaning = results.get("cleaning", {})
     modeling = results.get("modeling", {})
@@ -271,13 +373,14 @@ def answer_expert_question(message: str, snapshot: dict[str, Any]) -> dict[str, 
             "order": "参数置信区间与更广结构族对比",
             "cleaning": "异常掩码复核、真实动态误删率与其他因果清洗策略对照"})
     gaps = [gaps_by_topic[topic] for topic in selected_topics if topic in gaps_by_topic]
-    answer = "我把这个复合问题拆成以下专业检查项：\n\n" + "\n\n".join(sections)
+    answer = answers[selected_topics[0]] if len(selected_topics) == 1 else "这个问题包含多个需要分开核对的专业项：\n\n" + "\n\n".join(sections)
     if gaps:
         answer += "\n\n证据边界：以上是当前任务数据支持的诊断，不等同于因果证明或上线结论；当前证据不足，仍缺少：" + "；".join(gaps) + "。"
     return {
         "topic": selected_topics[0],
         "topics": selected_topics,
         "topic_name": "、".join(names[topic] for topic in selected_topics),
+        "answer_intent": answer_intent,
         "answer": answer,
         "cards": [
             {"label": "专业主题", "value": f"{len(selected_topics)} 项"},

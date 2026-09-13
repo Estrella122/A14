@@ -6,6 +6,7 @@ import SceneModel3D from '../components/SceneModel3D.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildSceneState } from '../composables/useSceneBinding'
+import { getScene3DDescriptor } from '../data/scene3dRegistry'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate'])
@@ -13,23 +14,12 @@ const { latestRun } = useLatestPipelineRun()
 const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 const modeling = computed(() => latestRun.value?.results?.modeling ?? {})
 const cleaning = computed(() => latestRun.value?.results?.cleaning ?? {})
-const sceneContent = computed(() => ({
-  blast_furnace: {
-    eyebrow: 'IRONMAKING PROCESS', title: '高炉炼铁过程结构', description: '以鼓风、富氧和装料条件为输入，观察炉内热状态与铁水硅含量的动态响应。',
-    zones: ['炉顶装料与煤气', '炉身还原区', '炉腹软熔带', '炉缸与出铁口'],
-    flow: ['矿石与焦炭装入', '热风与煤粉送入', '还原熔融反应', '铁水质量化验'],
-  },
-  debutanizer_column: {
-    eyebrow: 'REFINERY SEPARATION', title: '脱丁烷精馏过程结构', description: '展示进料、塔板分离、塔顶冷凝回流与塔底再沸之间的物料和能量联系。',
-    zones: ['塔顶冷凝器', '回流罐与回流线', '精馏塔板区', '塔底再沸器'],
-    flow: ['混合进料进入', '轻重组分分离', '塔顶冷凝回流', '塔底 C4 质量预测'],
-  },
-  industrial_dryer: {
-    eyebrow: 'THERMAL DRYING', title: '连续热风干燥过程结构', description: '呈现湿料进给、热风换热、滚筒输送和产品含水率变化的多变量耦合关系。',
-    zones: ['湿料进料斗', '空气加热器', '回转干燥筒', '产品出料端'],
-    flow: ['湿料连续进入', '热风建立温差', '筒内传热传质', '含水率在线估计'],
-  },
-}[props.project.scenarioId] ?? {}))
+const sceneContent = computed(() => getScene3DDescriptor(sceneState.value.data_scene.id))
+const sceneNodesById = computed(() => Object.fromEntries(sceneContent.value.nodes.map((node) => [node.id, node])))
+const processFlow = computed(() => sceneContent.value.flows.map(([from, to]) => ({
+  label: `${sceneNodesById.value[from]?.label || from} → ${sceneNodesById.value[to]?.label || to}`,
+  field: sceneNodesById.value[to]?.fields?.[0] || 'PROCESS NODE',
+})))
 const testMetrics = computed(() => modeling.value.metrics?.test ?? {})
 const evidenceRows = computed(() => [
   { label: '当前数据场景', value: sceneState.value.data_scene.display_name, detail: sceneState.value.data_scene_status_label },
@@ -53,21 +43,21 @@ const evidenceRows = computed(() => [
     </PageHeader>
 
     <div class="twin-layout">
-      <SceneModel3D :project="project" :latest-run="latestRun" />
+      <SceneModel3D :scene-state="sceneState" :latest-run="latestRun" />
       <aside class="twin-side">
         <section class="twin-context">
           <span class="section-kicker">Scene context</span>
-          <h2>{{ project.shortName }}</h2>
-          <p>{{ project.scene }}</p>
+          <h2>{{ sceneState.project_scene.display_name }}</h2>
+          <p>项目预设场景，不会被上传数据覆盖。</p>
           <dl>
-            <div><dt>被控目标</dt><dd>{{ project.target }}<code>{{ project.targetTag }}</code></dd></div>
-            <div><dt>主要输入</dt><dd>{{ project.mv }}<code>{{ project.mvTag }}</code></dd></div>
-            <div><dt>采样周期</dt><dd>{{ project.sample }}<code>max lag {{ project.maxLag }}</code></dd></div>
+            <div><dt>当前数据场景</dt><dd>{{ sceneState.data_scene.display_name }}<code>{{ sceneState.data_scene.status_label }}</code></dd></div>
+            <div><dt>场景绑定</dt><dd>{{ sceneState.is_mismatch ? '已分离' : '一致' }}<code>{{ sceneState.data_scene.source }}</code></dd></div>
+            <div><dt>项目采样设定</dt><dd>{{ project.sample }}<code>max lag {{ project.maxLag }}</code></dd></div>
           </dl>
         </section>
         <section class="zone-list">
           <div class="section-title"><span>设备分区</span><small>由上至下</small></div>
-          <ol><li v-for="(zone, index) in sceneContent.zones" :key="zone"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ zone }}</strong></li></ol>
+          <ol><li v-for="(node, index) in sceneContent.nodes" :key="node.id"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ node.label }}</strong></li></ol>
         </section>
       </aside>
     </div>
@@ -78,7 +68,7 @@ const evidenceRows = computed(() => [
 
     <section class="process-story">
       <div class="story-copy"><span class="section-kicker">Process narrative</span><h2>从工艺结构到数据证据</h2><p>三维模型只用于解释设备拓扑和变量关系；所有数值仍来自当前 CSV 流水线，不以动画或示意模型替代真实运行结果。</p></div>
-      <ol class="story-flow"><li v-for="(step, index) in sceneContent.flow" :key="step"><span>{{ index + 1 }}</span><div><strong>{{ step }}</strong><small>{{ index === sceneContent.flow.length - 1 ? project.targetTag : 'PROCESS NODE' }}</small></div><AppIcon v-if="index < sceneContent.flow.length - 1" name="arrow" :size="16" /></li></ol>
+      <ol class="story-flow"><li v-for="(step, index) in processFlow" :key="step.label"><span>{{ index + 1 }}</span><div><strong>{{ step.label }}</strong><small>{{ step.field }}</small></div><AppIcon v-if="index < processFlow.length - 1" name="arrow" :size="16" /></li></ol>
     </section>
   </div>
 </template>
