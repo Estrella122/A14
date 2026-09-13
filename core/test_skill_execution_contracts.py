@@ -35,12 +35,12 @@ class SkillExecutionContractTests(SimpleTestCase):
 
     def test_six_key_skills_have_explicit_capability_dispatch(self):
         expected = {
-            "missing_anomaly_cleaner": ("cleaning", "clean_missing_and_anomalies"),
-            "high_snr_dynamic_segment_extractor": ("segmentation", "extract_high_snr_segments"),
-            "time_delay_estimator_compensator": ("industrial-analysis", "estimate_and_compensate_delay"),
-            "system_identification_trainer": ("modeling", "train_system_identification_model"),
-            "model_diagnostics_evaluator": ("modeling", "evaluate_model_diagnostics"),
-            "closed_loop_preprocessing_optimizer": ("optimization", "optimize_preprocessing_closed_loop"),
+            "missing_anomaly_cleaner": ("missing_anomaly_cleaner", "clean_missing_and_anomalies"),
+            "high_snr_dynamic_segment_extractor": ("high_snr_dynamic_segment_extractor", "extract_high_snr_segments"),
+            "time_delay_estimator_compensator": ("time_delay_estimator_compensator", "estimate_and_compensate_delay"),
+            "system_identification_trainer": ("system_identification_trainer", "train_system_identification_model"),
+            "model_diagnostics_evaluator": ("model_diagnostics_evaluator", "evaluate_model_diagnostics"),
+            "closed_loop_preprocessing_optimizer": ("closed_loop_preprocessing_optimizer", "optimize_preprocessing_closed_loop"),
         }
         for skill_id, (executor, capability) in expected.items():
             contract = SKILL_CONTRACTS[skill_id]
@@ -63,11 +63,11 @@ class SkillExecutionContractTests(SimpleTestCase):
         modeling = next(item for item in plan["steps"] if item["id"] == "modeling")
         dispatch = {item["skill_id"]: item["selection_kind"] for item in modeling["capability_dispatch"]}
         self.assertEqual("core-executor-dag-v2", plan["version"])
-        self.assertEqual("shared_stage", modeling["dispatch_mode"])
+        self.assertEqual("dedicated_capability", modeling["dispatch_mode"])
         self.assertEqual(["system_identification_trainer"], modeling["requested_skill_ids"])
         self.assertEqual("direct", dispatch["system_identification_trainer"])
-        self.assertEqual("stage_support", dispatch["model_diagnostics_evaluator"])
-        self.assertEqual(set(GROUP_SKILLS["modeling"]), set(dispatch))
+        self.assertNotIn("model_diagnostics_evaluator", dispatch)
+        self.assertEqual({"system_identification_trainer"}, set(dispatch))
 
     def test_canonical_execution_states_are_closed_and_deterministic(self):
         cases = {

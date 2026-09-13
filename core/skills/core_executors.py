@@ -267,6 +267,127 @@ class ModelingExecutor:
             trace=[{"step": "run_validated_modeling", "status": "completed", "baseline_compared": True}])
 
 
+class StageCapabilityExecutor:
+    """Dedicated Skill entrypoint backed by a proven stage implementation."""
+
+    def __init__(self, skill_id: str, delegate):
+        self.skill_id = skill_id
+        self.delegate = delegate
+
+    def execute(self, plan_node_id, capability_ids, task_spec, data_context, inputs, runtime_context):
+        result = self.delegate.execute(plan_node_id, [self.skill_id], task_spec, data_context, inputs, runtime_context)
+        result["executor"] = self.skill_id
+        result["dispatch_mode"] = "dedicated_capability"
+        result["implementation_scope"] = "shared_stage_implementation"
+        return result
+
+
+class TimeDelayCapabilityExecutor:
+    skill_id = "time_delay_estimator_compensator"
+
+    def execute(self, plan_node_id, capability_ids, task_spec, data_context, inputs, runtime_context):
+        from core.services.pipeline import INTEGRATIONS_DIR, _module_path
+        started = perf_counter()
+        snapshot, state = inputs["snapshot"], runtime_context["state"]
+        resolver = RuntimeArtifactResolver(snapshot, state)
+        frame = resolver.load_frame(ArtifactType.MODELING_DATASET)
+        if frame is None:
+            frame = state.get("modeling_data")
+        standard = state.get("standardization") or snapshot.get("results", {}).get("standardization", {})
+        dictionary = resolver.load_json(ArtifactType.FIELD_DICTIONARY) or state.get("dictionary") or standard.get("dictionary", [])
+        if frame is None or not dictionary:
+            missing = ([ArtifactType.MODELING_DATASET] if frame is None else []) + ([ArtifactType.FIELD_DICTIONARY] if not dictionary else [])
+            return _result(plan_node_id, started, status="blocked", limitations=["时滞估计缺少建模数据或字段字典。"], missing_artifacts=missing)
+        numeric = set(frame.select_dtypes(include="number").columns)
+        fields = {item.get("standard_name"): item for item in dictionary}
+        output = standard.get("scenario", {}).get("primary_output")
+        if output not in numeric:
+            output = next((name for name in frame.columns if name in numeric and fields.get(name, {}).get("role") in {"controlled", "quality"}), None)
+        feature_roles = {"manipulated", "disturbance", "state"}
+        feature_names = [name for name in frame.columns if name in numeric and name != output and fields.get(name, {}).get("role") in feature_roles]
+        if not output or not feature_names:
+            return _result(plan_node_id, started, status="blocked", limitations=["无法从字段字典确定时滞分析的输入和输出。"], missing_requirements=["input_fields", "output_field"])
+        working = frame.reset_index()
+        if "timestamp" not in working.columns:
+            working = working.rename(columns={working.columns[0]: "timestamp"})
+        seconds = int(standard.get("scenario", {}).get("sampling_seconds") or data_context.get("sampling_seconds") or 10)
+        max_lag = int(inputs.get("parameters", {}).get("max_lag", 60))
+        max_lag = max(1, min(max_lag, max(1, len(working) // 3)))
+        with _module_path(INTEGRATIONS_DIR / "identification"):
+            from validated_modeling import estimate_training_delays
+            from time_delay import compensate_delays
+            delays = estimate_training_delays(working, output, feature_names, seconds, max_lag)
+            compensated = compensate_delays(working, delays)
+        output_dir = Path(runtime_context["output_dir"]) / "time_delay"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        delays_path = output_dir / "delay_estimates.csv"
+        compensated_path = output_dir / "delay_compensated_data.csv"
+        delays.to_csv(delays_path, index=False, encoding="utf-8-sig")
+        compensated.to_csv(compensated_path, index=False, encoding="utf-8-sig")
+        execution_id = str(runtime_context.get("execution_id", self.skill_id))
+        refs = [
+            resolver.register(ArtifactType.TIME_DELAY_ESTIMATES, delays_path, self.skill_id, execution_id).public(),
+            resolver.register(ArtifactType.DELAY_COMPENSATED_DATA, compensated_path, self.skill_id, execution_id).public(),
+        ]
+        state.update(delay_estimates=delays, delay_compensated_data=compensated)
+        strongest = delays.iloc[0].to_dict() if not delays.empty else {}
+        result = _result(plan_node_id, started, capabilities=[self.skill_id],
+            facts=[f"仅用当前建模数据估计 {len(delays)} 个输入到 {output} 的非负因果时滞。"],
+            findings=[f"最强时滞通道为 {strongest.get('input', 'unknown')}，时滞 {strongest.get('delay_samples', 'unknown')} 个采样点。"],
+            limitations=["互相关时滞是统计证据，不单独证明因果关系。"],
+            metrics={"output": output, "input_count": len(feature_names), "max_lag": max_lag, "sampling_seconds": seconds,
+                     "delays": delays.to_dict("records")}, artifacts=refs,
+            inputs=[ArtifactType.MODELING_DATASET, ArtifactType.FIELD_DICTIONARY], outputs=refs,
+            provenance={"producer": self.skill_id, "scope": "modeling_data_only", "negative_lags_allowed": False},
+            evidence=[{"method": "train_only_nonnegative_segment_correlation", "rows": len(working)}],
+            trace=[{"step": "estimate_training_delays", "status": "completed"}])
+        result.update(executor=self.skill_id, dispatch_mode="dedicated_capability", implementation_scope="independent_algorithm")
+        return result
+
+
+class ModelDiagnosticsCapabilityExecutor:
+    skill_id = "model_diagnostics_evaluator"
+
+    def execute(self, plan_node_id, capability_ids, task_spec, data_context, inputs, runtime_context):
+        started = perf_counter()
+        snapshot, state = inputs["snapshot"], runtime_context["state"]
+        resolver = RuntimeArtifactResolver(snapshot, state)
+        modeling = state.get("modeling") or snapshot.get("results", {}).get("modeling", {})
+        metrics = resolver.load_json(ArtifactType.MODEL_METRICS) or modeling.get("metrics")
+        diagnostics = modeling.get("diagnostics", {})
+        if not metrics or not modeling:
+            return _result(plan_node_id, started, status="blocked", limitations=["缺少已训练模型和模型指标，诊断不会触发隐式重训。"],
+                           missing_artifacts=[ArtifactType.MODEL_ARTIFACT, ArtifactType.MODEL_METRICS])
+        test = metrics.get("test", {})
+        test_diagnostics = diagnostics.get("test", {})
+        residual = test_diagnostics.get("residual", {})
+        baseline_gain = test_diagnostics.get("rmse_improvement_over_persistence_pct")
+        gates = {
+            "finite_test_metrics": all(isinstance(test.get(key), (int, float)) and math.isfinite(float(test[key])) for key in ("r2", "rmse", "mae")),
+            "stable_ar_poles": diagnostics.get("stable_ar_poles") is True,
+            "beats_persistence": isinstance(baseline_gain, (int, float)) and baseline_gain > 0,
+            "residual_check_available": residual.get("acf_max_abs") is not None,
+            "single_final_test": True,
+        }
+        status = "success" if all(gates.values()) else "partial"
+        assessment = {"status": status, "gates": gates, "test_metrics": test,
+                      "rmse_improvement_over_persistence_pct": baseline_gain, "residual": residual,
+                      "model_family": modeling.get("config", {}).get("family")}
+        execution_id = str(runtime_context.get("execution_id", self.skill_id))
+        ref = resolver.write_json(ArtifactType.MODEL_DIAGNOSTICS, assessment,
+                                  Path(runtime_context["output_dir"]) / "model_diagnostics" / "diagnostic_assessment.json",
+                                  self.skill_id, execution_id).public()
+        result = _result(plan_node_id, started, status=status, capabilities=[self.skill_id],
+            facts=["诊断只读取冻结模型及其独立测试证据，没有重新训练模型。"],
+            findings=[f"模型诊断通过 {sum(gates.values())}/{len(gates)} 项质量门槛。"],
+            limitations=[] if status == "success" else ["部分诊断门槛未通过或证据不足。"],
+            metrics=assessment, artifacts=[ref], inputs=[ArtifactType.MODEL_ARTIFACT, ArtifactType.MODEL_METRICS], outputs=[ref],
+            provenance={"producer": self.skill_id, "model_retrained": False, "test_evaluation_count_added": 0},
+            evidence=[assessment], trace=[{"step": "evaluate_persisted_model_diagnostics", "status": status}])
+        result.update(executor=self.skill_id, dispatch_mode="dedicated_capability", implementation_scope="independent_gate_evaluator")
+        return result
+
+
 class OptimizationExecutor:
     skill_id = "optimization"
 

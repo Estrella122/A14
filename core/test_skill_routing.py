@@ -93,7 +93,10 @@ class TrainedRoutingTests(SimpleTestCase):
         with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline') as rerun:
             result=chat('估计输入输出时滞')
         rerun.assert_not_called()
-        self.assertIn('尚无独立算法执行接口',result['action_note'])
+        lag=next(item for item in result['skill_executions'] if item['skill_id']=='time_delay_estimator_compensator')
+        self.assertEqual(lag['executor'],'time_delay_estimator_compensator')
+        self.assertEqual(lag['execution_state'],'blocked')
+        self.assertNotIn('system_identification_trainer',{item['skill_id'] for item in result['skill_executions']})
 
     def test_cleaning_stops_before_model_and_optimizer(self):
         folder=Path(self.temp.name);source=folder/'source.csv';source.write_text('x\n1\n')

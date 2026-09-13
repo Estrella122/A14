@@ -69,9 +69,19 @@ def discover_skills(roots: Iterable[Path]) -> tuple[list[DiscoveredSkill], dict[
                 text = entrypoint.read_text(encoding="utf-8")
                 metadata = _frontmatter(text)
                 manifest_match = MANIFEST_PATTERN.search(text)
-                if not metadata.get("name") or not manifest_match:
+                if not metadata.get("name"):
                     continue
-                manifest = json.loads(manifest_match.group(1))
+                if manifest_match:
+                    manifest = json.loads(manifest_match.group(1))
+                elif metadata.get("business_skill_id"):
+                    manifest = {
+                        "name": metadata["name"], "description": metadata.get("description", ""),
+                        "business_skill_id": metadata["business_skill_id"],
+                        "executor": metadata.get("executor"), "capability": metadata.get("capability"),
+                        "capabilities": {}, "workflows": {}, "references": {}, "scripts": {},
+                    }
+                else:
+                    continue
                 discovered.append(DiscoveredSkill(metadata["name"], metadata.get("description", ""), entrypoint.parent, entrypoint, text, manifest))
             except (OSError, ValueError, json.JSONDecodeError) as exc:
                 errors.append({"path": str(entrypoint), "error": type(exc).__name__})
@@ -183,3 +193,23 @@ def load_skill_context(
 
 def default_skill_roots() -> tuple[Path, ...]:
     return (Path(__file__).resolve().parent,)
+
+
+def load_business_skill_contexts(discovered_skills: Iterable[DiscoveredSkill], skill_ids: Iterable[str]) -> dict[str, Any]:
+    """Load only directly relevant business Skill entrypoints."""
+    requested = set(skill_ids)
+    selected = [skill for skill in discovered_skills if skill.manifest.get("business_skill_id") in requested]
+    sources, parts, errors = [], [], []
+    for skill in selected:
+        try:
+            content = skill.entrypoint_text if skill.entrypoint_text is not None else skill.entrypoint.read_text(encoding="utf-8")
+            relative = f"{skill.root.name}/SKILL.md"
+            sources.append(relative)
+            parts.append(f"[source: {relative}]\n{content}")
+        except OSError as exc:
+            errors.append({"resource": str(skill.entrypoint), "error": type(exc).__name__})
+    context = "\n\n".join(parts)
+    return {
+        "loaded_business_skills": [skill.manifest["business_skill_id"] for skill in selected],
+        "business_skill_sources": sources, "business_skill_context": context, "business_skill_errors": errors,
+    }

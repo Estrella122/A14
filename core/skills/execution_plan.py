@@ -11,7 +11,7 @@ GROUP_SKILLS = {
     "standardization": ("dataset_scenario_profiler", "semantic_field_unit_standardizer"),
     "cleaning": ("time_axis_alignment_resampler", "missing_anomaly_cleaner"),
     "segmentation": ("steady_transient_state_detector", "signal_noise_ratio_estimator", "high_snr_dynamic_segment_extractor", "segment_quality_scorer_ranker"),
-    "modeling": ("modeling_dataset_assembler", "arx_structure_order_selector", "system_identification_trainer", "multi_model_benchmark", "model_diagnostics_evaluator"),
+    "modeling": ("time_delay_estimator_compensator", "collinearity_detector_reducer", "modeling_dataset_assembler", "arx_structure_order_selector", "system_identification_trainer", "multi_model_benchmark", "model_diagnostics_evaluator"),
     "optimization": ("closed_loop_preprocessing_optimizer",),
     "review": ("engineering_result_interpreter",),
     "report": ("expert_report_writer",),
@@ -20,6 +20,10 @@ GROUP_SKILLS = {
     "supervision": ("execution_supervisor_replanner",),
 }
 SKILL_GROUP = {skill_id: group for group, skill_ids in GROUP_SKILLS.items() for skill_id in skill_ids}
+DEDICATED_EXECUTORS = {
+    "missing_anomaly_cleaner", "high_snr_dynamic_segment_extractor", "time_delay_estimator_compensator",
+    "system_identification_trainer", "model_diagnostics_evaluator", "closed_loop_preprocessing_optimizer",
+}
 
 
 def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str], data_context: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -66,7 +70,14 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
         targets.add("standardization")
     if auto_dependencies and "segmentation" in targets and not set(EXECUTOR_ARTIFACT_CONTRACTS["segmentation"]["requires"]) <= available_artifacts:
         targets.update(("standardization", "cleaning"))
-    if "modeling" in targets:
+    modeling_pipeline_requested = "modeling" in targets and (
+        bool(direct & {"modeling_dataset_assembler", "arx_structure_order_selector", "system_identification_trainer", "multi_model_benchmark", "collinearity_detector_reducer"})
+        or not (direct & set(GROUP_SKILLS["modeling"]))
+    )
+    modeling_data_requested = bool(direct & {"time_delay_estimator_compensator", "modeling_dataset_assembler", "arx_structure_order_selector", "system_identification_trainer", "multi_model_benchmark"})
+    if "modeling" in targets and modeling_data_requested and auto_dependencies and ArtifactType.MODELING_DATASET not in available_artifacts:
+        targets.update(("standardization", "cleaning"))
+    if "modeling" in targets and modeling_pipeline_requested:
         if auto_dependencies and not set(EXECUTOR_ARTIFACT_CONTRACTS["modeling"]["requires"]) <= available_artifacts:
             targets.update(("standardization", "cleaning"))
         targets.add("review")
@@ -74,12 +85,32 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
         targets.update(("standardization", "cleaning", "segmentation"))
 
     order = ("simulation", "standardization", "cleaning", "segmentation", "modeling", "optimization", "review", "report", "visualization", "experiment", "supervision")
-    producers = {artifact: group for group in order if group in targets for artifact in EXECUTOR_ARTIFACT_CONTRACTS.get(group, {}).get("produces", ())}
+    node_specs = {}
+    for group in order:
+        if group not in targets:
+            continue
+        requested = [skill_id for skill_id in GROUP_SKILLS[group] if skill_id in direct]
+        dedicated = requested[0] if len(requested) == 1 and requested[0] in DEDICATED_EXECUTORS else None
+        if dedicated:
+            skill_contract = get_skill_contract(dedicated)
+            node_specs[group] = {
+                "executor": dedicated, "dispatch_mode": "dedicated_capability", "skill_ids": [dedicated],
+                "requested_skill_ids": [dedicated],
+                "requires": tuple(skill_contract.requires), "produces": tuple(skill_contract.produces),
+            }
+        else:
+            group_contract = EXECUTOR_ARTIFACT_CONTRACTS.get(group, {"requires": (), "produces": ()})
+            node_specs[group] = {
+                "executor": group, "dispatch_mode": "shared_stage", "skill_ids": list(GROUP_SKILLS[group]),
+                "requested_skill_ids": requested, "requires": tuple(group_contract["requires"]), "produces": tuple(group_contract["produces"]),
+            }
+    producers = {artifact: group for group, spec in node_specs.items() for artifact in spec["produces"]}
     steps = []
     for group in order:
         if group not in targets:
             continue
-        contract = EXECUTOR_ARTIFACT_CONTRACTS.get(group, {"requires": (), "produces": ()})
+        spec = node_specs[group]
+        contract = {"requires": spec["requires"], "produces": spec["produces"]}
         missing_artifacts = [item for item in contract["requires"] if item not in available_artifacts]
         dependencies = list(dict.fromkeys(producers[item] for item in missing_artifacts if item in producers and producers[item] != group))
         if dependencies:
@@ -87,7 +118,7 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
         if group == "review" and "optimization" in targets:
             dependencies = ["optimization"]
         missing_unproducible = [item for item in missing_artifacts if item not in producers]
-        required_inputs = EXECUTOR_INPUT_CONTRACTS.get(group, ())
+        required_inputs = EXECUTOR_INPUT_CONTRACTS.get(group, ()) if spec["executor"] in {group, "closed_loop_preprocessing_optimizer"} else ()
         available_inputs = set(data_context.get("available_contract_fields") or ())
         missing_requirements = [item for item in required_inputs if item not in available_inputs]
         readiness_status = "blocked" if missing_unproducible or missing_requirements else "deferred" if dependencies else "executable"
@@ -96,17 +127,17 @@ def build_execution_plan(task_spec: dict[str, Any], direct_skill_ids: list[str],
             if readiness_status == "deferred" else "缺少 " + "、".join([*missing_unproducible, *missing_requirements]))
         steps.append({
             "id": group,
-            "executor": group,
-            "dispatch_mode": "shared_stage",
-            "skill_ids": list(GROUP_SKILLS[group]),
-            "requested_skill_ids": [skill_id for skill_id in GROUP_SKILLS[group] if skill_id in direct],
+            "executor": spec["executor"],
+            "dispatch_mode": spec["dispatch_mode"],
+            "skill_ids": spec["skill_ids"],
+            "requested_skill_ids": spec["requested_skill_ids"],
             "capability_dispatch": [
                 {
                     "skill_id": skill_id,
                     "capability": get_skill_contract(skill_id).capability,
                     "selection_kind": "direct" if skill_id in direct else "stage_support",
                 }
-                for skill_id in GROUP_SKILLS[group]
+                for skill_id in spec["skill_ids"]
             ],
             "dependencies": dependencies,
             "requires_artifacts": list(contract["requires"]),

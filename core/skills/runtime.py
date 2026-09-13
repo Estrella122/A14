@@ -15,7 +15,7 @@ from .task_understanding import understand_task
 from .catalog import CATEGORIES, SKILLS, SKILL_MAP, identify_scene_from_text
 from .context import build_data_context
 from .routing import select
-from .skill_loader import default_skill_roots, load_skill_context
+from .skill_loader import default_skill_roots, load_business_skill_contexts, load_skill_context
 from .skill_loader import discover_skills
 from .skill_resolver import resolve_skills
 from .executor import get_executor
@@ -237,6 +237,15 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         selected_skill_name=skill_resolution["selected_skills"][0] if skill_resolution["selected_skills"] else None,
         task_kind=task_understanding["task_kind"],
     )
+    business_runtime = load_business_skill_contexts(discovered_skills, direct)
+    skill_runtime.update(business_runtime)
+    if business_runtime["business_skill_context"]:
+        skill_runtime["context"] = "\n\n".join(filter(None, (skill_runtime["context"], business_runtime["business_skill_context"])))
+        skill_runtime["sources"] += business_runtime["business_skill_sources"]
+        skill_runtime["errors"] += business_runtime["business_skill_errors"]
+        skill_runtime["performance"]["loaded_business_skill_count"] = len(business_runtime["loaded_business_skills"])
+        skill_runtime["performance"]["context_characters"] = len(skill_runtime["context"])
+        skill_runtime["performance"]["estimated_tokens"] = (len(skill_runtime["context"]) + 3) // 4
     mark("skill_document_loading_ms")
     analysis_plan = build_analysis_plan(
         text,
@@ -431,7 +440,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                         "capability_dispatch": dispatch,
                         "facts": [], "findings": [], "hypotheses": [], "limitations": [reason],
                         "metrics": {}, "artifacts": [], "evidence": [],
-                        "warnings": ["没有生成或回退到 synthetic data。"] if node["executor"] == "optimization" else [],
+                        "warnings": ["没有生成或回退到 synthetic data。"] if node["executor"] in {"optimization", "closed_loop_preprocessing_optimizer"} else [],
                         "execution_trace": [], "duration_ms": 0}
             if node.get("readiness_status") == "blocked":
                 result = blocked_result(node.get("readiness_reason", "规划阶段前置条件不足"),
@@ -456,7 +465,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                 try:
                     if event_sink:
                         event_sink("executor_started", stage="execution", executor=node["executor"], status="executing", message=f"{node['executor']} Executor 已开始", metadata={"skill_ids": node.get("skill_ids", [])})
-                    result = executor.execute(node["executor"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
+                    result = executor.execute(node["id"], node["skill_ids"], plan.get("analysis", {}).get("task_understanding", {}),
                                               plan.get("analysis", {}).get("data_context", {}),
                                               {"snapshot": snapshot, "parameters": parameters,
                                                "optimization_request": (snapshot.get("runtime_state", {}) or {}).get("optimization_contract") or snapshot.get("optimization_contract")},

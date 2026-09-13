@@ -27,6 +27,9 @@ class ArtifactType:
     MODELING_DATASET = "MODELING_DATASET"
     MODEL_ARTIFACT = "MODEL_ARTIFACT"
     MODEL_METRICS = "MODEL_METRICS"
+    TIME_DELAY_ESTIMATES = "TIME_DELAY_ESTIMATES"
+    DELAY_COMPENSATED_DATA = "DELAY_COMPENSATED_DATA"
+    MODEL_DIAGNOSTICS = "MODEL_DIAGNOSTICS"
     OPTIMIZATION_REPORT = "OPTIMIZATION_REPORT"
     OPTIMIZATION_WINNER = "OPTIMIZATION_WINNER"
 
@@ -40,6 +43,9 @@ LEGACY_ARTIFACT_TYPES = {
     "segments_csv": ArtifactType.SELECTED_SEGMENTS, "segment_scores_csv": ArtifactType.SEGMENT_SCORES,
     "snr_csv": ArtifactType.SNR_ESTIMATES, "modeling_csv": ArtifactType.MODELING_DATASET,
     "summary_json": ArtifactType.MODEL_ARTIFACT, "metrics_json": ArtifactType.MODEL_METRICS,
+    "delays_csv": ArtifactType.TIME_DELAY_ESTIMATES,
+    "delay_compensated_csv": ArtifactType.DELAY_COMPENSATED_DATA,
+    "diagnostics_json": ArtifactType.MODEL_DIAGNOSTICS,
     "optimization_json": ArtifactType.OPTIMIZATION_REPORT,
     "optimization_winner_json": ArtifactType.OPTIMIZATION_WINNER,
 }
@@ -55,6 +61,8 @@ LEGACY_LAYOUT_PATHS = {
     ArtifactType.SEGMENT_SCORES: "03_cleaning/segment_scores.csv",
     ArtifactType.SNR_ESTIMATES: "03_cleaning/snr_estimates.csv",
     ArtifactType.MODELING_DATASET: "03_cleaning/modeling_dataset.csv",
+    ArtifactType.TIME_DELAY_ESTIMATES: "04_modeling/01_time_delay/delay_estimates.csv",
+    ArtifactType.MODEL_DIAGNOSTICS: "04_modeling/03_system_identification/diagnostics.json",
 }
 
 

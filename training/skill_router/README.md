@@ -54,12 +54,15 @@ python manage.py runserver 127.0.0.1:8000
 python -m pip install -r training/skill_router/requirements.txt
 python training/skill_router/train.py
 python training/skill_router/evaluate.py
+python training/skill_router/quality_gate.py
 python manage.py test core.test_skill_routing core.tests.AgentChatTests --noinput
 ```
 
 `train.py` 只读取 train 和 validation；`evaluate.py` 不修改模型。特征为字符 2–4 gram TF-IDF，分类器为多类逻辑回归，固定种子42。交付模型选择 C=20，概率阈值0.12、首二候选差值0.03、已知二元字符覆盖率0.20。这些阈值用验证集选择，不应当作普适常数。
 
 同一个测试集反复用于改代码、增补训练例后，就不能再作为独立验收集。此时请建立新的留出测试版本，并保留旧版结果作为回归记录。
+
+`quality_gate.py` 是发布门槛，不会训练或修改模型。它同时检查报告对应的模型/留出集哈希，以及准确率、精确率、召回率、未知请求拒绝率和有支持 Skill 的最低 F1。当前门槛只针对合成留出集，不能替代现场人工标注评测。
 
 ## 加入真实误调样本
 

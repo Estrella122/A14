@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from django.test import SimpleTestCase
 
 from core.skills.runtime import plan_skills
-from core.skills.skill_loader import default_skill_roots, discover_skills, load_skill_context
+from core.skills.skill_loader import default_skill_roots, discover_skills, load_business_skill_contexts, load_skill_context
 
 
 class SkillLoaderTests(SimpleTestCase):
@@ -100,3 +100,13 @@ class SkillDiscoveryTests(SimpleTestCase):
         self.assertIn("input_requirements", industrial.manifest)
         self.assertIn("output_contract", industrial.manifest)
         self.assertGreaterEqual(metrics["skill_count"], 1)
+
+    def test_all_catalog_skills_have_independent_document_entrypoints(self):
+        from core.skills.catalog import SKILL_MAP
+        skills, metrics = discover_skills(default_skill_roots())
+        expected = set(SKILL_MAP)
+        loaded = load_business_skill_contexts(skills, expected)
+        self.assertEqual(expected, set(loaded["loaded_business_skills"]))
+        self.assertEqual(30, len(loaded["business_skill_sources"]))
+        self.assertFalse(loaded["business_skill_errors"])
+        self.assertGreaterEqual(metrics["skill_count"], 31)
