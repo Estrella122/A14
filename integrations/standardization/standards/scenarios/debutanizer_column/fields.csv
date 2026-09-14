@@ -5,7 +5,7 @@ top_pressure,塔顶压力,脱丁烷精馏塔塔顶压力,state,float,Pa,true,U2|
 reflux_flow,回流流量,塔顶回流流量或回流泵出口流量,manipulated,float,t/h,true,U3|u3|Reflux_Flow|reflux flow|回流量|回流流量|DEBUT_REFLUX|FT_REFLUX,0,500
 next_process_flow,后续流程流量,脱丁烷塔流向下一流程的产品或侧线流量,manipulated,float,t/h,true,U4|u4|Flow_To_Next_Process|flow to next process|后续流程流量|塔底产品流量|出料流量|DEBUT_PRODUCT_FLOW|FT_PRODUCT,0,500
 tray6_temperature,第六塔板温度,脱丁烷塔第六塔板温度或灵敏板温度,state,float,degC,true,U5|u5|Tray6_Temperature|sixth tray temperature|第六塔板温度|灵敏板温度|DEBUT_TRAY6_TEMP|TT_TRAY6,20,150
-bottom_temperature_a,塔底温度A,脱丁烷塔塔底第一温度测点,state,float,degC,true,U6|u6|Bottom_Temperature_A|bottom temperature a|塔底温度A|塔釜温度A|DEBUT_BOTTOM_TEMP_A|TT_BOTTOM_A,50,180
-bottom_temperature_b,塔底温度B,脱丁烷塔塔底第二温度测点,state,float,degC,true,U7|u7|Bottom_Temperature_B|bottom temperature b|塔底温度B|塔釜温度B|DEBUT_BOTTOM_TEMP_B|TT_BOTTOM_B,50,180
+bottom_temperature_a,塔底温度A,脱丁烷塔塔底第一温度测点,state,float,degC,true,U6|u6|Bottom_Temperature_A|bottom temperature a|塔底温度A|塔釜温度A|DEBUT_BOTTOM_TEMP_A|TT_BOTTOM_A|bottom_temp_a,50,180
+bottom_temperature_b,塔底温度B,脱丁烷塔塔底第二温度测点,state,float,degC,true,U7|u7|Bottom_Temperature_B|bottom temperature b|塔底温度B|塔釜温度B|DEBUT_BOTTOM_TEMP_B|TT_BOTTOM_B|bottom_temp_b,50,180
 bottom_butane_content,塔底C4浓度,塔底物流中丁烷/C4组分浓度软测量目标；质量化验通常滞后30-75分钟,controlled,float,percent,true,U8|u8|y|Butane_Content|butane content|C4浓度|塔底C4|塔底丁烷含量|丁烷含量|BOTTOM_C4|C4_CONTENT|LIMS_C4,0,10
 sample_index,样本序号,样本顺序编号或历史数据行号,identifier,integer,string,false,sample|row_number|sample_index|序号,0,

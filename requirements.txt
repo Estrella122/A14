@@ -1,5 +1,6 @@
 asgiref==3.11.1
 Django==6.0.6
+PyYAML>=6.0,<7
 django-simpleui==2026.1.13
 PyMySQL==1.2.0
 sqlparse==0.5.5

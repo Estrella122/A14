@@ -1,0 +1,34 @@
+{
+  "base_commit": "eb240e8922ce953665844380fabb5c0c575718c9",
+  "worktree_dirty": true,
+  "training_performed": false,
+  "deliverables": [
+    "field_acceptance_path_audit.md",
+    "unified_field_acceptance_design.md",
+    "debutanizer_column_level_reaudit.md",
+    "field_acceptance_safety_acceptance.md",
+    "contract_coverage_post_safety.md",
+    "field_training_need_reassessment.md",
+    "real_dataset_candidates_post_safety.md",
+    "debutanizer_real_pipeline_post_safety.md",
+    "dryer_real_pipeline_post_safety.md",
+    "three_scene_final_pipeline_acceptance.md",
+    "three_scene_final_runtime.json",
+    "remaining_real_data_gaps_final.md",
+    "full_regression_acceptance.md"
+  ],
+  "code_sha256": {
+    "integrations/standardization/standard_agent/engine.py": "8de9481f0733894fe5c5d9fca2a0efb772f845919ce6afe5012bae848c5e9c78",
+    "integrations/standardization/standard_agent/physical_semantics.py": "ee9da0b25c0f21c3996cdf206843c0bbf629136ce309997f3810e1b6c9bf8cac",
+    "core/services/dataset_evidence.py": "6fd2d1a72b598fb72984cb2750eebc058fd40c964428515f3b697b31c029080b",
+    "core/test_final_field_acceptance.py": "96ded1cf2d0e11c813aef23025dba87209e11d2ec9067ead850024409cf9c7f5"
+  },
+  "regression": {
+    "tests": 381,
+    "passed": 378,
+    "skipped_existing": 3,
+    "failures": 0,
+    "errors": 0
+  },
+  "frontend_tests": 32
+}

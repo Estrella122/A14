@@ -5,14 +5,81 @@
   "process_unit": "连续式热风工业干燥装置",
   "version": "1.0.0",
   "dictionary": "fields.csv",
-  "keywords": ["工业干燥器", "干燥机", "烘干机", "热风干燥", "dryer", "drying unit"],
+  "keywords": [
+    "工业干燥器",
+    "干燥机",
+    "烘干机",
+    "热风干燥",
+    "dryer",
+    "drying unit"
+  ],
   "sampling_seconds": 10,
   "timestamp_field": "timestamp",
   "primary_output": "product_moisture",
-  "model_outputs": ["product_moisture", "product_temperature", "exhaust_humidity"],
+  "model_outputs": [
+    "product_moisture",
+    "product_temperature",
+    "exhaust_humidity"
+  ],
   "selection_window_samples": 18,
   "selection_step_samples": 6,
-  "recognition": {"priority": 60, "min_evidence": 3, "min_confidence": 0.52, "conflicting_features": ["slab_discharge_temp", "bottom_butane_content", "dissolved_oxygen"]},
-  "data_provenance_required": ["source_system", "equipment_id", "collection_period", "instrument_traceability", "usage_authorization"],
-  "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。"
+  "recognition": {
+    "priority": 60,
+    "min_evidence": 3,
+    "min_confidence": 0.52,
+    "conflicting_features": [
+      "slab_discharge_temp",
+      "bottom_butane_content",
+      "dissolved_oxygen"
+    ]
+  },
+  "data_provenance_required": [
+    "source_system",
+    "equipment_id",
+    "collection_period",
+    "instrument_traceability",
+    "usage_authorization"
+  ],
+  "notes": "面向3输入3输出连续干燥装置；快速动态窗口为180秒、步长60秒，采用共享输入的多输出ARX模型组。",
+  "family": "流程工业",
+  "field_roles": {
+    "timestamp": "timestamp",
+    "inputs": [
+      "hot_air_temperature",
+      "drying_air_flow",
+      "wet_feed_rate"
+    ],
+    "target": "product_moisture",
+    "optional_context": []
+  },
+  "units": {
+    "source": "fields.csv",
+    "column": "unit"
+  },
+  "aliases": {
+    "source": "fields.csv",
+    "column": "aliases"
+  },
+  "default_parameters": {
+    "resample_seconds": 10,
+    "max_lag": 60,
+    "window_length": 18,
+    "step": 6,
+    "top_k": 5
+  },
+  "constraints": {
+    "physical_bounds_source": "fields.csv",
+    "missing_target_policy": "preserve_nan",
+    "train_validation_test": "chronological_60_20_20_v2",
+    "strict_segment_score": 80,
+    "snr_threshold_db": 10,
+    "minimum_rows": 150,
+    "causal_alignment": "past_only",
+    "lab_tolerance_hours": null
+  },
+  "display": {
+    "name": "工业干燥器",
+    "industry": "流程工业",
+    "process_unit": "连续式热风工业干燥装置"
+  }
 }

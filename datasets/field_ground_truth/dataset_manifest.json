@@ -1,0 +1,40 @@
+{
+  "version": "evidence-v1",
+  "random_seed": null,
+  "partitioning": "deterministic semantic-group hash; normalized-source/source-dataset holdout propagation",
+  "source_gt_sha256": "51dc4dd5dbc351e0578fb1540ebe892ac6e51667262ff74c5c323b1e5aa3b421",
+  "dataset_sha256": "3bc8cddebe6d331dc0b129b49b8f815b6ab07e454a05b7e270ee70295d5eb19f",
+  "splits": {
+    "train": 169,
+    "validation": 32,
+    "test": 25,
+    "hard_negative_test": 4,
+    "cross_scene_test": 2,
+    "real_unseen_test": 98
+  },
+  "training_performed": false,
+  "real_unseen_caveat": "held out from THIS corpus; original pretrained model exposure unknown",
+  "feature_schema": [
+    "scenario",
+    "source_field",
+    "candidate_field",
+    "source_unit",
+    "candidate_unit",
+    "label",
+    "sample_type",
+    "reason_codes",
+    "source_type",
+    "scenario_split_group",
+    "split",
+    "source_quantity_type",
+    "candidate_quantity_type",
+    "source_role",
+    "candidate_role",
+    "source_location",
+    "candidate_location",
+    "source_direction",
+    "candidate_direction",
+    "source_equipment",
+    "candidate_equipment"
+  ]
+}

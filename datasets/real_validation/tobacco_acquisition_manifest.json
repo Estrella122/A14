@@ -1,0 +1,22 @@
+{
+  "source_url": "https://zenodo.org/api/records/19334481/files/Yan990/transformer-lstm-release-1.0.0.zip/content",
+  "concept_doi": "10.5281/zenodo.19334140",
+  "resolved_record_id": 19334481,
+  "archive_hash": "14c18a241ea2218ea615e13584e302d503584727c144f96381a0e3094be4d809",
+  "source_archive_md5_verified": true,
+  "member_filename": "FL2409JJ9070-049.xlsx",
+  "output_hash": "997e73bbf88854af528739019a62f93262e9a52c9dfc1ca34e453244dde4ee43",
+  "operation": "extract archive member verbatim; no cell modification",
+  "renames": {},
+  "unit_conversions": [],
+  "time_operations": [],
+  "inverse_transform": null,
+  "dropped_columns": [],
+  "warnings": [
+    "processed research subset; not full raw plant source",
+    "not eligible for current required contract"
+  ],
+  "license": {
+    "id": "apache2.0"
+  }
+}

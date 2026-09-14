@@ -20,6 +20,7 @@ from .point_dictionary import PointSemanticDictionary
 from .semantic_ensemble import HybridSemanticModel
 from .schema_validation import validate_standardized_frame
 from .units import conversion, split_header_unit
+from .physical_semantics import evaluate as evaluate_physical_semantics, final_field_acceptance_gate
 
 
 def normalize_name(value: str) -> str:
@@ -231,6 +232,14 @@ class StandardizationAgent:
             for alias in learned.get(target, [])
         ):
             method = "learned_alias"
+        if target is None and template.config.get("physical_semantics"):
+            # Formatting-only equality: preserve all letters and measurement digits.
+            compact = normalized.replace("_", "")
+            exact = {candidate for alias, candidate in aliases.items() if alias.replace("_", "") == compact}
+            if len(exact) == 1:
+                target = next(iter(exact))
+                method = "normalized_alias"
+                score = 1.0
         if target is None:
             core_targets: dict[str, set[str]] = {}
             for alias, candidate in aliases.items():
@@ -254,7 +263,7 @@ class StandardizationAgent:
                     best = (candidate_score, candidate)
             score, target = best
             method = "semantic"
-        if self.semantic_model is not None and score < self.auto_threshold:
+        if self.semantic_model is not None and score < self.auto_threshold and (not template.config.get("physical_semantics") or method not in {"alias", "normalized_alias", "learned_alias", "point_dictionary"}):
             predictions = self.semantic_model.predict(base_name, template.scenario_id, limit=2)
             if predictions and predictions[0]["standard_name"] == "__irrelevant__" and predictions[0]["score"] >= float(self.semantic_model.metadata.get("accept_threshold", 0.54)):
                 target = None
@@ -296,7 +305,14 @@ class StandardizationAgent:
             score *= 0.72 + 0.28 * plausibility
             if value_profile["missing_ratio"] >= 0.8:
                 score *= 0.72
+        physical = {}
+        if template.config.get("physical_semantics") and target:
+            physical = evaluate_physical_semantics(base_name, target, method, score, unit_status, template.config["physical_semantics"], self.auto_threshold)
         return {
+            **physical,
+            "source_column": raw_name,
+            "candidate_field": target,
+            "mapping_method": method,
             "raw": raw_name,
             "base_name": base_name,
             "standard": target,
@@ -314,7 +330,7 @@ class StandardizationAgent:
             "point_resolution": point_resolution,
         }
 
-    def map_columns(self, columns: list[str], scenario_id: str, frame: pd.DataFrame | None = None) -> dict[str, Any]:
+    def map_columns(self, columns: list[str], scenario_id: str, frame: pd.DataFrame | None = None, source_metadata: dict | None = None) -> dict[str, Any]:
         template = self.repository.get(scenario_id)
         names = [str(column) for column in columns]
         mappings = []
@@ -323,13 +339,14 @@ class StandardizationAgent:
             series = frame[column] if frame is not None and column in frame.columns else None
             mappings.append(self._match_one(column, template, series=series, neighbors=neighbors))
         for item in mappings:
-            target = item["standard"]
-            if target is None:
-                item["status"] = "unmapped"
-            else:
-                item["status"] = "matched" if item["confidence"] >= self.auto_threshold else "review"
+            item.update(final_field_acceptance_gate(item, template, self.auto_threshold, (source_metadata or {}).get(item['raw'])))
         self._resolve_duplicates(mappings)
         self._annotate_relevance(mappings, template)
+        for item in mappings:
+            item["decision"] = "AUTO_ACCEPT" if item["status"] == "matched" else "REVIEW_REQUIRED" if item["status"] == "review" else "REJECT"
+            item["decision_reason"] = item.get("physical_decision_reason", "existing identity/confidence/unit/value gates") + "; final status: " + item["status"]
+            for dimension in ("semantic", "unit", "quantity_type", "role", "location", "direction"):
+                item.setdefault(dimension + "_evidence", {"status": "not_evaluated", "reason": "no candidate or scenario has no physical contract"})
         required = {field.standard_name for field in template.fields if field.required}
         accepted = {item["standard"] for item in mappings if item["status"] == "matched"}
         candidates = {item["standard"] for item in mappings if item["status"] in {"matched", "review"}}
@@ -568,7 +585,7 @@ class StandardizationAgent:
         template = self.repository.get(selected_id)
         mapping_started = perf_counter()
         mapping_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
-        mapping = self.map_columns(list(frame.columns), selected_id, frame=frame)
+        mapping = self.map_columns(list(frame.columns), selected_id, frame=frame, source_metadata=(context or {}).get("field_metadata"))
         overrides = overrides or {}
         for item in mapping["mappings"]:
             if item["raw"] in overrides:
@@ -600,6 +617,8 @@ class StandardizationAgent:
                     item.update(unit_status="convertible", unit_action=unit_conversion[0])
                 else:
                     item.update(unit_status="conflict", unit_action=None)
+        for item in mapping["mappings"]:
+            item.update(final_field_acceptance_gate(item, template, self.auto_threshold, (context or {}).get("field_metadata", {}).get(item["raw"])))
         self._resolve_duplicates(mapping["mappings"])
         self._annotate_relevance(mapping["mappings"], template)
         result = pd.DataFrame(index=frame.index)
@@ -713,9 +732,15 @@ class StandardizationAgent:
         for items in grouped.values():
             if len(items) < 2:
                 continue
-            winner = max(items, key=lambda item: (item["method"] == "manual", item["confidence"]))
+            winner = max(items, key=lambda item: (item.get("physical_gate_pass", False), item["method"] == "manual", item["confidence"]))
             for item in items:
-                item["status"] = "matched" if item is winner and item["confidence"] >= self.auto_threshold else ("review" if item is winner else "duplicate")
+                item["status"] = "matched" if item is winner and item["confidence"] >= self.auto_threshold and item.get("physical_gate_pass", False) else ("review" if item is winner else "duplicate")
+
+        for item in mappings:
+            item['decision'] = 'AUTO_ACCEPT' if item.get('status') == 'matched' else 'REVIEW_REQUIRED' if item.get('status') == 'review' else 'REJECT'
+            if 'final_acceptance_audit' in item:
+                item['final_acceptance_audit']['final_status'] = item.get('status')
+                item['final_acceptance_audit']['post_duplicate_decision'] = item['decision']
 
     @staticmethod
     def _annotate_relevance(mappings: list[dict[str, Any]], template: ScenarioTemplate) -> None:

@@ -1,0 +1,1130 @@
+{
+  "source": "/Users/komi/Documents/ChatGPT/作品修复/A14/runtime/data_validation/final_search/tobacco.xlsx",
+  "source_hash": "997e73bbf88854af528739019a62f93262e9a52c9dfc1ca34e453244dde4ee43",
+  "scene": "industrial_dryer",
+  "required_count": 7,
+  "target": "product_moisture",
+  "source_metadata": {
+    "source_type": "DERIVED_REAL",
+    "source_hash": "997e73bbf88854af528739019a62f93262e9a52c9dfc1ca34e453244dde4ee43",
+    "evidence_source": "https://www.nature.com/articles/s41598-026-49347-9",
+    "license": "Apache-2.0 declared for Zenodo archive; proprietary full source not included",
+    "analysis_allowed": true,
+    "sampling_interval": 1,
+    "sampling_evidence": "article instrumentation section; actual _time 1s",
+    "normalization_status": "unknown",
+    "no_equivalent": 4
+  },
+  "provenance_authenticated_by_tool": false,
+  "rows": 800,
+  "columns": [
+    "_time",
+    "ZX_SIROX_INMATMOISTURE_PV",
+    "ZX_BBHS_MATERIALTOTAL_PV",
+    "ZX_BBHS_1GZBZGZD_PV",
+    "ZX_BBHS_1GZBZGZD_SP",
+    "K4_T04",
+    "K4_H04",
+    "avg",
+    "ZX_BBHS_OUTMATMOISTURE_PV"
+  ],
+  "time_coverage": [
+    "2024-09-26 00:45:19",
+    "2024-09-26 00:58:48"
+  ],
+  "timestamp_status": "valid",
+  "duplicate_timestamp_count": 0,
+  "sampling_status": "documented_and_consistent",
+  "observed_sampling_seconds": 1.0,
+  "unit_status": "unverified",
+  "target_status": {
+    "accepted": false,
+    "valid_observations": 0
+  },
+  "matched_required": 1,
+  "review_required": 1,
+  "missing_required": 5,
+  "missing_fields": [
+    "drying_air_flow",
+    "exhaust_humidity",
+    "hot_air_temperature",
+    "product_temperature",
+    "wet_feed_rate"
+  ],
+  "review_fields": [
+    "product_moisture"
+  ],
+  "no_equivalent": 4,
+  "required_field_coverage": 0.14285714285714285,
+  "physical_gate_results": [
+    {
+      "source_column": "_time",
+      "candidate_field": "timestamp",
+      "mapping_method": "alias",
+      "raw": "_time",
+      "base_name": "_time",
+      "standard": "timestamp",
+      "display_name": "时间戳",
+      "role": "time",
+      "data_type": "datetime",
+      "expected_unit": "datetime",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 1.0,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "ZX_SIROX_INMATMOISTURE_PV",
+        "ZX_BBHS_MATERIALTOTAL_PV"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "_TIME",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": true,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "AUTO_ACCEPT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: matched",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "_time",
+        "candidate": "timestamp",
+        "scenario": "industrial_dryer",
+        "required_field_criticality": true,
+        "identity_basis": "curated_identity",
+        "provenance_level": "registry_identity",
+        "unit_basis": "registry_unit",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": true,
+          "unit": true,
+          "physical_semantics": true,
+          "source_confidence": true,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "AUTO_ACCEPT",
+        "reason": "final gate passed",
+        "final_status": "matched",
+        "post_duplicate_decision": "AUTO_ACCEPT"
+      },
+      "status": "matched",
+      "need_level": "required",
+      "is_needed": true,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "ZX_SIROX_INMATMOISTURE_PV",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "ZX_SIROX_INMATMOISTURE_PV",
+      "base_name": "ZX_SIROX_INMATMOISTURE_PV",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.556,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "_time",
+        "ZX_BBHS_MATERIALTOTAL_PV",
+        "ZX_BBHS_1GZBZGZD_PV"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "ZX_SIROX_INMATMOISTURE_PV",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "ZX_SIROX_INMATMOISTURE_PV",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "ZX_BBHS_MATERIALTOTAL_PV",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "ZX_BBHS_MATERIALTOTAL_PV",
+      "base_name": "ZX_BBHS_MATERIALTOTAL_PV",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.364,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "_time",
+        "ZX_SIROX_INMATMOISTURE_PV",
+        "ZX_BBHS_1GZBZGZD_PV",
+        "ZX_BBHS_1GZBZGZD_SP"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "ZX_BBHS_MATERIALTOTAL_PV",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "ZX_BBHS_MATERIALTOTAL_PV",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "ZX_BBHS_1GZBZGZD_PV",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "ZX_BBHS_1GZBZGZD_PV",
+      "base_name": "ZX_BBHS_1GZBZGZD_PV",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.196,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "ZX_SIROX_INMATMOISTURE_PV",
+        "ZX_BBHS_MATERIALTOTAL_PV",
+        "ZX_BBHS_1GZBZGZD_SP",
+        "K4_T04"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "ZX_BBHS_1GZBZGZD_PV",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "ZX_BBHS_1GZBZGZD_PV",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "ZX_BBHS_1GZBZGZD_SP",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "ZX_BBHS_1GZBZGZD_SP",
+      "base_name": "ZX_BBHS_1GZBZGZD_SP",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.196,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "ZX_BBHS_MATERIALTOTAL_PV",
+        "ZX_BBHS_1GZBZGZD_PV",
+        "K4_T04",
+        "K4_H04"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "ZX_BBHS_1GZBZGZD_SP",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "ZX_BBHS_1GZBZGZD_SP",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "K4_T04",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "K4_T04",
+      "base_name": "K4_T04",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.261,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "ZX_BBHS_1GZBZGZD_PV",
+        "ZX_BBHS_1GZBZGZD_SP",
+        "K4_H04",
+        "avg"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "K4_T04",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "K4_T04",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "K4_H04",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "K4_H04",
+      "base_name": "K4_H04",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.174,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "ZX_BBHS_1GZBZGZD_SP",
+        "K4_T04",
+        "avg",
+        "ZX_BBHS_OUTMATMOISTURE_PV"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "K4_H04",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "K4_H04",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "avg",
+      "candidate_field": null,
+      "mapping_method": "semantic",
+      "raw": "avg",
+      "base_name": "avg",
+      "standard": null,
+      "display_name": null,
+      "role": null,
+      "data_type": null,
+      "expected_unit": null,
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.261,
+      "method": "semantic",
+      "value_profile": {
+        "available": false,
+        "plausibility": 0.5,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0
+      },
+      "neighbor_fields": [
+        "K4_T04",
+        "K4_H04",
+        "ZX_BBHS_OUTMATMOISTURE_PV"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "AVG",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REJECT",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: unmapped",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "avg",
+        "candidate": null,
+        "scenario": "industrial_dryer",
+        "required_field_criticality": false,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": false,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REJECT",
+        "reason": "final gate requires review: candidate_exists, identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "unmapped",
+        "post_duplicate_decision": "REJECT"
+      },
+      "status": "unmapped",
+      "need_level": "irrelevant",
+      "is_needed": false,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    },
+    {
+      "source_column": "ZX_BBHS_OUTMATMOISTURE_PV",
+      "candidate_field": "product_moisture",
+      "mapping_method": "semantic",
+      "raw": "ZX_BBHS_OUTMATMOISTURE_PV",
+      "base_name": "ZX_BBHS_OUTMATMOISTURE_PV",
+      "standard": "product_moisture",
+      "display_name": "产品含水率",
+      "role": "controlled",
+      "data_type": "float",
+      "expected_unit": "percent",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.685,
+      "method": "semantic",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "K4_H04",
+        "avg"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "ZX_BBHS_OUTMATMOISTURE_PV",
+        "missing_knowledge": []
+      },
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "quantity_type": true,
+        "physical_role": true,
+        "equipment_role": true,
+        "measurement_location": true,
+        "flow_direction": true,
+        "measurement_channel": true
+      },
+      "physical_decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity",
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "explicit source/canonical dimensions checked; unspecified dimensions rely on curated identity; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "semantic",
+        "source_column": "ZX_BBHS_OUTMATMOISTURE_PV",
+        "candidate": "product_moisture",
+        "scenario": "industrial_dryer",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": true,
+          "normalization_metadata": true,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "flow_direction": true,
+          "measurement_channel": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {},
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, physical_semantics, source_confidence",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null,
+      "semantic_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "unit_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "quantity_type_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "role_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "location_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      },
+      "direction_evidence": {
+        "status": "not_evaluated",
+        "reason": "no candidate or scenario has no physical contract"
+      }
+    }
+  ],
+  "normalization_status": "unknown",
+  "inverse_metadata_status": "unknown",
+  "missing_rate": 0.0,
+  "constant_ratio": 0.0,
+  "final_eligibility": "NORMALIZATION_BLOCKED",
+  "reasons": [
+    "MISSING_REQUIRED_SENSORS_OR_MAPPING: drying_air_flow, exhaust_humidity, hot_air_temperature, product_moisture, product_temperature, wet_feed_rate",
+    "MISSING_METADATA: canonical physical units not independently documented",
+    "NORMALIZATION_BLOCKED: physical scale/restoration not verified",
+    "INSUFFICIENT_DATA: less than existing 150-row minimum or no target observations"
+  ]
+}

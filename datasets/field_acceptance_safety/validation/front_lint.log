@@ -1,0 +1,5 @@
+
+> frontend@0.0.0 lint
+> eslint src tests vite.config.js && node scripts/lint.mjs
+
+Lint passed: 43 JavaScript/Vue files checked.

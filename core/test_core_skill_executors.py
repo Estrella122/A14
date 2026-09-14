@@ -53,7 +53,7 @@ class CoreExecutionPlanTests(SimpleTestCase):
 
     def test_acceptance_phrases_build_expected_dags(self):
         cases = {
-            "帮我检查这份数据并清洗缺失值。": ["standardization", "cleaning"],
+            "帮我检查这份数据并清洗缺失值。": ["missing_anomaly_cleaner"],
             "用这份数据建一个预测模型，并告诉我是否优于基线。": ["standardization", "cleaning", "modeling", "review"],
             "直接优化运行参数。": ["optimization"],
             "给我生成这次分析报告。": ["report"],

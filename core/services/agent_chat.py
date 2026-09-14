@@ -531,6 +531,10 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             answer = action_note + answer
     if skill_result and not core_results and not executed and not blocked_reason and not expert_answer and intent != "standardization":
         answer = DeterministicResponseRenderer().render(skill_plan["analysis"]["task_understanding"], skill_result)
+    if skill_plan.get("analysis", {}).get("routing_source") == "md_registry" and not blocked_reason and (core_results or not expert_answer):
+        from core.skills.md_response import render_manifest_response
+        answer, cards, suggestions = render_manifest_response(skill_plan, core_results)
+        action_note = ""
     logs.extend({
         "time": now,
         "level": "SKILL",

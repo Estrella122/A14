@@ -305,12 +305,17 @@ class TimeDelayCapabilityExecutor:
             output = next((name for name in frame.columns if name in numeric and fields.get(name, {}).get("role") in {"controlled", "quality"}), None)
         feature_roles = {"manipulated", "disturbance", "state"}
         feature_names = [name for name in frame.columns if name in numeric and name != output and fields.get(name, {}).get("role") in feature_roles]
+        scene_context = data_context.get("scene_context", {})
+        if scene_context.get("target_column"):
+            output = scene_context["target_column"] if scene_context["target_column"] in numeric else None
+            feature_names = [name for name in scene_context.get("input_columns", []) if name in numeric and name != output]
         if not output or not feature_names:
             return _result(plan_node_id, started, status="blocked", limitations=["无法从字段字典确定时滞分析的输入和输出。"], missing_requirements=["input_fields", "output_field"])
         working = frame.reset_index()
         if "timestamp" not in working.columns:
             working = working.rename(columns={working.columns[0]: "timestamp"})
-        seconds = int(standard.get("scenario", {}).get("sampling_seconds") or data_context.get("sampling_seconds") or 10)
+        split = resolver.load_json("FROZEN_SPLIT") or {}
+        seconds = float(split.get("seconds") or standard.get("scenario", {}).get("sampling_seconds") or data_context.get("sampling_seconds") or 10)
         max_lag = int(inputs.get("parameters", {}).get("max_lag", 60))
         max_lag = max(1, min(max_lag, max(1, len(working) // 3)))
         with _module_path(INTEGRATIONS_DIR / "identification"):

@@ -1,0 +1,60 @@
+
+> frontend@0.0.0 build
+> vite build
+
+vite v8.1.3 building client environment for production...
+[2Ktransforming...✓ 679 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/agent-review/index.html                        0.74 kB │ gzip:   0.39 kB
+dist/closed-loop-optimization/index.html            0.74 kB │ gzip:   0.40 kB
+dist/data-selection/index.html                      0.74 kB │ gzip:   0.40 kB
+dist/experiments/index.html                         0.74 kB │ gzip:   0.40 kB
+dist/identification-modeling/index.html             0.74 kB │ gzip:   0.40 kB
+dist/index.html                                     0.74 kB │ gzip:   0.40 kB
+dist/overview/index.html                            0.74 kB │ gzip:   0.40 kB
+dist/report-export/index.html                       0.74 kB │ gzip:   0.40 kB
+dist/standard-check/index.html                      0.74 kB │ gzip:   0.40 kB
+dist/knowledge-base/index.html                      0.75 kB │ gzip:   0.40 kB
+dist/pipeline-builder/index.html                    0.75 kB │ gzip:   0.40 kB
+dist/scenario-data/index.html                       0.75 kB │ gzip:   0.40 kB
+dist/digital-twin/index.html                        0.83 kB │ gzip:   0.45 kB
+dist/assets/IntegratedEvidencePanel-BVOSFQE-.css    1.09 kB │ gzip:   0.44 kB
+dist/assets/ExperimentTrackerView-BV5skVu4.css      1.94 kB │ gzip:   0.64 kB
+dist/assets/DataAssetsView-gcu-bGyY.css             2.50 kB │ gzip:   0.77 kB
+dist/assets/DataSelectionView-T0ZEoGZh.css          3.35 kB │ gzip:   0.97 kB
+dist/assets/ModelingView-D7dqOAlE.css               3.67 kB │ gzip:   1.04 kB
+dist/assets/KnowledgeBaseView-Cha4um7I.css          3.73 kB │ gzip:   1.04 kB
+dist/assets/SceneModel3D-dWYzXUoO.css               4.72 kB │ gzip:   1.52 kB
+dist/assets/DigitalTwinView-BCfUvtKj.css            5.26 kB │ gzip:   1.40 kB
+dist/assets/OverviewView-CamOuPBl.css               6.02 kB │ gzip:   1.86 kB
+dist/assets/PipelineBuilderView-D3MUcHot.css        7.90 kB │ gzip:   2.00 kB
+dist/assets/AgentWorkflowView-GwIMnwev.css         21.75 kB │ gzip:   4.50 kB
+dist/assets/main-C0C9rx3i.css                      88.17 kB │ gzip:  18.54 kB
+dist/assets/PageHeader-BuHwyJlh.js                  0.65 kB │ gzip:   0.37 kB
+dist/assets/useEChart-Bct3ryIC.js                   1.02 kB │ gzip:   0.59 kB
+dist/assets/pipeline-TPKq1lwT.js                    2.07 kB │ gzip:   0.98 kB
+dist/assets/client-CM2iPvSX.js                      2.29 kB │ gzip:   1.19 kB
+dist/assets/KnowledgeBaseView-CS7N5th5.js           5.44 kB │ gzip:   2.62 kB
+dist/assets/DigitalTwinView-BWolcMdn.js             5.70 kB │ gzip:   2.65 kB
+dist/assets/IntegratedEvidencePanel-Cp0B2VF3.js     6.42 kB │ gzip:   2.85 kB
+dist/assets/ExperimentTrackerView-CE7jUw5X.js      11.99 kB │ gzip:   4.88 kB
+dist/assets/CleaningView-DH7gTUIw.js               12.64 kB │ gzip:   5.44 kB
+dist/assets/scene3dRegistry-DvkBq4m7.js            13.34 kB │ gzip:   5.04 kB
+dist/assets/PipelineBuilderView-_lUeCQeS.js        13.85 kB │ gzip:   5.77 kB
+dist/assets/SceneModel3D-Bxg9HQ-L.js               14.08 kB │ gzip:   6.11 kB
+dist/assets/DataSelectionView-DAR1dxut.js          18.97 kB │ gzip:   7.56 kB
+dist/assets/DeliveryView-BFgUYy5B.js               19.46 kB │ gzip:   6.44 kB
+dist/assets/OverviewView-Cza-qBTr.js               22.26 kB │ gzip:   8.28 kB
+dist/assets/ModelingView-KOEUfDCg.js               22.85 kB │ gzip:   8.15 kB
+dist/assets/chart-core-CALLtlqE.js                 27.40 kB │ gzip:  10.41 kB
+dist/assets/DataAssetsView-o8MMtj5S.js             28.98 kB │ gzip:  11.01 kB
+dist/assets/main-CGsaOekT.js                       41.86 kB │ gzip:  16.95 kB
+dist/assets/AgentWorkflowView-8q9KLm0X.js          49.76 kB │ gzip:  16.99 kB
+dist/assets/chart-series-DcRa5nXt.js               52.25 kB │ gzip:  18.95 kB
+dist/assets/OptimizationView-CP9coeFt.js           52.34 kB │ gzip:  16.82 kB
+dist/assets/runtime-core.esm-bundler-CC24ayC-.js   63.90 kB │ gzip:  25.19 kB
+dist/assets/chart-components-G4rRFyuj.js          493.95 kB │ gzip: 165.44 kB
+dist/assets/three-runtime-B3cv4TwY.js             617.23 kB │ gzip: 156.17 kB
+
+✓ built in 455ms

@@ -28,12 +28,19 @@ def _variable_spec(dictionary: list[dict[str, Any]], columns: list[str]) -> dict
     return spec
 
 
-def select_modeling_rows(train_data: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
+def select_modeling_windows(segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
     if segments.empty:
-        return train_data
+        return segments
     chosen = segments[segments["level"] == "优质动态段"].head(top_k) if strict_first else segments.iloc[0:0]
     if chosen.empty:
         chosen = segments.head(min(top_k, len(segments)))
+    return chosen
+
+
+def select_modeling_rows(train_data: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
+    if segments.empty:
+        return train_data
+    chosen = select_modeling_windows(segments, top_k, strict_first)
     pieces = [train_data.loc[pd.Timestamp(row.start_time):pd.Timestamp(row.end_time)] for row in chosen.itertuples(index=False)]
     return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index() if pieces else train_data
 

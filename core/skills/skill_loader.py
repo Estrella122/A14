@@ -68,6 +68,13 @@ def discover_skills(roots: Iterable[Path]) -> tuple[list[DiscoveredSkill], dict[
                 # lightweight sidecar manifest yet.
                 text = entrypoint.read_text(encoding="utf-8")
                 metadata = _frontmatter(text)
+                if metadata.get("id"):
+                    from .loader import load_manifest
+                    document = load_manifest(entrypoint)
+                    manifest = {**document.metadata, "business_skill_id": document.id,
+                                "capabilities": {}, "workflows": {}, "references": {}, "scripts": {}}
+                    discovered.append(DiscoveredSkill(document.name, document.metadata.get("description", ""), entrypoint.parent, entrypoint, text, manifest))
+                    continue
                 manifest_match = MANIFEST_PATTERN.search(text)
                 if not metadata.get("name"):
                     continue

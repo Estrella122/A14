@@ -73,6 +73,15 @@ def agent_skills(request):
     return JsonResponse({"ok": True, "data": data}, json_dumps_params={"ensure_ascii": False})
 
 
+@require_GET
+def agent_skill_detail(request, skill_id):
+    from .skills.registry import get_registry
+    data = get_registry().get_manifest(skill_id)
+    if data is None:
+        return JsonResponse({"ok": False, "message": "Skill 不存在"}, status=404)
+    return JsonResponse({"ok": True, "data": data}, json_dumps_params={"ensure_ascii": False})
+
+
 @require_POST
 def agent_plan(request):
     try:

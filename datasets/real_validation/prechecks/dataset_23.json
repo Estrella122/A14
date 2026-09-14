@@ -1,0 +1,1734 @@
+{
+  "source": "/Users/komi/Documents/ChatGPT/作品修复/A14/runtime/data_validation/real_search/stevenshaw_debutanizer.csv",
+  "source_hash": "15897d2b086cf5e9ffcdb9e879bffcc6e6f9c96d4688f30503f8091893a5de7f",
+  "scene": "debutanizer_column",
+  "required_count": 9,
+  "target": "bottom_butane_content",
+  "source_metadata": {
+    "original_filename": "debutanizer_data.csv",
+    "sha256": "15897d2b086cf5e9ffcdb9e879bffcc6e6f9c96d4688f30503f8091893a5de7f",
+    "rows": 2394,
+    "columns": [
+      "u1",
+      "u2",
+      "u3",
+      "u4",
+      "u5",
+      "u6",
+      "u7",
+      "y"
+    ],
+    "time_coverage": null,
+    "sampling_interval": null,
+    "units": "无量纲",
+    "target": "y（归一化丁烷目标）",
+    "inputs": [
+      "u1",
+      "u2",
+      "u3",
+      "u4",
+      "u5",
+      "u6",
+      "u7"
+    ],
+    "inverse_metadata": null,
+    "scene": "debutanizer_column",
+    "dataset_name": "StevenShaw98 Fortuna CSV",
+    "source_url": "https://github.com/StevenShaw98/Debutanizer-Column-Process",
+    "source_type": "BENCHMARK_REAL",
+    "publisher": "StevenShaw98",
+    "paper_or_project": "StevenShaw98 Fortuna CSV",
+    "license": "UNKNOWN",
+    "download_method": "HTTPS raw CSV",
+    "field_descriptions": "新下载2394×8归一化CSV；无真实时间或逆缩放参数，README输入只描述Process variable 1–7。不能用列位置补物理量。",
+    "normalization_status": "normalized",
+    "usable": false,
+    "reject_reason": "新下载2394×8归一化CSV；无真实时间或逆缩放参数，README输入只描述Process variable 1–7。不能用列位置补物理量。",
+    "local_path": "/Users/komi/Documents/ChatGPT/作品修复/A14/runtime/data_validation/real_search/stevenshaw_debutanizer.csv",
+    "preflight": {
+      "file_readable": "PASS",
+      "enough_rows": "PASS",
+      "time_axis": "FAIL",
+      "sampling_interval": "UNKNOWN",
+      "target_explicit": "FAIL",
+      "inputs_physical": "FAIL",
+      "units_known": "FAIL",
+      "no_anonymous_fields": "FAIL",
+      "inverse_metadata": "FAIL",
+      "no_serious_duplicates_constants": "PASS",
+      "missing_acceptable": "PASS",
+      "physical_safety": "FAIL"
+    },
+    "numeric_stats": {
+      "min": {
+        "u1": 0.0,
+        "u2": 0.0,
+        "u3": 0.0,
+        "u4": 0.0,
+        "u5": 0.0,
+        "u6": 0.0,
+        "u7": 0.0,
+        "y": 0.0
+      },
+      "max": {
+        "u1": 1.0,
+        "u2": 1.0,
+        "u3": 1.0,
+        "u4": 1.0,
+        "u5": 1.0,
+        "u6": 1.0,
+        "u7": 1.0,
+        "y": 1.0
+      },
+      "missing": {
+        "u1": 0,
+        "u2": 0,
+        "u3": 0,
+        "u4": 0,
+        "u5": 0,
+        "u6": 0,
+        "u7": 0,
+        "y": 0
+      },
+      "duplicates": 0
+    },
+    "source_hash": "15897d2b086cf5e9ffcdb9e879bffcc6e6f9c96d4688f30503f8091893a5de7f",
+    "evidence_source": "https://github.com/StevenShaw98/Debutanizer-Column-Process",
+    "sampling_evidence": "新下载2394×8归一化CSV；无真实时间或逆缩放参数，README输入只描述Process variable 1–7。不能用列位置补物理量。",
+    "no_equivalent": 0,
+    "analysis_allowed": false
+  },
+  "provenance_authenticated_by_tool": false,
+  "rows": 2394,
+  "columns": [
+    "u1",
+    "u2",
+    "u3",
+    "u4",
+    "u5",
+    "u6",
+    "u7",
+    "y"
+  ],
+  "time_coverage": null,
+  "timestamp_status": "missing_or_not_accepted",
+  "duplicate_timestamp_count": null,
+  "sampling_status": "unverified",
+  "observed_sampling_seconds": null,
+  "unit_status": "unverified",
+  "target_status": {
+    "accepted": false,
+    "valid_observations": 0
+  },
+  "matched_required": 0,
+  "review_required": 8,
+  "missing_required": 1,
+  "missing_fields": [
+    "timestamp"
+  ],
+  "review_fields": [
+    "bottom_butane_content",
+    "bottom_temperature_a",
+    "bottom_temperature_b",
+    "next_process_flow",
+    "reflux_flow",
+    "top_pressure",
+    "top_temperature",
+    "tray6_temperature"
+  ],
+  "no_equivalent": 0,
+  "required_field_coverage": 0.0,
+  "physical_gate_results": [
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": false,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 0.72,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "temperature",
+        "expected": "temperature",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "column_top",
+        "expected": "column_top",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates require review: semantic_similarity_pass",
+      "source_column": "u1",
+      "candidate_field": "top_temperature",
+      "mapping_method": "alias",
+      "raw": "u1",
+      "base_name": "u1",
+      "standard": "top_temperature",
+      "display_name": "塔顶温度",
+      "role": "state",
+      "data_type": "float",
+      "expected_unit": "degC",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.72,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 0.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 1.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u2",
+        "u3"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U1",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates require review: semantic_similarity_pass; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u1",
+        "candidate": "top_temperature",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": false,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 0.72,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "temperature",
+            "expected": "temperature",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "column_top",
+            "expected": "column_top",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, physical_semantics, source_confidence, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": true,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 1.0,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "pressure",
+        "expected": "pressure",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "column_top",
+        "expected": "column_top",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates satisfied",
+      "source_column": "u2",
+      "candidate_field": "top_pressure",
+      "mapping_method": "alias",
+      "raw": "u2",
+      "base_name": "u2",
+      "standard": "top_pressure",
+      "display_name": "塔顶压力",
+      "role": "state",
+      "data_type": "float",
+      "expected_unit": "Pa",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 1.0,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u1",
+        "u3",
+        "u4"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U2",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates satisfied; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u2",
+        "candidate": "top_pressure",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": true,
+          "source_confidence": true,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 1.0,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "pressure",
+            "expected": "pressure",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "column_top",
+            "expected": "column_top",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": true,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 1.0,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "flow",
+        "expected": "flow",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "reflux_line",
+        "expected": "reflux_line",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": "reflux",
+        "expected": "reflux",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates satisfied",
+      "source_column": "u3",
+      "candidate_field": "reflux_flow",
+      "mapping_method": "alias",
+      "raw": "u3",
+      "base_name": "u3",
+      "standard": "reflux_flow",
+      "display_name": "回流流量",
+      "role": "manipulated",
+      "data_type": "float",
+      "expected_unit": "t/h",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 1.0,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u1",
+        "u2",
+        "u4",
+        "u5"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U3",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates satisfied; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u3",
+        "candidate": "reflux_flow",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": true,
+          "source_confidence": true,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 1.0,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "flow",
+            "expected": "flow",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "reflux_line",
+            "expected": "reflux_line",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": "reflux",
+            "expected": "reflux",
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": true,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 1.0,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "flow",
+        "expected": "flow",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "downstream_line",
+        "expected": "downstream_line",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": "downstream",
+        "expected": "downstream",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates satisfied",
+      "source_column": "u4",
+      "candidate_field": "next_process_flow",
+      "mapping_method": "alias",
+      "raw": "u4",
+      "base_name": "u4",
+      "standard": "next_process_flow",
+      "display_name": "后续流程流量",
+      "role": "manipulated",
+      "data_type": "float",
+      "expected_unit": "t/h",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 1.0,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u2",
+        "u3",
+        "u5",
+        "u6"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U4",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates satisfied; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u4",
+        "candidate": "next_process_flow",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": true,
+          "source_confidence": true,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 1.0,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "flow",
+            "expected": "flow",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "downstream_line",
+            "expected": "downstream_line",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": "downstream",
+            "expected": "downstream",
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": false,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 0.72,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "temperature",
+        "expected": "temperature",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "tray_6",
+        "expected": "tray_6",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates require review: semantic_similarity_pass",
+      "source_column": "u5",
+      "candidate_field": "tray6_temperature",
+      "mapping_method": "alias",
+      "raw": "u5",
+      "base_name": "u5",
+      "standard": "tray6_temperature",
+      "display_name": "第六塔板温度",
+      "role": "state",
+      "data_type": "float",
+      "expected_unit": "degC",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.72,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 0.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 1.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u3",
+        "u4",
+        "u6",
+        "u7"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U5",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates require review: semantic_similarity_pass; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u5",
+        "candidate": "tray6_temperature",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": false,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 0.72,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "temperature",
+            "expected": "temperature",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "tray_6",
+            "expected": "tray_6",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, physical_semantics, source_confidence, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": false,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 0.72,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "temperature",
+        "expected": "temperature",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "column_bottom",
+        "expected": "column_bottom",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": "a",
+          "expected": "a",
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates require review: semantic_similarity_pass",
+      "source_column": "u6",
+      "candidate_field": "bottom_temperature_a",
+      "mapping_method": "alias",
+      "raw": "u6",
+      "base_name": "u6",
+      "standard": "bottom_temperature_a",
+      "display_name": "塔底温度A",
+      "role": "state",
+      "data_type": "float",
+      "expected_unit": "degC",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.72,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 0.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 1.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u4",
+        "u5",
+        "u7",
+        "y"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U6",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates require review: semantic_similarity_pass; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u6",
+        "candidate": "bottom_temperature_a",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": false,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 0.72,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "temperature",
+            "expected": "temperature",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "column_bottom",
+            "expected": "column_bottom",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": "a",
+              "expected": "a",
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, physical_semantics, source_confidence, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": false,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 0.72,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "temperature",
+        "expected": "temperature",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "column_bottom",
+        "expected": "column_bottom",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": "b",
+          "expected": "b",
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates require review: semantic_similarity_pass",
+      "source_column": "u7",
+      "candidate_field": "bottom_temperature_b",
+      "mapping_method": "alias",
+      "raw": "u7",
+      "base_name": "u7",
+      "standard": "bottom_temperature_b",
+      "display_name": "塔底温度B",
+      "role": "state",
+      "data_type": "float",
+      "expected_unit": "degC",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 0.72,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 0.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 1.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u5",
+        "u6",
+        "y"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "U7",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates require review: semantic_similarity_pass; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "u7",
+        "candidate": "bottom_temperature_b",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": false,
+          "source_confidence": false,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": false,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 0.72,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "temperature",
+            "expected": "temperature",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "column_bottom",
+            "expected": "column_bottom",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": "b",
+              "expected": "b",
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, physical_semantics, source_confidence, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    },
+    {
+      "physical_gate_pass": false,
+      "physical_gates": {
+        "semantic_similarity_pass": true,
+        "unit_compatible": true,
+        "quantity_type_compatible": true,
+        "physical_role_compatible": true,
+        "location_compatible": true,
+        "direction_compatible": true,
+        "source_confidence_pass": true
+      },
+      "source_confidence_evidence": {
+        "pass": true,
+        "basis": "curated_identity"
+      },
+      "semantic_evidence": {
+        "method": "alias",
+        "confidence": 1.0,
+        "identity_basis": "curated_alias_or_point"
+      },
+      "unit_evidence": {
+        "status": "not_declared",
+        "compatible": true,
+        "basis": "curated_contract_unit"
+      },
+      "quantity_type_evidence": {
+        "source": "concentration",
+        "expected": "concentration",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "role_evidence": {
+        "source": "process_measurement",
+        "expected": "process_measurement",
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "location_evidence": {
+        "source": "column_bottom",
+        "expected": "column_bottom",
+        "compatible": true,
+        "basis": "curated_identity",
+        "equipment": {
+          "source": "column",
+          "expected": "column",
+          "compatible": true,
+          "basis": "curated_identity"
+        },
+        "channel": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "curated_identity"
+        }
+      },
+      "direction_evidence": {
+        "source": null,
+        "expected": null,
+        "compatible": true,
+        "basis": "curated_identity"
+      },
+      "physical_decision_reason": "physical gates satisfied",
+      "source_column": "y",
+      "candidate_field": "bottom_butane_content",
+      "mapping_method": "alias",
+      "raw": "y",
+      "base_name": "y",
+      "standard": "bottom_butane_content",
+      "display_name": "塔底C4浓度",
+      "role": "controlled",
+      "data_type": "float",
+      "expected_unit": "percent",
+      "detected_unit": null,
+      "unit_status": "not_declared",
+      "unit_action": null,
+      "confidence": 1.0,
+      "method": "alias",
+      "value_profile": {
+        "available": true,
+        "plausibility": 1.0,
+        "missing_ratio": 0.0,
+        "anomaly_ratio": 0.0,
+        "changing": true
+      },
+      "neighbor_fields": [
+        "u6",
+        "u7"
+      ],
+      "point_resolution": {
+        "status": "not_a_point",
+        "point_id": "Y",
+        "missing_knowledge": []
+      },
+      "decision": "REVIEW_REQUIRED",
+      "decision_reason": "physical gates satisfied; final status: review",
+      "final_acceptance_audit": {
+        "gate": "final_field_acceptance_gate",
+        "method": "alias",
+        "source_column": "y",
+        "candidate": "bottom_butane_content",
+        "scenario": "debutanizer_column",
+        "required_field_criticality": true,
+        "identity_basis": "candidate_only",
+        "provenance_level": "unverified",
+        "unit_basis": "unknown",
+        "checks": {
+          "metadata_consistency": true,
+          "point_dictionary_binding": true,
+          "candidate_exists": true,
+          "identity_basis": false,
+          "unit": false,
+          "physical_semantics": true,
+          "source_confidence": true,
+          "provenance": false,
+          "normalization_metadata": false,
+          "scenario_compatibility": true
+        },
+        "physical_checks": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": true,
+          "direction_compatible": true,
+          "source_confidence_pass": true
+        },
+        "source_metadata": {},
+        "metadata_checks": {
+          "quantity_type": true,
+          "physical_role": true,
+          "equipment_role": true,
+          "measurement_location": true,
+          "measurement_channel": true,
+          "flow_direction": true
+        },
+        "physical_evidence": {
+          "source_confidence_evidence": {
+            "pass": true,
+            "basis": "curated_identity"
+          },
+          "semantic_evidence": {
+            "method": "alias",
+            "confidence": 1.0,
+            "identity_basis": "curated_alias_or_point"
+          },
+          "unit_evidence": {
+            "status": "not_declared",
+            "compatible": true,
+            "basis": "curated_contract_unit"
+          },
+          "quantity_type_evidence": {
+            "source": "concentration",
+            "expected": "concentration",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "role_evidence": {
+            "source": "process_measurement",
+            "expected": "process_measurement",
+            "compatible": true,
+            "basis": "curated_identity"
+          },
+          "location_evidence": {
+            "source": "column_bottom",
+            "expected": "column_bottom",
+            "compatible": true,
+            "basis": "curated_identity",
+            "equipment": {
+              "source": "column",
+              "expected": "column",
+              "compatible": true,
+              "basis": "curated_identity"
+            },
+            "channel": {
+              "source": null,
+              "expected": null,
+              "compatible": true,
+              "basis": "curated_identity"
+            }
+          },
+          "direction_evidence": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "curated_identity"
+          }
+        },
+        "decision": "REVIEW_REQUIRED",
+        "reason": "final gate requires review: identity_basis, unit, provenance, normalization_metadata",
+        "final_status": "review",
+        "post_duplicate_decision": "REVIEW_REQUIRED"
+      },
+      "status": "review",
+      "need_level": "uncertain",
+      "is_needed": null
+    }
+  ],
+  "normalization_status": "normalized",
+  "inverse_metadata_status": "unknown",
+  "missing_rate": 0.0,
+  "constant_ratio": 0.0,
+  "final_eligibility": "UNUSABLE",
+  "reasons": [
+    "LICENSE_BLOCKED: permitted analysis not established",
+    "MISSING_REQUIRED_SENSORS_OR_MAPPING: bottom_butane_content, bottom_temperature_a, bottom_temperature_b, next_process_flow, reflux_flow, timestamp, top_pressure, top_temperature, tray6_temperature",
+    "MISSING_METADATA: canonical physical units not independently documented",
+    "MISSING_METADATA: timestamp or sampling not verified",
+    "NORMALIZATION_BLOCKED: physical scale/restoration not verified",
+    "INSUFFICIENT_DATA: less than existing 150-row minimum or no target observations"
+  ]
+}

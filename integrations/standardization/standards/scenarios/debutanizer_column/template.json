@@ -5,12 +5,195 @@
   "process_unit": "脱丁烷精馏塔软测量",
   "version": "1.1.0",
   "dictionary": "fields.csv",
-  "keywords": ["炼油", "脱丁烷塔", "精馏塔", "丁烷", "C4", "debutanizer", "butane", "refinery"],
+  "keywords": [
+    "炼油",
+    "脱丁烷塔",
+    "精馏塔",
+    "丁烷",
+    "C4",
+    "debutanizer",
+    "butane",
+    "refinery"
+  ],
   "sampling_seconds": 60,
   "time_axis_type": "wall_clock",
   "timestamp_field": "timestamp",
   "primary_output": "bottom_butane_content",
-  "measurement_delay_minutes": {"min": 30, "max": 75},
+  "measurement_delay_minutes": {
+    "min": 30,
+    "max": 75
+  },
   "expected_rows": 2394,
-  "notes": "炼油脱丁烷精馏塔软测量场景：7个温度/压力/流量输入预测塔底C4浓度，质量化验或软测量目标通常存在30-75分钟测量滞后。公开Fortuna样本仍可通过U1-U8别名接入，但若源数据为归一化值需保留数据来源说明。"
+  "notes": "炼油脱丁烷精馏塔软测量场景：7个温度/压力/流量输入预测塔底C4浓度，质量化验或软测量目标通常存在30-75分钟测量滞后。公开Fortuna样本仍可通过U1-U8别名接入，但若源数据为归一化值需保留数据来源说明。",
+  "family": "石油炼制",
+  "field_roles": {
+    "timestamp": "timestamp",
+    "inputs": [
+      "top_temperature",
+      "top_pressure",
+      "reflux_flow",
+      "next_process_flow",
+      "tray6_temperature",
+      "bottom_temperature_a",
+      "bottom_temperature_b"
+    ],
+    "target": "bottom_butane_content",
+    "optional_context": [
+      "sample_index"
+    ]
+  },
+  "units": {
+    "source": "fields.csv",
+    "column": "unit"
+  },
+  "aliases": {
+    "source": "fields.csv",
+    "column": "aliases"
+  },
+  "default_parameters": {
+    "resample_seconds": 60,
+    "max_lag": 75,
+    "window_length": 30,
+    "step": 15,
+    "top_k": 5
+  },
+  "constraints": {
+    "physical_bounds_source": "fields.csv",
+    "missing_target_policy": "preserve_nan",
+    "train_validation_test": "chronological_60_20_20_v2",
+    "strict_segment_score": 80,
+    "snr_threshold_db": 10,
+    "minimum_rows": 150,
+    "causal_alignment": "past_only",
+    "lab_tolerance_hours": null
+  },
+  "display": {
+    "name": "炼油脱丁烷塔",
+    "industry": "石油炼制",
+    "process_unit": "脱丁烷精馏塔软测量"
+  },
+  "physical_semantics": {
+    "top_temperature": {
+      "canonical_name": "top_temperature",
+      "quantity_type": "temperature",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "column_top",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    },
+    "top_pressure": {
+      "canonical_name": "top_pressure",
+      "quantity_type": "pressure",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "column_top",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    },
+    "reflux_flow": {
+      "canonical_name": "reflux_flow",
+      "quantity_type": "flow",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "reflux_line",
+      "flow_direction": "reflux",
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    },
+    "next_process_flow": {
+      "canonical_name": "next_process_flow",
+      "quantity_type": "flow",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "downstream_line",
+      "flow_direction": "downstream",
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    },
+    "tray6_temperature": {
+      "canonical_name": "tray6_temperature",
+      "quantity_type": "temperature",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "tray_6",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    },
+    "bottom_temperature_a": {
+      "canonical_name": "bottom_temperature_a",
+      "quantity_type": "temperature",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "column_bottom",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ],
+      "measurement_channel": "a"
+    },
+    "bottom_temperature_b": {
+      "canonical_name": "bottom_temperature_b",
+      "quantity_type": "temperature",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "column_bottom",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ],
+      "measurement_channel": "b"
+    },
+    "bottom_butane_content": {
+      "canonical_name": "bottom_butane_content",
+      "quantity_type": "concentration",
+      "physical_role": "process_measurement",
+      "equipment_role": "column",
+      "measurement_location": "column_bottom",
+      "flow_direction": null,
+      "unit_source": "fields.csv",
+      "aliases_source": "fields.csv",
+      "forbidden_relations": [
+        "different_measurement_location",
+        "different_equipment_role",
+        "different_flow_direction"
+      ]
+    }
+  }
 }

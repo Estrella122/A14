@@ -19,8 +19,9 @@ class DebutanizerScenarioTests(SimpleTestCase):
     def test_public_columns_map_without_relabeling_other_processes(self):
         agent = StandardizationAgent(ScenarioRepository())
         mapping = agent.map_columns(self.columns, "debutanizer_column")
-        self.assertEqual(mapping["required_coverage"], 1.0)
-        self.assertEqual(mapping["missing_required"], [])
+        self.assertEqual(mapping["required_coverage"], 0.111)
+        self.assertEqual(len(mapping["missing_required"]), 8)
+        self.assertTrue(all(row["decision"] == "REVIEW_REQUIRED" for row in mapping["mappings"] if row["raw"].startswith("U")))
         resolved = {row["raw"]: row["standard"] for row in mapping["mappings"]}
         self.assertEqual(resolved["U3"], "reflux_flow")
         self.assertEqual(resolved["U8"], "bottom_butane_content")
@@ -30,7 +31,7 @@ class DebutanizerScenarioTests(SimpleTestCase):
             self.columns, instruction="公开炼油脱丁烷塔数据"
         )
         self.assertEqual(detection["selected"]["scenario_id"], "debutanizer_column")
-        self.assertFalse(detection["is_ambiguous"])
+        self.assertNotEqual(detection["status"], "confirmed")  # Anonymous channels remain candidates, not physical proof.
 
     def test_time_axis_limit_is_exposed(self):
         scenario = ScenarioRepository().get("debutanizer_column").summary()

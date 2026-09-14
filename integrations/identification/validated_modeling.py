@@ -259,6 +259,37 @@ def evaluation(df, state, guard, split, detailed=True):
     return metrics, diagnostics, prediction, acf
 
 
+def search_structure_orders(train, validation, output_col, input_cols, selected, delay_map, seconds, guard):
+    """Shared candidate fitting; selection never reads the held-out test set."""
+    candidates, fitted = [], []
+    # Real order and model-family search, all on the same validation targets.
+    for family, variables, alphas in [('ARX', selected, (0., 1., 10.)), ('AR', [], (0.,))]:
+        for order in (1, 2, 3):
+            for alpha in alphas:
+                try:
+                    x = features(train, output_col, variables, delay_map, order, seconds)
+                    coef, valid, rank = fit(x, train[output_col], alpha=alpha)
+                    state = dict(output=output_col, seconds=seconds, inputs=variables, delays=delay_map,
+                                 order=order, coef=coef.tolist(), family=family, regularization_alpha=alpha,
+                                 evaluation_inputs=input_cols)
+                    m, d, p, acf = evaluation(validation, state, guard, 'validation', detailed=True)
+                    tm = regression_metrics(train.loc[valid, output_col], predict(x.loc[valid], coef), len(coef))
+                    roots = np.roots(np.r_[1, -np.array(coef[1:order + 1])])
+                    stable = bool(np.all(np.abs(roots) < 1))
+                    simulation_valid = bool(d.get('free_simulation', {}).get('metrics')) and not d.get('free_simulation', {}).get('diverged')
+                    eligible = stable and simulation_valid
+                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
+                                           status='completed', eligible=eligible, stable_ar_poles=stable,
+                                           validation_free_simulation_valid=simulation_valid,
+                                           max_pole_magnitude=float(max(np.abs(roots))), validation=m, train=tm, rank=rank))
+                    if eligible:
+                        fitted.append((m['rmse'], state, tm, m, d, p, acf, list(x.columns)))
+                except ValueError as exc:
+                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
+                                           status='failed', error=str(exc)))
+    return candidates, fitted
+
+
 def run_validated_modeling(input_csv, output_col, input_cols, output_dir, validation_csv, guard, seconds, max_lag):
     out = Path(output_dir)
     for folder in ('01_time_delay', '02_collinearity', '03_system_identification'): (out/folder).mkdir(parents=True, exist_ok=True)
@@ -288,32 +319,7 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     delays.to_csv(lagdir/'delay_estimates.csv', index=False)
     aligned.to_csv(lagdir/'delay_compensated_data.csv', index=False)
     save_json(lagdir/'delay_summary.json', delays.to_dict('records'))
-    candidates, fitted = [], []
-    # Real order and model-family search, all on the same validation targets.
-    for family, variables, alphas in [('ARX', selected, (0., 1., 10.)), ('AR', [], (0.,))]:
-        for order in (1, 2, 3):
-            for alpha in alphas:
-                try:
-                    x = features(train, output_col, variables, delay_map, order, seconds)
-                    coef, valid, rank = fit(x, train[output_col], alpha=alpha)
-                    state = dict(output=output_col, seconds=seconds, inputs=variables, delays=delay_map,
-                                 order=order, coef=coef.tolist(), family=family, regularization_alpha=alpha,
-                                 evaluation_inputs=input_cols)
-                    m, d, p, acf = evaluation(validation, state, guard, 'validation', detailed=True)
-                    tm = regression_metrics(train.loc[valid, output_col], predict(x.loc[valid], coef), len(coef))
-                    roots = np.roots(np.r_[1, -np.array(coef[1:order + 1])])
-                    stable = bool(np.all(np.abs(roots) < 1))
-                    simulation_valid = bool(d.get('free_simulation', {}).get('metrics')) and not d.get('free_simulation', {}).get('diverged')
-                    eligible = stable and simulation_valid
-                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
-                                           status='completed', eligible=eligible, stable_ar_poles=stable,
-                                           validation_free_simulation_valid=simulation_valid,
-                                           max_pole_magnitude=float(max(np.abs(roots))), validation=m, train=tm, rank=rank))
-                    if eligible:
-                        fitted.append((m['rmse'], state, tm, m, d, p, acf, list(x.columns)))
-                except ValueError as exc:
-                    candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
-                                           status='failed', error=str(exc)))
+    candidates, fitted = search_structure_orders(train, validation, output_col, input_cols, selected, delay_map, seconds, guard)
     save_json(modeldir/'order_search.json', candidates)
     if not fitted: raise ValueError('所有结构候选均失败：' + '; '.join(sorted({c.get('error', '') for c in candidates})))
     # Prefer the validation BIC so a marginal one-step RMSE gain cannot promote a

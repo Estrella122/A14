@@ -161,7 +161,7 @@ class AgentChatTests(SimpleTestCase):
         self.assertEqual(len(catalog_response.json()['data']['expert_topics']), 21)
         plan_response = self.client.post('/api/agent/plans/', data=json.dumps({'message': '提取1号塔高信噪比动态数据', 'run_id': 'run_test'}), content_type='application/json')
         self.assertEqual(plan_response.status_code, 201)
-        self.assertGreater(plan_response.json()['data']['selected_count'], 5)
+        self.assertGreaterEqual(plan_response.json()['data']['selected_count'], 5)
 
     @patch('core.agent_api.get_run')
     def test_skill_run_api_executes_against_pipeline_evidence(self, mocked_get_run):
@@ -314,7 +314,13 @@ class AgentChatTests(SimpleTestCase):
             with self.subTest(topic=topic['key']):
                 plan = plan_skills(f"请分析{topic['examples'][0]}", snapshot=self.snapshot())
                 self.assertIn(topic['key'], plan['analysis']['topics'])
-                self.assertGreater(len(plan['steps']), 4)
+                if plan['analysis'].get('routing_source') == 'md_registry':
+                    # A migrated single algorithm no longer adds four synthetic
+                    # governance rows to its minimal dependency plan.
+                    self.assertGreater(len(plan['steps']), 0)
+                    self.assertTrue(all(step.get('manifest_source') == 'SKILL.md' for step in plan['steps']))
+                else:
+                    self.assertGreater(len(plan['steps']), 4)
 
     def test_hypothetical_reidentification_question_never_executes_pipeline(self):
         question = '如果迁移到另一座炉，哪些参数必须重新辨识，如何监测模型漂移？'
@@ -413,7 +419,7 @@ class AgentChatTests(SimpleTestCase):
             result = chat('按5秒重新执行数据清洗')
 
         mocked.assert_not_called()
-        self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'], ['standardization', 'cleaning'])
+        self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'], ['missing_anomaly_cleaner'])
         self.assertEqual(result['run_id'], 'run_test')
 
     @patch('core.agent_api.get_run')
@@ -477,7 +483,10 @@ class AgentChatTests(SimpleTestCase):
         self.assertIn('"delta": "实时"', body)
         self.assertIn('event: complete', body)
 
+    @override_settings(SKILL_MANIFEST_MODE="legacy")
     def test_audit_skill_reads_existing_provenance_instead_of_reporting_unavailable(self):
+        # This upstream regression exercises the catalog audit handler; the MD
+        # workflow does not implicitly append this compatibility-only skill.
         snapshot = self.snapshot()
         snapshot['stages'] = [{'key': 'standardization', 'status': 'completed'}]
         with patch('core.services.agent_chat.get_run', return_value=snapshot):

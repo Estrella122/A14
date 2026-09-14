@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 import pandas as pd
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 from . import tests as original_tests
 from .skills.runtime import plan_skills, _with_dependencies, execute_skill_plan
 from .skills.catalog import SKILL_MAP
@@ -14,6 +14,7 @@ from .services.agent_chat import chat
 from .services import pipeline
 
 
+@override_settings(SKILL_MANIFEST_MODE="legacy")
 class TrainedRoutingTests(SimpleTestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()

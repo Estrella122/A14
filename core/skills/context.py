@@ -34,6 +34,7 @@ class DataContext:
     process_context: dict[str, Any] = field(default_factory=dict)
     available_artifacts: list[str] = field(default_factory=list)
     available_contract_fields: list[str] = field(default_factory=list)
+    scene_context: dict[str, Any] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
         return asdict(self)
@@ -118,4 +119,54 @@ def build_data_context(snapshot: dict[str, Any] | None, run_id: str | None = Non
         process_context=process,
         available_artifacts=sorted(resolver.available_types()),
         available_contract_fields=sorted(key for key, value in optimization_contract.items() if contract_value_present(value)),
+        scene_context=build_scene_context(snapshot).public(),
     )
+
+
+@dataclass
+class SceneContext:
+    scenario_id: str | None = None
+    scenario_name: str = ""
+    dataset_ref: str | None = None
+    timestamp_column: str = "timestamp"
+    input_columns: list[str] = field(default_factory=list)
+    target_column: str | None = None
+    units: dict = field(default_factory=dict)
+    sampling_interval: float | None = None
+    constraints: dict = field(default_factory=dict)
+    default_parameters: dict = field(default_factory=dict)
+    metadata: dict = field(default_factory=dict)
+
+    def public(self):
+        return asdict(self)
+
+
+def build_scene_context(snapshot, repository=None):
+    """Resolve data roles from the existing Registry, never the UI project scene."""
+    from integrations.standardization.standard_agent.repository import ScenarioRepository
+    standard = (snapshot or {}).get("results", {}).get("standardization", {})
+    scene = standard.get("scenario", {})
+    trace = {**standard.get("runtime_trace", {}), **(snapshot or {}).get("runtime_trace", {})}
+    scenario_id = trace.get("final_scene") or trace.get("selected_scene") or trace.get("agent_scene") or trace.get("detected_scene") or scene.get("scenario_id")
+    config = dict(scene)
+    dictionary = standard.get("dictionary", [])
+    repository = repository or ScenarioRepository()
+    template = next((t for t in repository.list() if t.scenario_id == scenario_id), None)
+    if template:
+        config = template.config
+        dictionary = [f.as_dict() for f in template.fields]
+    roles = config.get("field_roles", {})
+    inputs = roles.get("inputs", [f["standard_name"] for f in dictionary if f.get("role") in {"manipulated", "disturbance", "state"}])
+    target = roles.get("target") or config.get("primary_output")
+    defaults = dict(config.get("default_parameters", {}))
+    seconds = config.get("sampling_seconds")
+    if seconds:
+        defaults.setdefault("resample_seconds", seconds)
+    return SceneContext(scenario_id=scenario_id, scenario_name=config.get("scenario_name", ""),
+        dataset_ref=(snapshot or {}).get("dataset_ref") or (snapshot or {}).get("run_id"), timestamp_column=roles.get("timestamp", config.get("timestamp_field", "timestamp")),
+        input_columns=list(inputs), target_column=target, units={f["standard_name"]: f.get("unit", "") for f in dictionary},
+        sampling_interval=seconds, constraints=config.get("constraints", {}), default_parameters=defaults,
+        metadata={"family": config.get("family", config.get("industry")), "display": config.get("display", {}),
+                  "model_outputs": config.get("model_outputs", [target]), "source": config.get("source"),
+                  "skill_overrides": config.get("skill_overrides", {}), "config_source": "ScenarioRepository" if template else "snapshot",
+                  "project_context_scene": (snapshot or {}).get("project_scene")})

@@ -60,7 +60,9 @@ ROUTING_TOPIC_KEYS = (
 
 
 def list_skills() -> dict[str, Any]:
-    return {"total": len(SKILLS), "categories": CATEGORIES, "skills": [skill.public() for skill in SKILLS]}
+    from .registry import get_registry
+    registry = get_registry()
+    return {"total": len(registry.list()), "categories": CATEGORIES, "skills": [skill.public() for skill in registry.list()], "manifest_loading": registry.stats}
 
 
 def _entities(message: str) -> dict[str, Any]:
@@ -172,6 +174,58 @@ def _with_dependencies(selected: set[str]) -> list[str]:
 
 
 def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    from .registry import get_registry, manifest_mode
+    from .md_planning import plan_from_manifests
+    text = str(message or "").strip()
+    if not text:
+        raise ValueError("规划指令不能为空。")
+    mode = manifest_mode()
+    if mode != "legacy":
+        if snapshot is None and run_id:
+            from core.services.pipeline import get_run
+            snapshot = get_run(run_id)
+        task = understand_task(text, conversation_context)
+        registry = get_registry()
+        plan = plan_from_manifests(text, task, snapshot, run_id, registry)
+        if plan:
+            # Existing clients consume topic labels; they do not select MD Skills.
+            plan["analysis"] = {**_request_analysis(text), **plan["analysis"]}
+            # Keep upstream governed-knowledge observability on the MD path too.
+            # Suggestions are context only: MD manifests still own selection.
+            from core.services.knowledge_base import search_knowledge
+            data_scene = plan["analysis"].get("data_context", {}).get("detected_scene") or ""
+            knowledge = search_knowledge(text, data_scene)
+            plan["analysis"]["knowledge_retrieval"] = knowledge
+            plan["analysis"].setdefault("agent_context", {})["knowledge_context"] = knowledge
+        # Whole-pipeline requests retain their established stage orchestration.
+        full_pipeline = bool(re.search(r"全流程|全部流程|完整流水线|端到端|上传并分析", text))
+        if plan and (mode == "md" or not full_pipeline):
+            if mode == "hybrid":
+                # Use direct user recall here, not context-derived defaults from
+                # the old capability resolver (which may add unrelated stages).
+                try:
+                    recalled = select(text, _request_analysis(text), EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
+                except (OSError, ValueError, KeyError, TypeError) as exc:
+                    recalled = {"direct": set()}
+                    plan["analysis"]["legacy_recall_error"] = type(exc).__name__
+                remaining = [key for key in recalled["direct"] if not registry.get_prompt_content(key)]
+                if remaining:
+                    legacy_plan = _legacy_plan_skills(message, run_id, snapshot, conversation_context)
+                    # Preserve mixed requests (e.g. SNR + export/optimization)
+                    # until their stage orchestration has migrated as a unit.
+                    legacy_plan["analysis"]["manifest_fallback"] = {"reason": "mixed_workflow_contains_unmigrated_skills", "skill_ids": remaining}
+                    legacy_plan["analysis"]["md_candidates"] = plan["candidates"]
+                    return legacy_plan
+            return plan
+        if mode == "md":
+            return {"plan_id": f"plan_{uuid4().hex[:12]}", "run_id": run_id, "objective": task["objective"],
+                    "user_message": text, "mode": "analyze", "entities": {}, "parameters": {}, "constraints": {},
+                    "steps": [], "selected_count": 0, "direct_skill_ids": [], "direct_count": 0, "candidates": registry.search(text),
+                    "analysis": {"task_understanding": task, "routing_source": "md_registry", "needs_clarification": True}}
+    return _legacy_plan_skills(message, run_id, snapshot, conversation_context)
+
+
+def _legacy_plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
     plan_started = perf_counter()
     timing_trace: dict[str, float] = {}
     checkpoint = plan_started
@@ -385,6 +439,10 @@ def _summary(snapshot: dict[str, Any], handler: str) -> tuple[dict, list, list, 
 
 def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_reason: str | None = None,
                        *, skill_run_id: str | None = None, event_sink=None) -> dict[str, Any]:
+    from .registry import get_registry
+    registry = get_registry()
+    SKILLS = registry.list()
+    SKILL_MAP = {skill.id: skill for skill in SKILLS}
     started = datetime.now().astimezone().isoformat(timespec="seconds")
     skill_run_id = skill_run_id or f"skillrun_{uuid4().hex[:12]}"
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
@@ -448,12 +506,19 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         if "resample_seconds" in parameters:
             parameters["resample_rule"] = f"{parameters['resample_seconds']}s"
         for node in core_plan.get("steps", []):
-            executor = get_executor(node["executor"])
+            if node.get("dispatch_mode") == "md_executor":
+                from .md_adapter import MarkdownExecutor, effective_parameters
+                manifest = registry.get(node["executor"])
+                if not manifest or getattr(manifest, "digest", None) != node.get("manifest_hash"):
+                    raise ValueError("Skill manifest 已变更或不可用，请重新规划")
+                executor = MarkdownExecutor(manifest)
+            else:
+                executor = get_executor(node["executor"])
             def blocked_result(reason, missing_artifacts=None, missing_requirements=None, status="blocked"):
                 dispatch = [{**item, "executor": node["executor"],
                              "execution_state": execution_state_for(status=status), "algorithm_invoked": False}
                             for item in node.get("capability_dispatch", [])]
-                return {"schema_version": "skill-execution-result-v2", "status": status,
+                result = {"schema_version": "skill-execution-result-v2", "status": status,
                         "execution_state": execution_state_for(status=status), "algorithm_invoked": False,
                         "skill_id": node["executor"], "executor": node["executor"], "reason": reason,
                         "inputs": [], "outputs": [], "missing_requirements": missing_requirements or [],
@@ -463,12 +528,24 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                         "metrics": {}, "artifacts": [], "evidence": [],
                         "warnings": ["没有生成或回退到 synthetic data。"] if node["executor"] in {"optimization", "closed_loop_preprocessing_optimizer"} else [],
                         "execution_trace": [], "duration_ms": 0}
+                if node.get("dispatch_mode") == "md_executor":
+                    result["audit"] = {"skill_id": manifest.id, "skill_version": manifest.version,
+                        "manifest_path": str(manifest.path), "manifest_hash": manifest.digest,
+                        "executor_module": manifest.executor["module"], "executor_function": manifest.executor["function"],
+                        "execution_mode": manifest.execution_mode, "executor_invoked": False,
+                        "input_refs": [{"artifact_type": key, "available": key not in (missing_artifacts or [])} for key in manifest.requires],
+                        "parameter_snapshot": effective_parameters(manifest, plan.get("analysis", {}).get("data_context", {}).get("scene_context", {}), parameters),
+                        "scene_context": plan.get("analysis", {}).get("data_context", {}).get("scene_context", {}),
+                        "dependency_runs": [{"skill_id": r["skill_id"], "status": r["status"]} for r in core_results if r["skill_id"] in manifest.depends_on],
+                        "metrics": {}, "artifacts": [], "evidence": [], "warnings": [reason],
+                        "started_at": datetime.now().astimezone().isoformat(), "finished_at": datetime.now().astimezone().isoformat(), "status": status}
+                return result
             if node.get("readiness_status") == "blocked":
                 result = blocked_result(node.get("readiness_reason", "规划阶段前置条件不足"),
                                         node.get("missing_artifacts"), node.get("missing_requirements"))
             elif executor is None:
                 result = blocked_result("当前计划无可用独立 Executor。", status="skipped")
-            elif any(result.get("status") in {"failed", "blocked", "skipped"} for result in core_results if result.get("skill_id") in node.get("dependencies", [])):
+            elif any(result.get("status") in {"failed", "blocked", "skipped", "unavailable"} for result in core_results if result.get("skill_id") in node.get("dependencies", [])):
                 result = blocked_result("前置 Executor 未成功。")
             else:
                 readiness = RuntimeArtifactResolver(snapshot, state).readiness(node.get("requires_artifacts", []))
@@ -503,6 +580,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                 for item in node.get("capability_dispatch", result.get("capability_dispatch", []))
             ]
             result["dispatch_mode"] = node.get("dispatch_mode", "shared_stage")
+            if node.get("dispatch_mode") == "md_executor":
+                result["skill_id"] = node["id"]
             result["requested_skill_ids"] = node.get("requested_skill_ids", [])
             core_results.append(result)
             if event_sink:
@@ -549,6 +628,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             artifacts = [industrial_result["artifact"]] if industrial_result and industrial_result.get("artifact") else []
             evidence = [entry for item in capability_executions for entry in item["evidence"]]
             warnings = [entry for item in capability_executions for entry in item["warnings"]]
+        elif getattr(skill, "body", None) and plan.get("analysis", {}).get("routing_source") == "md_registry":
+            metrics, artifacts, evidence, warnings = {}, [], [{"manifest_path": str(skill.path), "manifest_hash": skill.digest, "content": skill.body}], []
         elif skill.handler == "intent":
             metrics = {"objective": plan["objective"], "mode": plan.get("mode", "analyze")}
             artifacts, evidence, warnings = [], ["user_instruction"], []
@@ -563,7 +644,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             metrics = {"capability": "available", "entry": "/scenario-data/", "format": "CSV"}
             artifacts, evidence, warnings = [], ["frontend:simulation_generator"], []
         else:
-            metrics, artifacts, evidence, warnings = _summary(snapshot, skill.handler)
+            handler = skill.metadata.get("legacy_handler", skill.handler) if getattr(skill, "body", None) else skill.handler
+            metrics, artifacts, evidence, warnings = _summary(snapshot, handler)
         if skill.handler in {"intent", "entity", "parameter", "matcher", "planner"}:
             activity = "planned"
         if skill.handler == "supervisor" and core_result is None:
@@ -581,7 +663,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "experiment_tracker_comparator": bool(core_result),
             "execution_supervisor_replanner": bool(core_result),
         }
-        if core_result is None and status != "skipped" and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
+        document_only = plan.get("analysis", {}).get("routing_source") == "md_registry" and plan.get("analysis", {}).get("task_understanding", {}).get("execution_mode") == "explain"
+        if not document_only and core_result is None and status != "skipped" and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"
             warnings = warnings or ["此能力未执行或缺少独立产物，不能标记完成"]
         algorithm_invoked = bool(
@@ -602,7 +685,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             **step, "status": status, "execution_state": execution_state,
             "algorithm_invoked": algorithm_invoked,
             "activity": activity, "duration_ms": round((perf_counter() - tick) * 1000),
-            "execution_contract": contract.public() if contract else None,
+            "execution_contract": skill.public()["execution_contract"] if getattr(skill, "body", None) and plan.get("analysis", {}).get("routing_source") == "md_registry" else contract.public() if contract else None,
             "executor": dispatch.get("executor") if dispatch else contract.executor if contract else None,
             "capability": contract.capability if contract else None,
             "executor_selection_kind": dispatch.get("selection_kind") if dispatch else "orchestration" if skill.category == "orchestration" else "evidence",
@@ -611,8 +694,27 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "input": {"run_id": snapshot.get("run_id"), "objective": plan["objective"], "parameters": plan["parameters"]},
             "metrics": metrics, "artifacts": artifacts, "evidence": evidence, "warnings": warnings,
             "suggested_next_skills": [item.id for item in SKILLS if skill.id in item.depends_on][:3],
+            **({"audit": core_result["audit"], "manifest_source": "SKILL.md"} if core_result and core_result.get("audit") else {}),
         })
+    from .md_adapter import effective_parameters
     pipeline_run_id = snapshot.get("run_id")
+    for row in executions:
+        if "audit" not in row:
+            skill = registry.get(row["skill_id"])
+            manifest = skill if getattr(skill, "body", None) and plan.get("analysis", {}).get("routing_source") == "md_registry" else None
+            row["audit"] = {"skill_id": skill.id, "skill_version": skill.version,
+                "manifest_path": str(manifest.path) if manifest else None,
+                "manifest_hash": manifest.digest if manifest else None,
+                "executor_module": manifest.executor["module"] if manifest else None,
+                "executor_function": manifest.executor["function"] if manifest else None,
+                "execution_mode": manifest.execution_mode if manifest else "legacy",
+                "executor_invoked": row.get("algorithm_invoked", False),
+                "input_refs": [snapshot.get("run_id")],
+                "scene_context": plan.get("analysis", {}).get("data_context", {}).get("scene_context", {}),
+                "parameter_snapshot": effective_parameters(manifest, plan.get("analysis", {}).get("data_context", {}).get("scene_context", {}), plan.get("parameters")) if manifest else plan.get("parameters", {}),
+                "dependency_runs": [], "started_at": started,
+                "finished_at": datetime.now().astimezone().isoformat(),
+                **{key: row[key] for key in ("metrics", "artifacts", "evidence", "warnings", "status")}}
     if not isinstance(pipeline_run_id, (str, int, float, bool, type(None))):
         pipeline_run_id = None
     result_status = "blocked" if blocked_reason or any(item.get("status") == "blocked" for item in core_results) else "failed" if any(item.get("status") == "failed" for item in core_results) else "partial" if any(item.get("status") in {"partial", "unavailable"} for item in core_results) or any(row["status"] == "unavailable" for row in executions) else "completed"

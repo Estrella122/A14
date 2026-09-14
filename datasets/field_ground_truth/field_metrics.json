@@ -1,0 +1,373 @@
+{
+  "before": {
+    "blast_furnace": {
+      "n": 32,
+      "match_support": 32,
+      "review_support": 0,
+      "top1_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "top5_recall": 1.0,
+      "match_precision": 1.0,
+      "match_recall": 1.0,
+      "false_auto_accept_count": 0,
+      "false_auto_accept_rate": 0.0,
+      "review_recall": null,
+      "hard_negative_rejection": null,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    },
+    "debutanizer_column": {
+      "n": 43,
+      "match_support": 2,
+      "review_support": 36,
+      "top1_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "top5_recall": 1.0,
+      "match_precision": 0.04,
+      "match_recall": 0.5,
+      "false_auto_accept_count": 24,
+      "false_auto_accept_rate": 0.5581395348837209,
+      "review_recall": 0.3333333333333333,
+      "hard_negative_rejection": 1.0,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    },
+    "industrial_dryer": {
+      "n": 23,
+      "match_support": 0,
+      "review_support": 19,
+      "top1_accuracy": null,
+      "top3_recall": null,
+      "top5_recall": null,
+      "match_precision": null,
+      "match_recall": null,
+      "false_auto_accept_count": 0,
+      "false_auto_accept_rate": 0.0,
+      "review_recall": 0.05263157894736842,
+      "hard_negative_rejection": 1.0,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    }
+  },
+  "after": {
+    "blast_furnace": {
+      "n": 32,
+      "match_support": 32,
+      "review_support": 0,
+      "top1_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "top5_recall": 1.0,
+      "match_precision": 1.0,
+      "match_recall": 1.0,
+      "false_auto_accept_count": 0,
+      "false_auto_accept_rate": 0.0,
+      "review_recall": null,
+      "hard_negative_rejection": null,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    },
+    "debutanizer_column": {
+      "n": 43,
+      "match_support": 2,
+      "review_support": 36,
+      "top1_accuracy": 1.0,
+      "top3_recall": 1.0,
+      "top5_recall": 1.0,
+      "match_precision": 0.04,
+      "match_recall": 0.5,
+      "false_auto_accept_count": 24,
+      "false_auto_accept_rate": 0.5581395348837209,
+      "review_recall": 0.3333333333333333,
+      "hard_negative_rejection": 1.0,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    },
+    "industrial_dryer": {
+      "n": 23,
+      "match_support": 0,
+      "review_support": 19,
+      "top1_accuracy": null,
+      "top3_recall": null,
+      "top5_recall": null,
+      "match_precision": null,
+      "match_recall": null,
+      "false_auto_accept_count": 0,
+      "false_auto_accept_rate": 0.0,
+      "review_recall": 0.05263157894736842,
+      "hard_negative_rejection": 1.0,
+      "limitations": "raw field-level decisions; source metadata/normalization guards can still block entire dataset; duplicate datasets not independent trials"
+    }
+  },
+  "training_performed": false,
+  "hard_negative_probes": [
+    {
+      "source": "reactor outlet temperature [degC]",
+      "candidate": "bottom_temperature_b",
+      "auto_accept": false,
+      "trace": {
+        "physical_gate_pass": false,
+        "physical_gates": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": false,
+          "direction_compatible": true,
+          "source_confidence_pass": false
+        },
+        "source_confidence_evidence": {
+          "pass": false,
+          "basis": "explicit_source_tokens_and_candidate_score; not provenance verification"
+        },
+        "semantic_evidence": {
+          "method": "trained_model_auto",
+          "confidence": 0.999,
+          "identity_basis": "candidate_only; values are not identity evidence"
+        },
+        "unit_evidence": {
+          "status": "consistent",
+          "compatible": true,
+          "basis": "declared_header_unit"
+        },
+        "quantity_type_evidence": {
+          "source": "temperature",
+          "expected": "temperature",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "role_evidence": {
+          "source": "process_measurement",
+          "expected": "process_measurement",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "location_evidence": {
+          "source": null,
+          "expected": "column_bottom",
+          "compatible": false,
+          "basis": "source_name_tokens",
+          "equipment": {
+            "source": "other_equipment",
+            "expected": "column",
+            "compatible": false,
+            "basis": "source_name_tokens"
+          },
+          "channel": {
+            "source": null,
+            "expected": "b",
+            "compatible": false,
+            "basis": "source_name_tokens"
+          }
+        },
+        "direction_evidence": {
+          "source": "outlet",
+          "expected": null,
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "physical_decision_reason": "physical gates require review: location_compatible, source_confidence_pass"
+      }
+    },
+    {
+      "source": "upstream inlet flow [t/h]",
+      "candidate": "next_process_flow",
+      "auto_accept": false,
+      "trace": {
+        "physical_gate_pass": false,
+        "physical_gates": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": false,
+          "direction_compatible": false,
+          "source_confidence_pass": false
+        },
+        "source_confidence_evidence": {
+          "pass": false,
+          "basis": "explicit_source_tokens_and_candidate_score; not provenance verification"
+        },
+        "semantic_evidence": {
+          "method": "trained_model_auto",
+          "confidence": 0.999,
+          "identity_basis": "candidate_only; values are not identity evidence"
+        },
+        "unit_evidence": {
+          "status": "consistent",
+          "compatible": true,
+          "basis": "declared_header_unit"
+        },
+        "quantity_type_evidence": {
+          "source": "flow",
+          "expected": "flow",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "role_evidence": {
+          "source": "process_measurement",
+          "expected": "process_measurement",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "location_evidence": {
+          "source": null,
+          "expected": "downstream_line",
+          "compatible": false,
+          "basis": "source_name_tokens",
+          "equipment": {
+            "source": null,
+            "expected": "column",
+            "compatible": false,
+            "basis": "source_name_tokens"
+          },
+          "channel": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "source_name_tokens"
+          }
+        },
+        "direction_evidence": {
+          "source": "inlet",
+          "expected": "downstream",
+          "compatible": false,
+          "basis": "source_name_tokens"
+        },
+        "physical_decision_reason": "physical gates require review: location_compatible, direction_compatible, source_confidence_pass"
+      }
+    },
+    {
+      "source": "tray 7 temperature [degC]",
+      "candidate": "top_temperature",
+      "auto_accept": false,
+      "trace": {
+        "physical_gate_pass": false,
+        "physical_gates": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": false,
+          "direction_compatible": true,
+          "source_confidence_pass": false
+        },
+        "source_confidence_evidence": {
+          "pass": false,
+          "basis": "explicit_source_tokens_and_candidate_score; not provenance verification"
+        },
+        "semantic_evidence": {
+          "method": "trained_model_auto",
+          "confidence": 0.999,
+          "identity_basis": "candidate_only; values are not identity evidence"
+        },
+        "unit_evidence": {
+          "status": "consistent",
+          "compatible": true,
+          "basis": "declared_header_unit"
+        },
+        "quantity_type_evidence": {
+          "source": "temperature",
+          "expected": "temperature",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "role_evidence": {
+          "source": "process_measurement",
+          "expected": "process_measurement",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "location_evidence": {
+          "source": null,
+          "expected": "column_top",
+          "compatible": false,
+          "basis": "source_name_tokens",
+          "equipment": {
+            "source": null,
+            "expected": "column",
+            "compatible": false,
+            "basis": "source_name_tokens"
+          },
+          "channel": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "source_name_tokens"
+          }
+        },
+        "direction_evidence": {
+          "source": null,
+          "expected": null,
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "physical_decision_reason": "physical gates require review: location_compatible, source_confidence_pass"
+      }
+    },
+    {
+      "source": "recycle flow [t/h]",
+      "candidate": "next_process_flow",
+      "auto_accept": false,
+      "trace": {
+        "physical_gate_pass": false,
+        "physical_gates": {
+          "semantic_similarity_pass": true,
+          "unit_compatible": true,
+          "quantity_type_compatible": true,
+          "physical_role_compatible": true,
+          "location_compatible": false,
+          "direction_compatible": false,
+          "source_confidence_pass": false
+        },
+        "source_confidence_evidence": {
+          "pass": false,
+          "basis": "explicit_source_tokens_and_candidate_score; not provenance verification"
+        },
+        "semantic_evidence": {
+          "method": "trained_model_auto",
+          "confidence": 0.999,
+          "identity_basis": "candidate_only; values are not identity evidence"
+        },
+        "unit_evidence": {
+          "status": "consistent",
+          "compatible": true,
+          "basis": "declared_header_unit"
+        },
+        "quantity_type_evidence": {
+          "source": "flow",
+          "expected": "flow",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "role_evidence": {
+          "source": "process_measurement",
+          "expected": "process_measurement",
+          "compatible": true,
+          "basis": "source_name_tokens"
+        },
+        "location_evidence": {
+          "source": null,
+          "expected": "downstream_line",
+          "compatible": false,
+          "basis": "source_name_tokens",
+          "equipment": {
+            "source": null,
+            "expected": "column",
+            "compatible": false,
+            "basis": "source_name_tokens"
+          },
+          "channel": {
+            "source": null,
+            "expected": null,
+            "compatible": true,
+            "basis": "source_name_tokens"
+          }
+        },
+        "direction_evidence": {
+          "source": "recycle",
+          "expected": "downstream",
+          "compatible": false,
+          "basis": "source_name_tokens"
+        },
+        "physical_decision_reason": "physical gates require review: location_compatible, direction_compatible, source_confidence_pass"
+      }
+    }
+  ],
+  "new_false_auto_accept": 0,
+  "new_false_auto_accept_reason": "No retraining or field decision code change; same frozen evaluation, not proof baseline false accepts are zero"
+}

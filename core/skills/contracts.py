@@ -74,6 +74,22 @@ def get_skill_contract(skill_id: str) -> SkillContract | None:
     return SKILL_CONTRACTS.get(skill_id)
 
 
+@dataclass(frozen=True)
+class SkillRoundRecord:
+    """Forward-compatible round receipt; does not replace the current optimizer."""
+    round_id: str
+    parameter_set: dict
+    executed_skills: list
+    reused_skills: list
+    metrics: dict
+    artifacts: list
+    validation_score: float | None
+    stop_reason: str | None
+
+    def public(self) -> dict:
+        return asdict(self)
+
+
 def execution_state_for(*, status: str, invoked: bool = False, evidence_read: bool = False) -> str:
     if status == "blocked" or status == "unavailable":
         return "blocked"

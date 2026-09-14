@@ -5,7 +5,16 @@
   "process_unit": "炼铁高炉",
   "version": "1.0.0",
   "dictionary": "fields.csv",
-  "keywords": ["钢铁高炉", "炼铁高炉", "高炉", "铁水", "铁水硅含量", "blast furnace", "hot metal", "silicon content"],
+  "keywords": [
+    "钢铁高炉",
+    "炼铁高炉",
+    "高炉",
+    "铁水",
+    "铁水硅含量",
+    "blast furnace",
+    "hot metal",
+    "silicon content"
+  ],
   "sampling_seconds": 3600,
   "timestamp_field": "timestamp",
   "primary_output": "hot_metal_si",
@@ -19,5 +28,75 @@
     "doi": "10.17632/6d7jbc7tb5.1",
     "license": "CC BY 4.0"
   },
-  "notes": "真实高炉过程量为1小时采样，铁水Si为非等间隔化验值。派生CSV只允许向后as-of对齐，并保留化验时间与数据龄期，禁止使用未来化验值。"
+  "notes": "真实高炉过程量为1小时采样，铁水Si为非等间隔化验值。派生CSV只允许向后as-of对齐，并保留化验时间与数据龄期，禁止使用未来化验值。",
+  "family": "钢铁冶金",
+  "field_roles": {
+    "timestamp": "timestamp",
+    "inputs": [
+      "blast_flow_rate",
+      "hot_blast_pressure",
+      "cold_blast_pressure",
+      "cold_blast_temperature",
+      "oxygen_flow_rate",
+      "total_pressure_drop",
+      "upper_pressure_drop",
+      "lower_pressure_drop",
+      "top_gas_pressure",
+      "hot_blast_temperature",
+      "top_gas_co2",
+      "top_gas_h2",
+      "top_gas_temp_1",
+      "top_gas_temp_2",
+      "top_gas_temp_3",
+      "top_gas_temp_4",
+      "peripheral_gas_temp_1",
+      "peripheral_gas_temp_2",
+      "peripheral_gas_temp_3",
+      "peripheral_gas_temp_4",
+      "peripheral_gas_temp_5",
+      "peripheral_gas_temp_6",
+      "peripheral_gas_temp_7",
+      "peripheral_gas_temp_8",
+      "peripheral_gas_temp_9",
+      "peripheral_gas_temp_10",
+      "ore_coke_ratio"
+    ],
+    "target": "hot_metal_si",
+    "optional_context": [
+      "lab_source_timestamp",
+      "lab_age_minutes",
+      "lab_fresh",
+      "blast_furnace_state"
+    ]
+  },
+  "units": {
+    "source": "fields.csv",
+    "column": "unit"
+  },
+  "aliases": {
+    "source": "fields.csv",
+    "column": "aliases"
+  },
+  "default_parameters": {
+    "resample_seconds": 3600,
+    "max_lag": 24,
+    "window_length": 30,
+    "step": 15,
+    "top_k": 5
+  },
+  "constraints": {
+    "physical_bounds_source": "fields.csv",
+    "missing_target_policy": "preserve_nan",
+    "train_validation_test": "chronological_60_20_20_v2",
+    "strict_segment_score": 80,
+    "snr_threshold_db": 10,
+    "minimum_rows": 150,
+    "causal_alignment": "causal_asof_backward",
+    "lab_tolerance_hours": 3
+  },
+  "display": {
+    "name": "钢铁高炉铁水质量预测",
+    "industry": "钢铁冶金",
+    "process_unit": "炼铁高炉"
+  }
 }

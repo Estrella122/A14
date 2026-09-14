@@ -57,7 +57,7 @@ export function capabilityCards(runtime = {}) {
   return (runtime.capabilities ?? []).map((candidate) => ({
     ...candidate,
     id: candidate.candidate,
-    name: capabilityLabel(candidate.candidate),
+    name: candidate.display_name ?? capabilityLabel(candidate.candidate),
     ui_status: capabilityStatus(candidate),
     score: Number(candidate.final_score ?? 0),
     required_artifacts: candidate.required_artifacts ?? Object.keys(candidate.artifact_readiness ?? {}),

@@ -1,0 +1,44 @@
+
+> frontend@0.0.0 test
+> node --test tests/*.test.js tests/*.test.mjs
+
+✔ HTML CSRF response preserves HTTP 403 and gives a useful error (0.642958ms)
+✔ missing HTML API preserves HTTP 404 instead of throwing JSON syntax error (0.108583ms)
+✔ valid JSON remains unchanged (0.512583ms)
+✔ JSON API errors retain both status and backend reason (1.310959ms)
+✔ normalizes only real backend metrics and prediction rows (15.230042ms)
+✔ does not manufacture metrics when backend evidence is absent (0.131875ms)
+✔ canonical visual pipeline is forward, connected, and unique (0.082292ms)
+✔ replay and incremental batches do not duplicate events (1.512167ms)
+✔ executor lifecycle updates DAG independently and keeps partial status (0.205875ms)
+✔ timeline keeps operational reasons and omits noisy recall events (0.102ms)
+✔ completed timelines never animate historical running events (1.174417ms)
+✔ compact timeline stays bounded and keeps the terminal event (0.415458ms)
+✔ timeline shows model lifecycle but leaves token deltas to the streaming draft (0.113708ms)
+✔ case A exposes semantic capability reasons and score breakdown (0.851667ms)
+✔ case B shows deferred segmentation becoming success after cleaning (0.188542ms)
+✔ case C shows optimization waiting for modeling artifact (0.720333ms)
+✔ case D keeps optimization partial and exposes feasibility metrics (0.175ms)
+✔ case E separates missing contracts from artifact readiness (0.093083ms)
+✔ artifact chain hides full hash by default while retaining provenance (0.1005ms)
+✔ installed and confirmed data scene selects the 3D descriptor independently from project scene (1.332292ms)
+✔ all three project scenes use installed GLBs with semantic mesh bindings (0.29675ms)
+✔ detected data scene overrides the project preview scene (0.068916ms)
+✔ 3D view falls back to an installed project model when the detected data model is absent (0.118708ms)
+✔ explicit project model selection is retained when both mismatched scenes have assets (0.068791ms)
+✔ unconfirmed data scenes keep the installed project model visible (0.055666ms)
+✔ boiler and debutanizer retain independent semantic field bindings (0.076375ms)
+✔ scenes without installed models expose explicit missing asset contracts (0.095625ms)
+✔ runtime source loads GLB and never constructs primitive equipment (6.575791ms)
+✔ xinan data remains independent from the project scene (0.613417ms)
+✔ vapor pressure scene replaces the prior run data scene (0.099959ms)
+✔ matching debutanizer data reports no mismatch (0.073459ms)
+✔ scene priority prefers final over selected and standardization (0.064167ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 74.296334

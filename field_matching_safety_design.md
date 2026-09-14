@@ -1,0 +1,26 @@
+# 字段物理语义安全设计
+
+范围由脱丁烷template.json新增physical_semantics显式启用，其他场景不启用新身份门禁。fields.csv、required、alias、单位与物理范围不变；不修改Skill Runtime/Registry/Planner/SceneContext或12 Skill数值算法。
+
+每个输入和目标元数据包括canonical_name、quantity_type、physical_role、equipment_role、measurement_location、flow_direction、unit_source、aliases_source、forbidden_relations。两处底温还要求measurement_channel=a/b，避免同在塔底但不同测点混淆。unit/aliases引用原fields.csv，不建立第二份真值。
+
+新physical_semantics.py从来源列名提取量纲、角色、位置、设备和方向，不使用候选名称回填来源语义，不读取数值范围当身份证据。未知保持null；冲突保持conflict。模型/模糊/vendor_core候选必须同时满足：
+
+- semantic_similarity_pass：最终置信度达到既有阈值；
+- unit_compatible：来源明确单位一致或可转换；
+- quantity_type_compatible、physical_role_compatible；
+- location_compatible：设备、位置及必要的A/B通道一致；
+- direction_compatible：流量入口、出口、回流、循环、下游分开；
+- source_confidence_pass：有标准元数据、来源能解析到列设备上下文、置信度达标。
+
+source_confidence是确定性门禁，不是校准后的来源真实性概率。字段名本身无法验证仪表接线；需要外部点位字典保证源数据真实性。
+
+明确alias/point_dictionary保留人工确认身份优先级，仍受旧单位冲突、数值范围和缺失门禁影响。新增normalized_alias仅允许去分隔符后的唯一完全相等（保留所有字符和测点数字），例如tray_6_temperature与tray6_temperature；不增添别名。vendor_core去噪可能删除语义，不能获得这种豁免。模型不能覆盖已确认alias。
+
+最终status=matched仅在旧置信门禁和新physical_gate_pass同时通过时成立。review仍保留候选、原置信度和失败维度；不伪装为低置信。重复字段处理后再生成decision，保证AUTO_ACCEPT/REVIEW_REQUIRED/REJECT与最终status一致。
+
+每次mapping增加source_column、candidate_field、mapping_method、semantic_evidence、unit_evidence、quantity_type_evidence、role_evidence、location_evidence、direction_evidence、physical_gates、decision、decision_reason。无候选或未启用场景的维度标记not_evaluated，不宣称已通过。
+
+边界：词法提取是保守规则，不是通用语义理解；不认识的位置或单位进入review。明确alias被当作人工身份依据，需要单独治理错误alias。未修改场景识别评分公式；该公式目前仍可能将review候选作为场景证据，但required coverage与标准化输出只接受matched，不能因此绕过数据门禁。
+
+重复候选处理优先选择已通过物理门禁的候选，并在重新确定matched时再次检查门禁，禁止分数重选绕过。当前人工override保持既有显式人工优先级，不属于自动接受路径。

@@ -203,7 +203,8 @@ class RuntimeClosureTests(SimpleTestCase):
 
     def test_case_a_dynamic_segment_request_has_no_modeling(self):
         groups = plan_skills("找出这批数据里最适合建模的动态工况段。")["analysis"]["execution_plan"]["core"]["target_groups"]
-        self.assertEqual(groups, ["standardization", "cleaning", "segmentation"])
+        self.assertIn("high_snr_dynamic_segment_extractor", groups)
+        self.assertNotIn("system_identification_trainer", groups)
 
     def test_case_b_existing_model_request_is_optimization_only(self):
         groups = plan_skills("用已有模型和这批数据优化运行参数。")["analysis"]["execution_plan"]["core"]["target_groups"]

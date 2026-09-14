@@ -1,0 +1,42 @@
+{
+  "base_commit": "eb240e8922ce953665844380fabb5c0c575718c9",
+  "tracked_worktree_dirty": true,
+  "training_performed": false,
+  "deliverables": [
+    "real_field_ground_truth.md",
+    "real_field_ground_truth.json",
+    "contract_coverage_audit.md",
+    "training_need_decision.md",
+    "field_training_dataset_report.md",
+    "field_agent_training_report.md",
+    "field_agent_evaluation.md",
+    "scene_recognition_evaluation.md",
+    "cleaning_strategy_evaluation.md",
+    "before_after_field_mapping.md",
+    "post_training_contract_coverage.md",
+    "three_scene_post_training_pipeline.md",
+    "three_scene_post_training_runtime.json",
+    "remaining_real_data_gaps.md"
+  ],
+  "code_sha256": {
+    "tools/evaluate_real_field_ground_truth.py": "4a6aa690a4f95fc0b953e11cc248e4e932dc0b0940758967758b4fc9e0182652",
+    "tools/evaluate_field_agents.py": "a33d3009c3f1d21fc04cdfe892e9ae0da93e7848e6a48395bcb08c0126d47d2a",
+    "tools/write_ground_truth_reports.py": "83ac76bfd3c62cd494f674273801260c1b6c563052469da45f096d258624500e",
+    "core/test_ground_truth_evaluation.py": "8124a2f5b735f2f42298beebcd305a4288663da77a7b416b6236ab1f17fec1ef",
+    "core/skills/runtime.py": "f94010e7a95fb9913eac6b6661a6240817c7d0644ae4037cee5337d0df9c46ea"
+  },
+  "tests": {
+    "core": {
+      "total": 368,
+      "passed": 365,
+      "skipped_existing": 3,
+      "failed": 0
+    },
+    "frontend": {
+      "total": 32,
+      "passed": 32
+    },
+    "frontend_lint": "PASS",
+    "frontend_build": "PASS"
+  }
+}
