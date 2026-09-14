@@ -15,6 +15,22 @@ test('核心页面可导航且没有横向溢出', async ({ page }) => {
   }
 })
 
+test('左侧导航在桌面固定且移动端保持顶部导航', async ({ page }) => {
+  await page.goto('/overview/')
+  const sidebar = page.locator('.app-sidebar')
+  await expect(sidebar).toBeVisible()
+  const viewportWidth = page.viewportSize()?.width ?? 1280
+  if (viewportWidth > 720) {
+    await expect(sidebar).toHaveCSS('position', 'fixed')
+    const before = await sidebar.boundingBox()
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    const after = await sidebar.boundingBox()
+    expect(after?.y).toBe(before?.y)
+  } else {
+    await expect(sidebar).toHaveCSS('position', 'sticky')
+  }
+})
+
 test('三维场景明确展示模型或可解释降级状态', async ({ page }) => {
   await page.goto('/digital-twin/')
   const canvas = page.locator('canvas').first()
