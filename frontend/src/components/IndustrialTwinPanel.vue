@@ -3,18 +3,17 @@ import { computed, ref, watch } from 'vue'
 import StatusPill from './StatusPill.vue'
 import { useEChart } from '../composables/useEChart'
 import { sceneStateFromProject, sceneFromRun } from '../composables/useSceneBinding'
+import { resolveScene3DView } from '../data/scene3dRegistry'
 
 const props = defineProps({ project: { type: Object, required: true }, latestRun: { type: Object, default: null }, sceneState: { type: Object, default: null } })
 const selectedId = ref('')
 const sparkline = ref(null)
-const dataSceneId = computed(() => {
-  const stateSceneId = props.sceneState?.data_scene?.id
-  if (stateSceneId) return stateSceneId
-  const runtimeScene = sceneFromRun(props.latestRun)
-  if (runtimeScene?.id) return runtimeScene.id
-  return sceneStateFromProject(props.project).id || 'blast_furnace'
+const effectiveSceneState = computed(() => props.sceneState ?? {
+  project_scene: sceneStateFromProject(props.project),
+  data_scene: sceneFromRun(props.latestRun),
 })
-const scenarioId = computed(() => dataSceneId.value || props.project.scenarioId || 'blast_furnace')
+const visualScene = computed(() => resolveScene3DView(effectiveSceneState.value))
+const scenarioId = computed(() => visualScene.value.descriptor.id || props.project.scenarioId || 'blast_furnace')
 const isBlastFurnace = computed(() => scenarioId.value === 'blast_furnace')
 const isDebutanizer = computed(() => scenarioId.value === 'debutanizer_column')
 const isDryer = computed(() => scenarioId.value === 'industrial_dryer')
@@ -25,9 +24,13 @@ const sceneLayouts = {
 }
 const twinDefinition = computed(() => sceneLayouts[scenarioId.value] ?? sceneLayouts.blast_furnace)
 const sceneDescription = computed(() => twinDefinition.value.description)
+const visualFallback = computed(() => visualScene.value.usedProjectFallback)
+const sceneDisplayNote = computed(() => visualFallback.value
+  ? `本次数据识别为${effectiveSceneState.value.data_scene.display_name}，暂无适用设备资产，当前展示项目拓扑且不绑定跨场景测点`
+  : '设备图为结构示意，数值仅来自同场景真实任务')
 const preview = computed(() => props.latestRun?.results?.cleaning?.timeseries_preview?.points ?? [])
 const metrics = computed(() => {
-  if (!props.latestRun || !preview.value.length) return []
+  if (!props.latestRun || visualFallback.value || !preview.value.length) return []
   const last = preview.value.at(-1)
   const rows = []
   if (Number.isFinite(Number(last?.input))) rows.push({ id: 'runtime-input', role: 'input', label: props.project.mv, value: Number(last.input).toFixed(2), unit: props.project.mvUnit, status: 'normal', x: twinDefinition.value.input[0], y: twinDefinition.value.input[1], trend: preview.value.slice(-24).map((point) => Number(point.input)).filter(Number.isFinite) })
@@ -49,7 +52,7 @@ useEChart(sparkline, sparklineOption)
 
 <template>
   <section class="twin-panel">
-    <div class="twin-heading"><div><span class="section-kicker">Industrial Process Topology</span><h2>工业场景设备拓扑</h2><p>{{ sceneDescription }}；设备图为结构示意，数值仅来自真实任务。</p></div><div><StatusPill :tone="metrics.length ? 'success' : 'neutral'" dot>{{ metrics.length ? '真实任务测点' : '等待真实数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
+    <div class="twin-heading"><div><span class="section-kicker">Industrial Process Topology</span><h2>工业场景设备拓扑</h2><p>{{ sceneDescription }}；{{ sceneDisplayNote }}。</p></div><div><StatusPill :tone="metrics.length ? 'success' : visualFallback ? 'brand' : 'neutral'" dot>{{ metrics.length ? '真实任务测点' : visualFallback ? '项目拓扑回退' : '等待真实数据' }}</StatusPill><span>{{ latestRun?.run_id ?? project.code }}</span></div></div>
     <div class="twin-stage">
       <svg v-if="isBlastFurnace" viewBox="0 0 1000 420" role="img" aria-label="钢铁高炉数字孪生设备示意图">
         <defs><linearGradient id="blastShell" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17375b"/><stop offset="1" stop-color="#0a1e35"/></linearGradient></defs>
@@ -84,7 +87,7 @@ useEChart(sparkline, sparklineOption)
       <svg v-else viewBox="0 0 1000 420" role="img" aria-label="通用流程工业设备占位图"><g class="twin-grid"><path d="M0 70H1000M0 140H1000M0 210H1000M0 280H1000M0 350H1000"/></g><rect class="generic-vessel" x="370" y="52" width="260" height="315" rx="125"/><path class="furnace-zone" d="M370 150H630M370 250H630"/><path class="flow-line" d="M80 210H370M630 210H920"/><text x="425" y="215">通用反应设备</text></svg>
 
       <button v-for="item in metrics" :key="item.id" class="twin-sensor" :class="{ 'is-warning': item.status === 'warning', 'is-active': selectedId === item.id }" :style="{ left: `${item.x}%`, top: `${item.y}%` }" type="button" @click="selectedId = item.id"><i></i><span>{{ item.label }}</span><strong>{{ item.value }} <small>{{ item.unit }}</small></strong></button>
-      <div v-if="!metrics.length" class="twin-empty">暂无真实测点快照；上传 CSV 后显示关键输入与输出。</div>
+      <div v-if="!metrics.length" class="twin-empty">{{ visualFallback ? '当前数据与项目拓扑不同，已停止绑定跨场景测点。' : '暂无真实测点快照；上传 CSV 后显示关键输入与输出。' }}</div>
       <div class="twin-legend"><span><i class="normal"></i>正常测点</span><span><i class="warning"></i>需要关注</span><span><b></b>物料流向</span></div>
       <aside v-if="selected" class="sensor-popover"><div><span>MEASUREMENT TREND</span><button type="button" aria-label="关闭测点趋势" @click="selectedId = ''">×</button></div><strong>{{ selected.label }}</strong><p>{{ selected.value }} <small>{{ selected.unit }}</small><StatusPill :tone="selected.status === 'warning' ? 'warning' : 'success'">{{ selected.status === 'warning' ? '偏离稳态带' : '运行正常' }}</StatusPill></p><div ref="sparkline" class="sensor-sparkline"></div></aside>
     </div>

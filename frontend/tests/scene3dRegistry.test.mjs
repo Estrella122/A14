@@ -4,13 +4,13 @@ import test from 'node:test'
 
 import { buildScene3DState, getScene3DDescriptor, listMissingSceneAssets, resolveScene3DView, UNKNOWN_SCENE_3D } from '../src/data/scene3dRegistry.js'
 
-test('detected data scene selects the 3D descriptor independently from project scene', () => {
-  for (const id of ['debutanizer_column', 'thermal_power_boiler_long_tail', 'industrial_dryer', 'blast_furnace']) {
+test('installed and confirmed data scene selects the 3D descriptor independently from project scene', () => {
+  for (const id of ['debutanizer_column', 'industrial_dryer', 'blast_furnace']) {
     const state = buildScene3DState({ project_scene: { id: 'debutanizer_column' }, data_scene: { id } })
     assert.equal(state.descriptor.id, id)
     assert.equal(state.isKnown, true)
   }
-  const unknown = buildScene3DState({ project_scene: { id: 'debutanizer_column' }, data_scene: { id: 'new_industrial_scene' } })
+  const unknown = buildScene3DState({ project_scene: { id: null }, data_scene: { id: 'new_industrial_scene' } })
   assert.equal(unknown.descriptor, UNKNOWN_SCENE_3D)
   assert.equal(unknown.isKnown, false)
   assert.equal(unknown.status, 'missing_3d_asset')
@@ -71,6 +71,15 @@ test('explicit project model selection is retained when both mismatched scenes h
   }
   assert.equal(resolveScene3DView(state).descriptor.id, 'industrial_dryer')
   assert.equal(resolveScene3DView(state, 'project').descriptor.id, 'debutanizer_column')
+})
+
+test('unconfirmed data scenes keep the installed project model visible', () => {
+  const uncertain = resolveScene3DView({
+    project_scene: { id: 'blast_furnace' },
+    data_scene: { id: 'debutanizer_column', status: 'uncertain' },
+  })
+  assert.equal(uncertain.descriptor.id, 'blast_furnace')
+  assert.equal(uncertain.fallbackReason, 'data_scene_unconfirmed')
 })
 
 test('boiler and debutanizer retain independent semantic field bindings', () => {

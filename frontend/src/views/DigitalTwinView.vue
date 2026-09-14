@@ -78,6 +78,7 @@ watch(() => sceneState.value.data_scene.id, (next, previous) => {
           <dl>
             <div><dt>当前数据场景</dt><dd>{{ sceneState.data_scene.display_name }}<code>{{ sceneState.data_scene.status_label }}</code></dd></div>
             <div><dt>场景绑定</dt><dd>{{ sceneState.is_mismatch ? '已分离' : '一致' }}<code>{{ sceneState.data_scene.source }}</code></dd></div>
+            <div><dt>三维展示</dt><dd>{{ sceneContent.label }}<code>{{ sceneView.scope === 'project' && sceneState.is_mismatch ? '项目模型回退' : '数据场景模型' }}</code></dd></div>
             <div><dt>项目采样设定</dt><dd>{{ project.sample }}<code>max lag {{ project.maxLag }}</code></dd></div>
           </dl>
         </section>

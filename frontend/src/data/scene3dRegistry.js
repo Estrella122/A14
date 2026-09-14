@@ -93,9 +93,6 @@ export function getScene3DDescriptor(sceneId) {
 }
 
 export function buildScene3DState(sceneState) {
-  // Before a CSV run exists there is no data-scene evidence yet. In that
-  // state, preview the explicitly selected project scene instead of showing
-  // an unrelated "unknown scene" canvas. A detected data scene always wins.
   const requestedId = sceneState?.data_scene?.id || sceneState?.project_scene?.id
   const descriptor = getScene3DDescriptor(requestedId)
   return {
@@ -115,9 +112,10 @@ export function resolveScene3DView(sceneState, preferredScope = 'auto') {
   const projectDescriptor = getScene3DDescriptor(projectId)
   const dataHasAsset = dataDescriptor.asset_status === 'installed' && Boolean(dataDescriptor.model_url)
   const projectHasAsset = projectDescriptor.asset_status === 'installed' && Boolean(projectDescriptor.model_url)
+  const dataSceneUnconfirmed = ['uncertain', 'ambiguous', 'unknown'].includes(sceneState?.data_scene?.status)
 
   let scope = preferredScope
-  if (scope === 'auto') scope = dataId && dataHasAsset ? 'data' : projectId && projectHasAsset ? 'project' : dataId ? 'data' : 'project'
+  if (scope === 'auto') scope = dataId && dataHasAsset && !dataSceneUnconfirmed ? 'data' : projectId && projectHasAsset ? 'project' : dataId ? 'data' : 'project'
   if (scope === 'data' && !dataId) scope = 'project'
   if (scope === 'project' && !projectId) scope = 'data'
 
@@ -127,7 +125,8 @@ export function resolveScene3DView(sceneState, preferredScope = 'auto') {
     descriptor,
     dataHasAsset,
     projectHasAsset,
-    usedProjectFallback: preferredScope === 'auto' && scope === 'project' && Boolean(dataId) && !dataHasAsset,
+    usedProjectFallback: preferredScope === 'auto' && scope === 'project' && Boolean(dataId) && (!dataHasAsset || dataSceneUnconfirmed),
+    fallbackReason: scope === 'project' && dataId ? (dataSceneUnconfirmed ? 'data_scene_unconfirmed' : !dataHasAsset ? 'data_scene_asset_missing' : null) : null,
     sceneState: scope === 'data'
       ? sceneState
       : { ...sceneState, data_scene: { ...(sceneState?.data_scene || {}), id: null } },

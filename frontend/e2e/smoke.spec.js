@@ -29,3 +29,22 @@ test('键盘焦点可见且页面具有唯一主标题', async ({ page }) => {
   const focused = page.locator(':focus')
   await expect(focused).toBeVisible()
 })
+
+test('缺少资产的跨场景任务不会覆盖当前项目模型与拓扑', async ({ page }) => {
+  await page.route('**/api/pipeline/runs/latest/', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true, data: {
+      run_id: 'run-cross-scene', original_name: 'Steel_industry_data.csv', status: 'completed',
+      runtime_trace: { final_scene: 'steel_industry_energy', scene_status: 'confirmed' },
+      stages: [], results: { standardization: { scenario: { scenario_id: 'steel_industry_energy', display_name: '钢铁工业能源监测' } } },
+    } }),
+  }))
+  await page.goto('/overview/')
+  await expect(page.getByRole('img', { name: '钢铁高炉数字孪生设备示意图' })).toBeVisible()
+  await expect(page.getByText('项目拓扑回退')).toBeVisible()
+  await expect(page.getByText('当前数据与项目拓扑不同，已停止绑定跨场景测点。')).toBeVisible()
+
+  await page.goto('/digital-twin/')
+  await expect(page.getByText('项目模型回退').first()).toBeVisible()
+  await expect(page.getByText('BF—01')).toBeVisible()
+})
