@@ -101,6 +101,32 @@ export function buildScene3DState(sceneState) {
   }
 }
 
+export function resolveScene3DView(sceneState, preferredScope = 'auto') {
+  const dataId = sceneState?.data_scene?.id || null
+  const projectId = sceneState?.project_scene?.id || null
+  const dataDescriptor = getScene3DDescriptor(dataId)
+  const projectDescriptor = getScene3DDescriptor(projectId)
+  const dataHasAsset = dataDescriptor.asset_status === 'installed' && Boolean(dataDescriptor.model_url)
+  const projectHasAsset = projectDescriptor.asset_status === 'installed' && Boolean(projectDescriptor.model_url)
+
+  let scope = preferredScope
+  if (scope === 'auto') scope = dataId && dataHasAsset ? 'data' : projectId && projectHasAsset ? 'project' : dataId ? 'data' : 'project'
+  if (scope === 'data' && !dataId) scope = 'project'
+  if (scope === 'project' && !projectId) scope = 'data'
+
+  const descriptor = scope === 'data' ? dataDescriptor : projectDescriptor
+  return {
+    scope,
+    descriptor,
+    dataHasAsset,
+    projectHasAsset,
+    usedProjectFallback: preferredScope === 'auto' && scope === 'project' && Boolean(dataId) && !dataHasAsset,
+    sceneState: scope === 'data'
+      ? sceneState
+      : { ...sceneState, data_scene: { ...(sceneState?.data_scene || {}), id: null } },
+  }
+}
+
 export function listMissingSceneAssets() {
   return Object.values(SCENE_3D_REGISTRY).filter((item) => item.asset_status !== 'installed').map((item) => ({ scene_id: item.id, required_asset: item.required_asset }))
 }

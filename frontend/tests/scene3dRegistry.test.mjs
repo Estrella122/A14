@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { buildScene3DState, getScene3DDescriptor, listMissingSceneAssets, UNKNOWN_SCENE_3D } from '../src/data/scene3dRegistry.js'
+import { buildScene3DState, getScene3DDescriptor, listMissingSceneAssets, resolveScene3DView, UNKNOWN_SCENE_3D } from '../src/data/scene3dRegistry.js'
 
 test('detected data scene selects the 3D descriptor independently from project scene', () => {
   for (const id of ['debutanizer_column', 'thermal_power_boiler_long_tail', 'industrial_dryer', 'blast_furnace']) {
@@ -45,6 +45,32 @@ test('detected data scene overrides the project preview scene', () => {
   })
   assert.equal(state.descriptor.id, 'blast_furnace')
   assert.equal(state.source, 'data_scene')
+})
+
+test('3D view falls back to an installed project model when the detected data model is absent', () => {
+  const state = {
+    project_scene: { id: 'blast_furnace' },
+    data_scene: { id: 'steel_industry_energy' },
+  }
+  const automatic = resolveScene3DView(state)
+  assert.equal(automatic.scope, 'project')
+  assert.equal(automatic.descriptor.id, 'blast_furnace')
+  assert.equal(automatic.usedProjectFallback, true)
+  assert.equal(buildScene3DState(automatic.sceneState).hasAsset, true)
+
+  const dataView = resolveScene3DView(state, 'data')
+  assert.equal(dataView.scope, 'data')
+  assert.equal(dataView.descriptor.id, 'steel_industry_energy')
+  assert.equal(buildScene3DState(dataView.sceneState).hasAsset, false)
+})
+
+test('explicit project model selection is retained when both mismatched scenes have assets', () => {
+  const state = {
+    project_scene: { id: 'debutanizer_column' },
+    data_scene: { id: 'industrial_dryer' },
+  }
+  assert.equal(resolveScene3DView(state).descriptor.id, 'industrial_dryer')
+  assert.equal(resolveScene3DView(state, 'project').descriptor.id, 'debutanizer_column')
 })
 
 test('boiler and debutanizer retain independent semantic field bindings', () => {

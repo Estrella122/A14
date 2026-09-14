@@ -1,23 +1,31 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import SceneModel3D from '../components/SceneModel3D.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildSceneState } from '../composables/useSceneBinding'
-import { getScene3DDescriptor } from '../data/scene3dRegistry'
+import { resolveScene3DView } from '../data/scene3dRegistry'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate'])
 const sceneModel = ref(null)
+// The project selector controls which equipment the digital-twin page opens.
+// Data evidence remains visible and can be inspected explicitly when its
+// detected scene differs from the selected project.
+const preferredModelScope = ref('project')
 const { latestRun } = useLatestPipelineRun()
 const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
 const modeling = computed(() => latestRun.value?.results?.modeling ?? {})
 const cleaning = computed(() => latestRun.value?.results?.cleaning ?? {})
-const sceneContent = computed(() => getScene3DDescriptor(
-  sceneState.value.data_scene.id || sceneState.value.project_scene.id,
-))
+const sceneView = computed(() => resolveScene3DView(sceneState.value, preferredModelScope.value))
+const sceneContent = computed(() => sceneView.value.descriptor)
+const modelSceneState = computed(() => sceneView.value.sceneState)
+const canSwitchModelScope = computed(() => Boolean(sceneState.value.data_scene.id && sceneState.value.project_scene.id && sceneState.value.data_scene.id !== sceneState.value.project_scene.id))
+const modelScopeLabel = computed(() => sceneView.value.scope === 'project'
+  ? sceneState.value.data_scene.id && !sceneView.value.dataHasAsset ? '项目模型 · 数据模型未安装' : '正在查看项目模型'
+  : '正在查看数据模型')
 const sceneNodesById = computed(() => Object.fromEntries(sceneContent.value.semantic_nodes.map((node) => [node.id, node])))
 const processFlow = computed(() => sceneContent.value.flows.map(([from, to]) => ({
   label: `${sceneNodesById.value[from]?.label || from} → ${sceneNodesById.value[to]?.label || to}`,
@@ -30,6 +38,17 @@ const evidenceRows = computed(() => [
   { label: '独立测试 R²', value: testMetrics.value.r2 == null ? '—' : Number(testMetrics.value.r2).toFixed(3), detail: '不使用演示指标' },
   { label: '动态数据段', value: cleaning.value.selected_segment_count ?? '—', detail: `${cleaning.value.modeling_row_count ?? '—'} 行建模数据` },
 ])
+
+function toggleModelScope() {
+  preferredModelScope.value = sceneView.value.scope === 'data' ? 'project' : 'data'
+}
+
+watch(() => props.project.scenarioId, (next, previous) => {
+  if (previous && next !== previous) preferredModelScope.value = 'project'
+})
+watch(() => sceneState.value.data_scene.id, (next, previous) => {
+  if (previous && next !== previous) preferredModelScope.value = 'auto'
+})
 </script>
 
 <template>
@@ -40,13 +59,16 @@ const evidenceRows = computed(() => [
       :description="sceneContent.description"
     >
       <template #actions>
-        <StatusPill :tone="latestRun ? 'success' : 'neutral'" dot>{{ latestRun ? '真实任务测点' : '结构示意模式' }}</StatusPill>
+        <StatusPill :tone="sceneView.usedProjectFallback ? 'warning' : latestRun ? 'success' : 'neutral'" dot>{{ modelScopeLabel }}</StatusPill>
+        <button v-if="canSwitchModelScope" class="btn btn-secondary" type="button" @click="toggleModelScope">
+          <AppIcon name="cube" />{{ sceneView.scope === 'data' ? '查看项目模型' : '查看数据模型' }}
+        </button>
         <button class="btn btn-secondary" type="button" @click="emit('navigate', '/overview/')"><AppIcon name="dashboard" />返回驾驶舱</button>
       </template>
     </PageHeader>
 
     <div class="twin-layout">
-      <SceneModel3D ref="sceneModel" :scene-state="sceneState" :latest-run="latestRun" />
+      <SceneModel3D ref="sceneModel" :scene-state="modelSceneState" :latest-run="latestRun" />
       <aside class="twin-side">
         <section class="twin-context">
           <span class="section-kicker">Scene context</span>
