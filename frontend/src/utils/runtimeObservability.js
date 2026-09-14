@@ -33,7 +33,9 @@ export function capabilityLabel(id) {
 
 export function capabilityStatus(candidate) {
   if (candidate?.selected) return 'selected'
-  if (candidate?.status === 'blocked') return 'blocked'
+  // Candidates that were not selected did not fail this turn. Missing optional
+  // evidence is useful context, but should not render as an execution error.
+  if (candidate?.status === 'blocked') return 'skipped'
   if (candidate?.status === 'deferred' && candidate?.producible_artifacts?.length) return 'deferred'
   return 'skipped'
 }

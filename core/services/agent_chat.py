@@ -587,7 +587,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             nonlocal emitted_characters
             emitted_characters += len(delta)
             delta_buffer.append(delta)
-            if len("".join(delta_buffer)) >= 48:
+            if len("".join(delta_buffer)) >= 20:
                 flush_delta()
 
         try:
@@ -608,6 +608,10 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
                 event_sink("llm_generation_failed", stage="answer", status="partial", message=f"大模型不可用，已安全回退到证据回答：{exc}")
     else:
         response["llm"] = {"provider": "evidence", "model": "deterministic-evidence-v1", "used": False, "fallback": False}
+        if event_sink:
+            for offset in range(0, len(response["answer"]), 20):
+                delta = response["answer"][offset:offset + 20]
+                event_sink("llm_response_delta", stage="answer", status="streaming", message=f"Evidence Agent 已生成 {min(offset + 20, len(response['answer']))} 字", metadata={"delta": delta, "generated_characters": min(offset + 20, len(response["answer"]))})
     if event_sink:
         event_sink("answer_generation_completed", stage="answer", status="completed", message="回答已生成")
     return response

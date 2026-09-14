@@ -9,7 +9,7 @@ import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
 import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
-import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun } from '../api/agent'
+import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
@@ -56,6 +56,7 @@ const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
 const { latestRun } = useLatestPipelineRun()
 let pollController
+let scrollFrame
 let disposed = false
 const activeRun = computed(() => selectedRun.value ?? latestRun.value)
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
@@ -163,28 +164,43 @@ async function scrollToLatest() {
   if (chatThread.value) chatThread.value.scrollTop = chatThread.value.scrollHeight
 }
 
-async function pollLiveRun(live, timelineMessage) {
+function scheduleScrollToLatest() {
+  if (scrollFrame) return
+  scrollFrame = window.requestAnimationFrame(() => {
+    scrollFrame = null
+    void scrollToLatest()
+  })
+}
+
+function applyLivePayload(live, timelineMessage, draftMessage, payload) {
+  const events = payload.events ?? []
+  timelineMessage.events = mergeRuntimeEvents(timelineMessage.events, events)
+  const after = Number(payload.next_sequence ?? events.at(-1)?.sequence ?? activeLiveRun.value?.after ?? 0)
+  timelineMessage.status = payload.status ?? timelineMessage.status
+  timelineMessage.metrics = payload.metrics ?? timelineMessage.metrics
+  const answerDelta = events.filter((event) => event.event_type === 'llm_response_delta').map((event) => event.metadata?.delta || '').join('')
+  if (answerDelta && draftMessage) draftMessage.text += answerDelta
+  const latestStage = [...events].reverse().find((event) => event.event_type !== 'llm_response_delta' && event.message)
+  if (latestStage && draftMessage) draftMessage.phase = latestStage.message
+  activeLiveRun.value = { ...live, after, status: payload.status ?? 'running' }
+  liveProgress.value = [...timelineMessage.events].reverse().find((event) => Number.isFinite(event.progress))?.progress ?? null
+  responseState.value = {
+    ...(responseState.value ?? { run_id: live.run_id }),
+    skill_run_id: live.skill_run_id,
+    runtime_observability: applyRuntimeEvents(responseState.value?.runtime_observability, events),
+  }
+  scheduleScrollToLatest()
+  return after
+}
+
+async function pollLiveRun(live, timelineMessage, draftMessage, initialAfter = null) {
   isRunning.value = true
   activeLiveRun.value = live
-  let after = Number(live.after ?? 0)
-  pollController?.abort()
-  pollController = new AbortController()
+  let after = Number(initialAfter ?? live.after ?? 0)
   let delay = 350
   while (true) {
     const payload = await getAgentSkillEvents(live.skill_run_id, after, { signal: pollController.signal })
-    timelineMessage.events = mergeRuntimeEvents(timelineMessage.events, payload.events ?? [])
-    after = Number(payload.next_sequence ?? after)
-    timelineMessage.status = payload.status
-    timelineMessage.metrics = payload.metrics ?? {}
-    timelineMessage.draft = (timelineMessage.draft || '') + (payload.events ?? []).filter((event) => event.event_type === 'llm_response_delta').map((event) => event.metadata?.delta || '').join('')
-    activeLiveRun.value = { ...live, after, status: payload.status }
-    liveProgress.value = [...timelineMessage.events].reverse().find((event) => Number.isFinite(event.progress))?.progress ?? null
-    responseState.value = {
-      ...(responseState.value ?? { run_id: live.run_id }),
-      skill_run_id: live.skill_run_id,
-      runtime_observability: applyRuntimeEvents(responseState.value?.runtime_observability, payload.events ?? []),
-    }
-    await scrollToLatest()
+    after = applyLivePayload(live, timelineMessage, draftMessage, payload)
     if (payload.status === 'completed') return payload.result
     if (payload.status === 'failed') throw new Error(payload.error || 'Agent 执行失败')
     delay = (payload.events?.length ?? 0) > 0 ? 350 : Math.min(2_500, Math.round(delay * 1.6))
@@ -192,16 +208,44 @@ async function pollLiveRun(live, timelineMessage) {
   }
 }
 
-function appendAgentResult(result, prefix = '') {
+async function streamLiveRun(live, timelineMessage, draftMessage) {
+  isRunning.value = true
+  activeLiveRun.value = live
+  pollController?.abort()
+  pollController = new AbortController()
+  let after = Number(live.after ?? 0)
+  try {
+    const terminal = await streamAgentSkillEvents(live.skill_run_id, after, {
+      signal: pollController.signal,
+      onRuntime(event) {
+        after = applyLivePayload(live, timelineMessage, draftMessage, {
+          status: 'running', events: [event], next_sequence: event.sequence,
+        })
+      },
+    })
+    timelineMessage.status = terminal.status
+    timelineMessage.metrics = terminal.metrics ?? timelineMessage.metrics
+    activeLiveRun.value = { ...live, after: terminal.next_sequence ?? after, status: terminal.status }
+    return terminal.result
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
+    if (draftMessage) draftMessage.phase = '实时连接已恢复，正在同步遗漏事件…'
+    return pollLiveRun({ ...live, after }, timelineMessage, draftMessage, after)
+  }
+}
+
+function appendAgentResult(result, prefix = '', draftMessage = null) {
   responseState.value = result
   rememberRuntime(result)
   liveLogs.value = [...(result.logs ?? []), ...liveLogs.value].slice(0, 18)
-  messages.value.push({
+  const completedMessage = {
     id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
     skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity, execution_state: item.execution_state, executor_selection_kind: item.executor_selection_kind })) ?? [],
     skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
-    runId: result.run_id, llm: result.llm, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-  })
+    runId: result.run_id, llm: result.llm, streaming: false, phase: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  }
+  if (draftMessage) Object.assign(draftMessage, completedMessage, { id: draftMessage.id })
+  else messages.value.push(completedMessage)
   if (result.snapshot) {
     latestRun.value = result.snapshot
     selectedRun.value = result.snapshot
@@ -211,13 +255,20 @@ function appendAgentResult(result, prefix = '') {
 
 async function executeLiveMessage(userText, runId, prefix = '') {
   const started = await startAgentLiveRun(userText, runId, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [], llmRequestConfig())
-  const timelineMessage = { id: Date.now() + 1, role: 'runtime', events: [], draft: '', status: 'running', metrics: {}, skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
-  messages.value.push(timelineMessage)
-  const result = await pollLiveRun(started, timelineMessage)
-  appendAgentResult(result, prefix)
-  activeLiveRun.value = null
-  liveProgress.value = null
-  return result
+  const timelineMessage = { id: Date.now() + 1, role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+  const draftMessage = { id: Date.now() + 2, role: 'agent', text: '', streaming: true, phase: '正在连接 Agent 实时事件流…', skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+  messages.value.push(timelineMessage, draftMessage)
+  try {
+    const result = await streamLiveRun(started, timelineMessage, draftMessage)
+    appendAgentResult(result, prefix, draftMessage)
+    activeLiveRun.value = null
+    liveProgress.value = null
+    return result
+  } catch (error) {
+    Object.assign(draftMessage, { text: `本次请求失败：${error.message}`, phase: '', streaming: false, error: true })
+    error.renderedInConversation = true
+    throw error
+  }
 }
 
 async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
@@ -262,7 +313,7 @@ async function runWorkflow() {
     emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : 'Agent 执行完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key}` })
   } catch (error) {
     activeLiveRun.value = null
-    messages.value.push({ id: Date.now() + 2, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    if (!error.renderedInConversation) messages.value.push({ id: Date.now() + 2, role: 'agent', text: `本次请求失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'Agent 请求失败', message: error.message })
   } finally {
     isRunning.value = false
@@ -320,7 +371,7 @@ async function handleCsv(event) {
     const detectedScenario = snapshot.results?.standardization?.scenario?.scenario_id
     if (detectedScenario) emit('scene-detected', { scenarioId: detectedScenario, runId: snapshot.run_id, path: '/digital-twin/' })
   } catch (error) {
-    messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    if (!error.renderedInConversation) messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'CSV分析失败', message: error.message })
   } finally {
     uploading.value = false
@@ -349,11 +400,13 @@ onMounted(async () => {
     }).catch(() => { llmProvider.value = 'evidence' }),
   ])
   if (activeLiveRun.value?.skill_run_id && activeLiveRun.value.status === 'running') {
-    const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], draft: '', status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
+    const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
+    const draftMessage = messages.value.find((message) => message.role === 'agent' && message.streaming && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now() + 1, role: 'agent', text: '', streaming: true, phase: '正在恢复 Agent 实时事件流…', skillRunId: activeLiveRun.value.skill_run_id }
     if (!messages.value.includes(timelineMessage)) messages.value.push(timelineMessage)
+    if (!messages.value.includes(draftMessage)) messages.value.push(draftMessage)
     try {
-      const result = await pollLiveRun(activeLiveRun.value, timelineMessage)
-      appendAgentResult(result)
+      const result = await streamLiveRun(activeLiveRun.value, timelineMessage, draftMessage)
+      appendAgentResult(result, '', draftMessage)
       activeLiveRun.value = null
     } catch (error) {
       if (error.name !== 'AbortError') messages.value.push({ id: Date.now() + 1, role: 'agent', text: `恢复实时任务失败：${error.message}`, error: true })
@@ -369,7 +422,7 @@ onMounted(async () => {
   }
   scrollToLatest()
 })
-onBeforeUnmount(() => { disposed = true; pollController?.abort() })
+onBeforeUnmount(() => { disposed = true; pollController?.abort(); if (scrollFrame) window.cancelAnimationFrame(scrollFrame) })
 
 function switchRun(event) {
   const run = recentRuns.value.find((item) => item.run_id === event.target.value)
@@ -415,10 +468,11 @@ function switchRun(event) {
 
         <div ref="chatThread" class="chat-thread">
           <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
-            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" :draft="message.draft" />
+            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" />
             <div v-if="message.role === 'agent'" class="message-avatar"><AppIcon name="spark" :size="17" /></div>
             <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
-              <p>{{ message.text }}</p>
+              <span v-if="message.streaming" class="streaming-phase"><AppIcon name="loop" class="spinning" :size="11" />{{ message.phase }}</span>
+              <p>{{ message.text || (message.streaming ? '正在读取数据证据与 Skill 执行结果…' : '') }}<i v-if="message.streaming" class="streaming-cursor"></i></p>
               <span v-if="message.llm" class="message-model"><AppIcon name="spark" :size="11" />{{ message.llm.used ? `${message.llm.provider} · ${message.llm.model}` : message.llm.fallback ? '大模型不可用 · Evidence 回退' : 'Evidence Agent' }}</span>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">
@@ -529,6 +583,7 @@ function switchRun(event) {
 .agent-delivery-bar .report-link { display: inline-flex; align-items: center; gap: 4px; border-color: #93c5fd; color: #1d4ed8; background: #eff6ff; }
 .message-error { border-color: #fecaca; background: #fff7f7; }
 .message-model { display: inline-flex!important; align-items: center; gap: 3px; margin-top: 7px!important; padding: 3px 6px; border: 1px solid #dbeafe; border-radius: 999px; color: #1d4ed8!important; background: #eff6ff; font-size: 7px!important; }
+.streaming-phase { display:inline-flex!important;align-items:center;gap:4px;margin-bottom:7px!important;color:#2563eb!important;font-size:8px!important;font-weight:650 }.streaming-cursor{display:inline-block;width:5px;height:12px;margin-left:3px;vertical-align:-1px;background:#2563eb;animation:stream-blink .8s steps(1) infinite}@keyframes stream-blink{50%{opacity:0}}
 .model-selector { display: grid; grid-template-columns: 150px 170px minmax(220px, 1fr); gap: 8px; align-items: end; margin: 10px 16px; padding: 10px; border: 1px solid #dbe7f5; border-radius: 10px; background: #f8fbff; }
 .model-selector label { display: grid; gap: 4px; color: #64748b; font-size: 8px; }
 .model-selector select, .model-selector input { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid #cbd8e8; border-radius: 7px; outline: 0; color: #243b5a; background: #fff; font: inherit; font-size: 9px; }

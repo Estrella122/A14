@@ -12,8 +12,8 @@ const nodes = computed(() => dagNodes(props.runtime))
 const artifacts = computed(() => artifactChain(props.runtime))
 const loading = computed(() => props.runtime?.skill_loading ?? {})
 const capabilityTone = { selected: 'success', deferred: 'warning', blocked: 'warning', skipped: 'neutral' }
-const capabilityText = { selected: '已选择', deferred: '等待上游依赖', blocked: '前置条件不足', skipped: '未选择' }
-const readinessText = { executable: '可执行', deferred: '等待上游依赖', blocked: '前置条件不足' }
+const capabilityText = { selected: '已选择', deferred: '等待上游产物', blocked: '执行受阻', skipped: '本轮未选择' }
+const readinessText = { executable: '可执行', deferred: '等待上游产物', blocked: '执行前置未满足' }
 
 function score(value) { return Number(value ?? 0).toFixed(3) }
 function metric(value, kind) {

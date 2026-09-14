@@ -374,8 +374,12 @@ def _summary(snapshot: dict[str, Any], handler: str) -> tuple[dict, list, list, 
     related = [key for key in artifact_keys.get(handler, []) if key in artifacts]
     evidence = [f"pipeline:{snapshot.get('run_id')}", f"results:{handler}"]
     required_result = {"selection": "cleaning", "lag": "modeling", "collinearity": "modeling",
-                       "asset": "standardization", "audit": "audit", "experiment": "experiment"}.get(handler, handler)
-    warnings = [] if results.get(required_result) else ["当前任务没有此能力的可核验结果"]
+                       "asset": "standardization", "experiment": "experiment"}.get(handler, handler)
+    if handler == "audit":
+        evidence = [f"pipeline:{snapshot.get('run_id')}", *[f"artifact:{key}" for key in sorted(artifacts)]]
+        warnings = [] if snapshot.get("run_id") and snapshot.get("stages") else ["当前任务尚无可审计的运行轨迹"]
+    else:
+        warnings = [] if results.get(required_result) else ["当前任务没有此能力的可核验结果"]
     return metrics, related, evidence, warnings
 
 
@@ -563,8 +567,9 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
         if skill.handler in {"intent", "entity", "parameter", "matcher", "planner"}:
             activity = "planned"
         if skill.handler == "supervisor" and core_result is None:
+            status, activity = "skipped", "skipped"
             metrics = {"pipeline_status": snapshot.get("status"), "automatic_replanning": False}
-            warnings = ["当前为分析模式，未触发执行监督。"]
+            warnings = ["本轮没有收到重试或重规划指令，执行监督未触发。"]
         checks = {
             "signal_noise_ratio_estimator": bool(snapshot.get("results", {}).get("cleaning", {}).get("snr")),
             "high_snr_dynamic_segment_extractor": bool(snapshot.get("results", {}).get("cleaning", {}).get("snr")),
@@ -576,7 +581,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
             "experiment_tracker_comparator": bool(core_result),
             "execution_supervisor_replanner": bool(core_result),
         }
-        if core_result is None and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
+        if core_result is None and status != "skipped" and activity != "executed" and (not checks.get(skill.id, True) or (warnings and not artifacts and skill.handler not in {"intent", "entity", "parameter", "matcher", "planner"})):
             status, activity = "unavailable", "unavailable"
             warnings = warnings or ["此能力未执行或缺少独立产物，不能标记完成"]
         algorithm_invoked = bool(

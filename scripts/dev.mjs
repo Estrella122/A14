@@ -9,8 +9,11 @@ const npmCommand = isWindows ? 'npm.cmd' : 'npm'
 const defaultPython = isWindows ? join('.venv', 'Scripts', 'python.exe') : join('.venv', 'bin', 'python')
 const python = process.env.PROCESSPILOT_PYTHON || defaultPython
 const host = process.env.PROCESSPILOT_HOST || '127.0.0.1'
+const pythonIsExplicitPath = python.includes('/') || python.includes('\\')
 
-if (!existsSync(python)) {
+// CI commonly supplies "python" as a PATH-resolved command. existsSync only
+// applies to filesystem paths and incorrectly rejected that valid setup.
+if (pythonIsExplicitPath && !existsSync(python)) {
   console.error('[ProcessPilot] Python运行环境不存在，请先执行 npm run setup。')
   process.exit(1)
 }

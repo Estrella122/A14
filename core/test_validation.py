@@ -145,6 +145,20 @@ class CausalModelingTests(SimpleTestCase):
         self.assertFalse(dynamic_gate['passed'])
         self.assertIn('free_simulation_r2=-0.2', dynamic_gate['evidence'])
 
+    def test_diverged_simulation_with_null_metrics_is_reviewed_not_crashed(self):
+        model = {'metrics': {'test': {'r2': .88}}, 'config': {'family': 'ARX'},
+                 'diagnostics': {'stable_ar_poles': True, 'test': {
+                     'rmse_improvement_over_persistence_pct': 2,
+                     'multi_step': {'metrics': {'rmse': 1}, 'persistence': {'rmse': 2}},
+                     'free_simulation': {'diverged': True, 'metrics': None}}}}
+        with TemporaryDirectory() as tmp:
+            result = pipeline._review({'data_decision': {'status': 'ready'}}, {'overall_score': 87}, model, Path(tmp))
+
+        self.assertFalse(result['passed'])
+        self.assertTrue(any('自由仿真' in item for item in result['blockers']))
+        dynamic_gate = next(gate for gate in result['deployment_readiness']['offline_model']['gates'] if gate['id'] == 'dynamic_validity')
+        self.assertIn('free_simulation_r2=None, diverged=True', dynamic_gate['evidence'])
+
     def test_explicit_unsupported_parameter_does_not_silently_rerun(self):
         from core.services.agent_chat import chat
         snapshot = {'run_id':'example', 'results':{'standardization':{'scenario':{'scenario_name':'钢铁高炉铁水质量预测'}}}}

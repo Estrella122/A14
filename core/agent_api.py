@@ -1,8 +1,9 @@
 import json
+import time
 from datetime import datetime
 from uuid import uuid4
 
-from django.http import JsonResponse
+from django.http import JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from .services.agent_chat import chat
@@ -123,6 +124,49 @@ def agent_skill_run_events(request, skill_run_id):
 
 
 @require_GET
+def agent_skill_run_stream(request, skill_run_id):
+    """Stream auditable runtime events and answer deltas over server-sent events."""
+    store = get_runtime_event_store(skill_run_id)
+    if not store:
+        return JsonResponse({"ok": False, "message": "Skill 运行记录不存在。"}, status=404, json_dumps_params={"ensure_ascii": False})
+    try:
+        after = max(0, int(request.GET.get("after", 0)))
+    except ValueError:
+        return JsonResponse({"ok": False, "message": "after 必须是整数。"}, status=422, json_dumps_params={"ensure_ascii": False})
+
+    def encode(event_name, payload):
+        return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+
+    def event_stream():
+        cursor = after
+        yield "retry: 1000\n: ProcessPilot runtime stream connected\n\n"
+        while True:
+            snapshot = store.snapshot(after=cursor, limit=100)
+            for event in snapshot.get("events", []):
+                cursor = max(cursor, int(event.get("sequence", cursor)))
+                yield encode("runtime", event)
+            if snapshot.get("has_more"):
+                continue
+            status = snapshot.get("status")
+            if status in {"completed", "failed"}:
+                yield encode("complete" if status == "completed" else "failed", {
+                    "status": status,
+                    "result": snapshot.get("result"),
+                    "error": snapshot.get("error"),
+                    "metrics": snapshot.get("metrics", {}),
+                    "next_sequence": cursor,
+                })
+                return
+            yield ": keep-alive\n\n"
+            time.sleep(0.2)
+
+    response = StreamingHttpResponse(event_stream(), content_type="text/event-stream; charset=utf-8")
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+@require_GET
 def agent_trace(request, run_id):
     """Expose auditable execution decisions without revealing private model reasoning tokens."""
     snapshot = get_run(run_id)
@@ -137,16 +181,29 @@ def agent_trace(request, run_id):
     stages = snapshot.get("stages", [])
     stage_duration = {stage.get("key"): _duration_ms(stage.get("started_at"), stage.get("finished_at")) for stage in stages}
     total_duration = _duration_ms(snapshot.get("created_at"), snapshot.get("updated_at"))
-    status = "failed" if snapshot.get("status") == "failed" else "success"
+    stage_states = {stage.get("key"): stage.get("status") for stage in stages}
+
+    def evidence_status(stage_keys=(), *, available=False, terminal=False):
+        states = [stage_states.get(key) for key in stage_keys]
+        if any(value == "failed" for value in states):
+            return "failed"
+        if available or any(value in {"completed", "success"} for value in states):
+            return "success"
+        if any(value in {"running", "executing"} for value in states):
+            return "running"
+        if terminal and snapshot.get("status") == "failed":
+            return "failed"
+        return "waiting"
+
     nodes = [
         {"id": "instruction", "name": "用户指令", "kind": "input", "duration_ms": 0, "status": "success", "input": {"message": snapshot.get("instruction") or "上传 CSV 并执行全流程"}, "output": {"run_id": run_id, "dataset": snapshot.get("original_name")}},
-        {"id": "intent", "name": "意图解析", "kind": "reason", "duration_ms": stage_duration.get("standardization", 0), "status": status, "input": {"scenario_request": snapshot.get("scenario_request", "auto")}, "output": {"scenario": standard.get("scenario", {}).get("scenario_name"), "data_decision": standard.get("data_decision", {}).get("status")}},
-        {"id": "tools", "name": "工具选择", "kind": "tool", "duration_ms": 0, "status": status, "input": {"available_stages": len(stages)}, "output": {"tools": [stage.get("key") for stage in stages]}},
-        {"id": "parameters", "name": "参数生成", "kind": "parameter", "duration_ms": 0, "status": status, "input": {"objective": "R²、误差与数据覆盖率综合评价"}, "output": {"resample_rule": cleaning.get("config", {}).get("resample_rule"), "max_lag": modeling.get("config", {}).get("max_lag"), "best_parameters": optimization.get("best_parameters", {})}},
-        {"id": "execution", "name": "算法调用", "kind": "execution", "duration_ms": sum(stage_duration.values()), "status": status, "input": {"rows": cleaning.get("cleaned_row_count"), "variables": len(standard.get("mapping", {}).get("mappings", []))}, "output": {"selected_segments": cleaning.get("selected_segment_count"), "modeling_rows": cleaning.get("modeling_row_count"), "features": len(modeling.get("selected_inputs", []))}},
-        {"id": "evaluation", "name": "结果评估", "kind": "evaluation", "duration_ms": stage_duration.get("modeling", 0), "status": status, "input": {"metrics": ["R²", "RMSE", "MAE"]}, "output": {**modeling.get("metrics", {}).get("test", {}), "gate": "passed" if review.get("passed") else "review"}},
-        {"id": "decision", "name": "下一步决策", "kind": "decision", "duration_ms": stage_duration.get("optimization", 0), "status": status, "input": {"rounds": len(optimization.get("iterations", [])), "best_round": optimization.get("best_round")}, "output": {"action": "deliver" if review.get("passed") else "review", "reason": optimization.get("stopping", {}).get("stop_reason") or review.get("conclusion")}},
-        {"id": "output", "name": "最终输出", "kind": "output", "duration_ms": stage_duration.get("report", 0), "status": status, "input": {"review": review.get("conclusion")}, "output": {"artifacts": list(snapshot.get("artifacts", {}).keys()), "status": snapshot.get("status")}},
+        {"id": "intent", "name": "意图解析", "kind": "reason", "duration_ms": stage_duration.get("standardization", 0), "status": evidence_status(("standardization",), available=bool(standard)), "input": {"scenario_request": snapshot.get("scenario_request", "auto")}, "output": {"scenario": standard.get("scenario", {}).get("scenario_name"), "data_decision": standard.get("data_decision", {}).get("status")}},
+        {"id": "tools", "name": "工具选择", "kind": "tool", "duration_ms": 0, "status": "success" if stages else "waiting", "input": {"available_stages": len(stages)}, "output": {"tools": [stage.get("key") for stage in stages]}},
+        {"id": "parameters", "name": "参数生成", "kind": "parameter", "duration_ms": 0, "status": "success" if cleaning.get("config") or modeling.get("config") or optimization.get("best_parameters") else evidence_status(("cleaning", "modeling", "optimization")), "input": {"objective": "R²、误差与数据覆盖率综合评价"}, "output": {"resample_rule": cleaning.get("config", {}).get("resample_rule"), "max_lag": modeling.get("config", {}).get("max_lag"), "best_parameters": optimization.get("best_parameters", {})}},
+        {"id": "execution", "name": "算法调用", "kind": "execution", "duration_ms": sum(stage_duration.values()), "status": evidence_status(("cleaning", "selection", "modeling", "optimization"), available=bool(cleaning or modeling or optimization)), "input": {"rows": cleaning.get("cleaned_row_count"), "variables": len(standard.get("mapping", {}).get("mappings", []))}, "output": {"selected_segments": cleaning.get("selected_segment_count"), "modeling_rows": cleaning.get("modeling_row_count"), "features": len(modeling.get("selected_inputs", []))}},
+        {"id": "evaluation", "name": "结果评估", "kind": "evaluation", "duration_ms": stage_duration.get("modeling", 0), "status": evidence_status(("modeling", "review"), available=bool(modeling.get("metrics") or review)), "input": {"metrics": ["R²", "RMSE", "MAE"]}, "output": {**modeling.get("metrics", {}).get("test", {}), "gate": "passed" if review.get("passed") else "review"}},
+        {"id": "decision", "name": "下一步决策", "kind": "decision", "duration_ms": stage_duration.get("optimization", 0), "status": evidence_status(("optimization", "review"), available=bool(optimization.get("iterations") or review)), "input": {"rounds": len(optimization.get("iterations", [])), "best_round": optimization.get("best_round")}, "output": {"action": "deliver" if review.get("passed") else "review", "reason": optimization.get("stopping", {}).get("stop_reason") or review.get("conclusion")}},
+        {"id": "output", "name": "最终输出", "kind": "output", "duration_ms": stage_duration.get("report", 0), "status": evidence_status(("report",), available=snapshot.get("status") == "completed", terminal=True), "input": {"review": review.get("conclusion")}, "output": {"artifacts": list(snapshot.get("artifacts", {}).keys()), "status": snapshot.get("status")}},
     ]
     payload = {"source": "api", "run_id": run_id, "total_duration_ms": total_duration, "nodes": nodes, "toolchain": ["数据清洗", "动态筛选", "时滞解耦", "系统辨识", "指标评估"]}
     return JsonResponse({"ok": True, "data": payload}, json_dumps_params={"ensure_ascii": False})

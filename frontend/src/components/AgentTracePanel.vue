@@ -60,7 +60,7 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
 <template>
   <section class="panel agent-trace-panel" :aria-busy="loading">
     <div class="section-heading compact">
-      <div><span class="section-kicker">Reasoning & Tool Trace</span><h2>Agent 推理链路</h2></div>
+      <div><span class="section-kicker">Decision Summary & Tool Trace</span><h2>Agent 决策摘要与工具轨迹</h2></div>
       <div class="trace-heading-actions">
         <StatusPill v-if="error" tone="warning">读取失败</StatusPill>
         <StatusPill v-else :tone="loading ? 'neutral' : 'success'" dot>{{ loading ? '读取中' : traceSource }}</StatusPill>
@@ -87,7 +87,7 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
         </div>
       </article>
     </div>
-    <div v-else class="empty-state">{{ loading ? '正在读取 Agent 推理轨迹…' : runId ? '当前任务暂无可核验的推理节点。' : '请先上传并运行 CSV，之后这里展示后端真实轨迹。' }}</div>
+    <div v-else class="empty-state">{{ loading ? '正在读取 Agent 决策轨迹…' : runId ? '当前任务暂无可核验的决策节点。' : '请先上传并运行 CSV，之后这里展示后端真实轨迹。' }}</div>
 
     <div class="trace-toolchain">
       <div><span class="section-kicker">Tool Call Chain</span><strong>底层工具调用链</strong></div>
@@ -107,7 +107,8 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
 .trace-node:not(:last-child)::before { content: ''; position: absolute; top: 30px; bottom: -5px; left: 16px; width: 2px; background: #dbe5f1; }
 .trace-index { z-index: 1; display: grid; place-items: center; width: 33px; height: 33px; color: #fff; border: 4px solid #fff; border-radius: 50%; background: #10b981; box-shadow: 0 0 0 1px #b7e4d2; }
 .trace-node.is-failed .trace-index { background: #dc2626; box-shadow: 0 0 0 1px #fecaca; }
-.trace-node.is-skipped .trace-index { color: #64748b; background: #e2e8f0; box-shadow: 0 0 0 1px #cbd5e1; }
+.trace-node.is-skipped .trace-index, .trace-node.is-waiting .trace-index { color: #64748b; background: #e2e8f0; box-shadow: 0 0 0 1px #cbd5e1; }
+.trace-node.is-partial .trace-index, .trace-node.is-blocked .trace-index { color: #92400e; background: #fbbf24; box-shadow: 0 0 0 1px #fde68a; }
 .trace-node.is-running .trace-index { background: #2563eb; animation: trace-pulse 1.4s ease-in-out infinite; }
 .trace-node > button { display: grid; grid-template-columns: 140px minmax(170px, 1fr) minmax(170px, 1fr) 70px 20px; gap: 12px; align-items: center; width: 100%; min-height: 58px; margin: 0 0 8px 8px; padding: 9px 12px; color: var(--ink-2); text-align: left; border: 1px solid var(--line); border-radius: 9px; background: #fbfdff; transition: 160ms ease; }
 .trace-node > button:hover { border-color: #a8c6f3; background: #f5f9ff; }

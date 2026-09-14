@@ -848,9 +848,9 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
     residual = test_diag.get("residual", {})
     acf = residual.get("acf_max_abs")
     acf_bound = residual.get("heuristic_95pct_bound")
-    multi_rmse = multi.get("metrics", {}).get("rmse")
-    multi_baseline_rmse = multi.get("persistence", {}).get("rmse")
-    simulation_r2 = simulation.get("metrics", {}).get("r2")
+    multi_rmse = (multi.get("metrics") or {}).get("rmse")
+    multi_baseline_rmse = (multi.get("persistence") or {}).get("rmse")
+    simulation_r2 = (simulation.get("metrics") or {}).get("r2")
     dynamic_valid = (
         diagnostics.get("stable_ar_poles") is True
         and multi_rmse is not None

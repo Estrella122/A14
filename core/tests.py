@@ -428,6 +428,66 @@ class AgentChatTests(SimpleTestCase):
         self.assertEqual(len(payload['nodes']), 8)
         self.assertEqual(payload['nodes'][5]['output']['r2'], 0.76)
 
+    @patch('core.agent_api.get_run')
+    def test_agent_trace_does_not_copy_terminal_failure_to_completed_nodes(self, mocked_get_run):
+        snapshot = self.snapshot()
+        snapshot.update({
+            'status': 'failed',
+            'created_at': '2026-09-07T10:00:00+08:00',
+            'updated_at': '2026-09-07T10:00:03+08:00',
+            'stages': [
+                {'key': 'standardization', 'status': 'completed'},
+                {'key': 'cleaning', 'status': 'completed'},
+                {'key': 'modeling', 'status': 'failed'},
+                {'key': 'report', 'status': 'failed'},
+            ],
+        })
+        mocked_get_run.return_value = snapshot
+
+        nodes = self.client.get('/api/agent/runs/run_test/trace/').json()['data']['nodes']
+
+        states = {node['id']: node['status'] for node in nodes}
+        self.assertEqual(states['instruction'], 'success')
+        self.assertEqual(states['intent'], 'success')
+        self.assertEqual(states['tools'], 'success')
+        self.assertEqual(states['parameters'], 'success')
+        self.assertEqual(states['execution'], 'failed')
+        self.assertEqual(states['output'], 'failed')
+
+    @patch('core.agent_api.get_runtime_event_store')
+    def test_agent_runtime_stream_emits_runtime_and_terminal_events(self, mocked_store):
+        class FinishedStore:
+            def snapshot(self, after=0, limit=100):
+                return {
+                    'status': 'completed',
+                    'events': [{'sequence': 1, 'event_type': 'llm_response_delta', 'status': 'streaming', 'metadata': {'delta': '实时'}}] if after < 1 else [],
+                    'has_more': False,
+                    'result': {'answer': '实时回答'},
+                    'error': None,
+                    'metrics': {'event_count': 1},
+                }
+
+        mocked_store.return_value = FinishedStore()
+        response = self.client.get('/api/agent/skill-runs/skillrun_stream/stream/')
+        body = b''.join(response.streaming_content).decode('utf-8')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/event-stream; charset=utf-8')
+        self.assertIn('event: runtime', body)
+        self.assertIn('"delta": "实时"', body)
+        self.assertIn('event: complete', body)
+
+    def test_audit_skill_reads_existing_provenance_instead_of_reporting_unavailable(self):
+        snapshot = self.snapshot()
+        snapshot['stages'] = [{'key': 'standardization', 'status': 'completed'}]
+        with patch('core.services.agent_chat.get_run', return_value=snapshot):
+            result = chat('分析当前任务的数据质量')
+
+        audit = next(item for item in result['skill_executions'] if item['skill_id'] == 'evidence_audit_reproducer')
+        self.assertEqual(audit['status'], 'success')
+        self.assertEqual(audit['execution_state'], 'evidence_only')
+        self.assertTrue(any(item.startswith('pipeline:') for item in audit['evidence']))
+
 
 class LivePipelineApiTests(SimpleTestCase):
     @patch('core.pipeline_api.list_runs', return_value=[{'score': float('nan')}])

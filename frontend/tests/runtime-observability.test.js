@@ -45,11 +45,11 @@ test('case D keeps optimization partial and exposes feasibility metrics', () => 
   assert.deepEqual(executorHighlights(result).map((item) => item[0]), ['候选数', 'Validation R²', 'Test R²', '训练覆盖率', '最低覆盖率'])
 })
 
-test('case E separates missing contracts from artifact readiness', () => {
+test('case E keeps unselected missing-contract candidates neutral', () => {
   const card = capabilityCards({ capabilities: [{ candidate: 'OPTIMIZATION', status: 'blocked', selected: false,
     artifact_readiness: { MODEL_ARTIFACT: true }, artifact_readiness_score: 1,
     missing_artifacts: [], missing_contract_fields: ['objective'], reason: '缺少显式执行合同' }] })[0]
-  assert.equal(card.ui_status, 'blocked')
+  assert.equal(card.ui_status, 'skipped')
   assert.deepEqual(card.missing_artifacts, [])
   assert.deepEqual(card.missing_contract_fields, ['objective'])
 })
