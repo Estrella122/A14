@@ -11,7 +11,8 @@ class ApiAuthenticationMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        protected = request.path.startswith("/api/") and request.path != "/api/security/session/"
+        public_endpoints = {"/api/security/session/", "/api/health/"}
+        protected = request.path.startswith("/api/") and request.path not in public_endpoints
         if settings.PROCESSPILOT_REQUIRE_AUTH and protected and not request.user.is_authenticated:
             return JsonResponse(
                 {"ok": False, "message": "登录已失效，请通过管理入口登录后重试。", "code": "authentication_required"},

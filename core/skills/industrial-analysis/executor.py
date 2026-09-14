@@ -24,6 +24,17 @@ def _confidence(context: dict[str, Any], sample_count: int) -> float:
     return round(max(0.2, min(0.98, base * min(1.0, sample_count / 100))), 3)
 
 
+def _matching_columns(columns, *terms: str) -> list[str]:
+    return [str(column) for column in columns if any(term in str(column).lower() for term in terms)]
+
+
+def _role_columns(context: dict[str, Any], role_names: set[str]) -> list[str]:
+    roles = context.get("variable_roles") or {}
+    if isinstance(roles, dict):
+        return [str(name) for role in role_names for name in roles.get(role, [])]
+    return []
+
+
 def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[str, Any], policy: dict[str, Any], shared: dict[str, Any] | None = None) -> dict[str, Any]:
     started = perf_counter()
     shared = shared if shared is not None else {}
@@ -99,10 +110,70 @@ def execute_capability(capability_id: str, frame: pd.DataFrame, context: dict[st
         findings.append(_conclusion(f"最强线性相关变量对为 {pairs[0][0] + '/' + pairs[0][1] if pairs else '无'}。", confidence, evidence + ([f"abs_r:{pairs[0][2]:.6g}"] if pairs else [])))
         if policy.get("correlation_is_not_causation", True):
             limitations.append(_conclusion("相关关系不能单独证明因果。", "high", ["evidence-rule:correlation-is-not-causation"]))
+    elif capability_id == "ENERGY_ANALYSIS":
+        energy_fields = _matching_columns(numeric.columns, "energy", "power", "fuel", "gas", "coal", "steam", "electric", "能耗", "煤", "气", "电", "蒸汽")
+        totals = {name: float(numeric[name].dropna().sum()) for name in energy_fields}
+        variability = {name: float(numeric[name].dropna().std(ddof=0)) for name in energy_fields}
+        metrics = {"method": "energy_field_inventory_and_variability", "energy_fields": energy_fields, "totals": totals, "standard_deviation": variability}
+        if energy_fields:
+            dominant = max(variability, key=variability.get)
+            findings.append(_conclusion(f"能耗相关字段中波动最大的为 {dominant}。", confidence, evidence + [f"std:{variability[dominant]:.6g}"]))
+        else:
+            limitations.append(_conclusion("字段字典未提供可确认的能源计量字段，不能计算真实能耗。", "high", evidence))
+    elif capability_id == "EQUIPMENT_HEALTH":
+        z = ((numeric - numeric.mean()) / numeric.std(ddof=0).replace(0, np.nan)).abs()
+        anomaly_rate = (z > float(policy.get("anomaly_zscore_threshold", 3.0))).mean().fillna(0)
+        cv = (numeric.std(ddof=0) / numeric.mean().abs().replace(0, np.nan)).abs().fillna(0)
+        risk = (anomaly_rate.clip(upper=1) * .65 + cv.clip(upper=1) * .35).sort_values(ascending=False)
+        metrics = {"method": "statistical_health_indicator", "risk_score": {str(k): float(v) for k, v in risk.items()}, "not_a_fault_diagnosis": True}
+        if len(risk):
+            findings.append(_conclusion(f"统计健康风险最高的测点为 {risk.index[0]}，需结合检修与报警记录复核。", confidence, evidence + [f"risk:{risk.iloc[0]:.6g}"]))
+        limitations.append(_conclusion("健康分仅由过程数据波动与异常率构成，不等同于设备故障诊断。", "high", ["evidence-rule:health-is-not-diagnosis"]))
+    elif capability_id == "QUALITY_ANALYSIS":
+        quality_fields = [name for name in _role_columns(context, {"quality", "controlled"}) if name in numeric]
+        quality_fields += [name for name in _matching_columns(numeric.columns, "quality", "moisture", "content", "purity", "质量", "含量", "水分") if name not in quality_fields]
+        stats = {name: {"mean": float(numeric[name].mean()), "std": float(numeric[name].std(ddof=0)), "missing_rate": float(numeric[name].isna().mean())} for name in quality_fields}
+        metrics = {"method": "quality_variable_statistics", "quality_fields": quality_fields, "statistics": stats}
+        if quality_fields:
+            worst = max(quality_fields, key=lambda name: stats[name]["std"])
+            findings.append(_conclusion(f"质量变量中绝对波动最大的为 {worst}。", confidence, evidence + [f"std:{stats[worst]['std']:.6g}"]))
+        else:
+            limitations.append(_conclusion("未识别到质量变量，需在场景注册字段中明确 quality/controlled 角色。", "high", evidence))
+    elif capability_id == "OPERATING_STATE":
+        scaled = (numeric - numeric.median()) / numeric.std(ddof=0).replace(0, np.nan)
+        activity = scaled.diff().abs().median(axis=1).fillna(0)
+        low, high = activity.quantile([.5, .85]) if len(activity) else (0.0, 0.0)
+        labels = np.where(activity > high, "transient", np.where(activity > low, "adjusting", "steady"))
+        counts = pd.Series(labels).value_counts().to_dict()
+        metrics = {"method": "robust_multivariate_activity_quantiles", "thresholds": {"steady": float(low), "transient": float(high)}, "state_counts": {str(k): int(v) for k, v in counts.items()}}
+        findings.append(_conclusion(f"识别到稳态 {counts.get('steady', 0)}、调节态 {counts.get('adjusting', 0)}、瞬态 {counts.get('transient', 0)} 个采样点。", confidence, evidence))
+    elif capability_id == "BOTTLENECK_ANALYSIS":
+        missing = numeric.isna().mean()
+        variability = (numeric.std(ddof=0) / numeric.mean().abs().replace(0, np.nan)).abs().fillna(0).clip(upper=5) / 5
+        score = (missing * .45 + variability * .55).sort_values(ascending=False)
+        metrics = {"method": "data_constraint_bottleneck_ranking", "ranking": [{"field": str(k), "score": float(v)} for k, v in score.head(8).items()]}
+        if len(score):
+            findings.append(_conclusion(f"当前数据约束瓶颈最高的字段为 {score.index[0]}。", confidence, evidence + [f"score:{score.iloc[0]:.6g}"]))
+        limitations.append(_conclusion("该排名反映数据质量和波动约束，不直接代表装置产能瓶颈。", "high", ["scope:data-bottleneck-only"]))
+    elif capability_id == "ROOT_CAUSE_CANDIDATES":
+        usable = numeric.loc[:, numeric.nunique(dropna=True) > 1]
+        target_candidates = [name for name in _role_columns(context, {"quality", "controlled"}) if name in usable]
+        target = target_candidates[0] if target_candidates else (str(usable.columns[-1]) if len(usable.columns) else None)
+        correlations = usable.corr()[target].drop(target).abs().sort_values(ascending=False) if target else pd.Series(dtype=float)
+        candidates = [{"field": str(name), "abs_correlation": float(value)} for name, value in correlations.head(8).items()]
+        metrics = {"method": "target_correlation_candidate_screen", "target": target, "candidates": candidates, "causal_claim": False}
+        if candidates:
+            findings.append(_conclusion(f"与目标 {target} 统计关联最强的候选因素为 {candidates[0]['field']}。", confidence, evidence + [f"abs_r:{candidates[0]['abs_correlation']:.6g}"]))
+        limitations.append(_conclusion("根因候选仅用于缩小排查范围，必须结合时序、机理或干预证据验证因果。", "high", ["evidence-rule:root-cause-requires-causal-evidence"]))
     else:
-        metrics = {"context_available": bool(context)}
-        facts.append(_conclusion(f"{capability_id} 已接收标准化数据和上下文。", confidence, evidence))
-        limitations.append(_conclusion("该 capability 当前仅提供上下文级结论，尚无专用统计实现。", "high", ["executor:generic-context-analysis"]))
+        return {
+            "status": "blocked", "capability_id": capability_id,
+            "outputs": {"facts": [], "findings": [], "hypotheses": [], "limitations": []},
+            "metrics": {}, "artifacts": [], "evidence": evidence,
+            "warnings": ["unsupported_capability"], "limitations": [],
+            "execution_trace": [{"operation": "reject_unsupported_capability"}],
+            "duration_ms": round((perf_counter() - started) * 1000, 3),
+        }
 
     return {
         "status": "success", "capability_id": capability_id,

@@ -33,6 +33,21 @@ export function useLatestPipelineRun(expectedScenarioId = null) {
     }
   }
 
+  function scheduleRefresh() {
+    window.clearTimeout(refreshTimer)
+    const running = ['queued', 'running'].includes(rawLatestRun.value?.status)
+    const delay = document.hidden ? 30_000 : running ? 2_000 : 15_000
+    refreshTimer = window.setTimeout(async () => {
+      await refreshPipeline()
+      scheduleRefresh()
+    }, delay)
+  }
+
+  function handleVisibility() {
+    if (!document.hidden) refreshPipeline()
+    scheduleRefresh()
+  }
+
   function handleUpdate(event) { rawLatestRun.value = event.detail }
   function handleStorage(event) {
     if (event.key !== 'processpilot-latest-run' || !event.newValue) return
@@ -44,15 +59,16 @@ export function useLatestPipelineRun(expectedScenarioId = null) {
       const cached = JSON.parse(window.localStorage.getItem('processpilot-latest-run') || 'null')
       if (cached?.snapshot) rawLatestRun.value = cached.snapshot
     } catch { /* The API refresh below remains authoritative. */ }
-    refreshPipeline()
+    refreshPipeline().finally(scheduleRefresh)
     window.addEventListener('processpilot:pipeline-updated', handleUpdate)
     window.addEventListener('storage', handleStorage)
-    refreshTimer = window.setInterval(refreshPipeline, 5000)
+    document.addEventListener('visibilitychange', handleVisibility)
   })
   onBeforeUnmount(() => {
     window.removeEventListener('processpilot:pipeline-updated', handleUpdate)
     window.removeEventListener('storage', handleStorage)
-    window.clearInterval(refreshTimer)
+    document.removeEventListener('visibilitychange', handleVisibility)
+    window.clearTimeout(refreshTimer)
   })
 
   return { latestRun, rawLatestRun, pipelineError, refreshPipeline }

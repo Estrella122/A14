@@ -23,6 +23,7 @@ from .models import (
     StandardCheck,
     VariableMapping,
 )
+from .services.scene_registry import list_scene_configs
 
 
 MODEL_CONFIG = {
@@ -194,6 +195,11 @@ MODEL_CONFIG = {
 
 def api_response(data, status=200):
     return JsonResponse(data, status=status, json_dumps_params={'ensure_ascii': False})
+
+
+@require_http_methods(['GET', 'OPTIONS'])
+def scene_registry(request):
+    return api_response({'ok': True, 'data': list_scene_configs()})
 
 
 def parse_json_body(request):

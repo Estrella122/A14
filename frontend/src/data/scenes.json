@@ -1,0 +1,8 @@
+[
+  {"id":"blast_furnace","name":"钢铁高炉","family":"ironmaking","official":true,"aliases":["高炉","炼铁高炉","钢铁高炉"],"asset_status":"installed","model_url":"/models/blast_furnace.glb"},
+  {"id":"debutanizer_column","name":"脱丁烷精馏塔","family":"refinery","official":true,"aliases":["脱丁烷塔","脱丁烷精馏塔","精馏塔"],"asset_status":"installed","model_url":"/models/debutanizer_column.glb"},
+  {"id":"industrial_dryer","name":"工业干燥器","family":"drying","official":true,"aliases":["工业干燥器","干燥器","干燥机","烘干机"],"asset_status":"installed","model_url":"/models/industrial_dryer.glb"},
+  {"id":"thermal_power_boiler_long_tail","name":"热电锅炉长尾系统","family":"thermal_power","official":false,"aliases":["热电锅炉","锅炉"],"asset_status":"missing_3d_asset","required_asset":"thermal_power_boiler.glb"},
+  {"id":"steel_industry_energy","name":"钢铁企业能源系统","family":"energy","official":false,"aliases":["钢铁能源","能源系统"],"asset_status":"missing_3d_asset","required_asset":"steel_industry_energy.glb"},
+  {"id":"vapor_pressure_soft_sensor","name":"蒸气压力软测量","family":"soft_sensor","official":false,"aliases":["蒸气压力","蒸汽压力","软测量"],"asset_status":"missing_3d_asset","required_asset":"vapor_pressure_soft_sensor.glb"}
+]

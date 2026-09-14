@@ -172,6 +172,11 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_UPLOAD_MEMORY_BYTES', 
 FILE_UPLOAD_MAX_MEMORY_SIZE = int(os.getenv('PROCESSPILOT_FILE_UPLOAD_MEMORY_BYTES', str(2_621_440)))
 PROCESSPILOT_MAX_CSV_ROWS = int(os.getenv('PROCESSPILOT_MAX_CSV_ROWS', '1000000'))
 PROCESSPILOT_MAX_CSV_COLUMNS = int(os.getenv('PROCESSPILOT_MAX_CSV_COLUMNS', '500'))
+PROCESSPILOT_INLINE_WORKER = os.getenv('PROCESSPILOT_INLINE_WORKER', '1' if DEBUG else '0').strip().lower() in {'1', 'true', 'yes', 'on'}
+PROCESSPILOT_JOB_STALE_SECONDS = int(os.getenv('PROCESSPILOT_JOB_STALE_SECONDS', '900'))
+# Control recommendations are advisory by design. Enabling this flag only allows
+# approval records; no equipment protocol adapter is shipped or called.
+PROCESSPILOT_CONTROL_APPROVALS = os.getenv('PROCESSPILOT_CONTROL_APPROVALS', '1').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 SIMPLEUI_HOME_INFO = False

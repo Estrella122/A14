@@ -1,12 +1,13 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
-import SceneModel3D from '../components/SceneModel3D.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { resolveScene3DView } from '../data/scene3dRegistry'
+
+const SceneModel3D = defineAsyncComponent(() => import('../components/SceneModel3D.vue'))
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['navigate'])

@@ -17,6 +17,8 @@ from uuid import uuid4
 
 import pandas as pd
 from django.conf import settings
+from django.db import OperationalError, ProgrammingError
+from django.test.testcases import DatabaseOperationForbidden
 
 
 BASE_DIR = Path(settings.BASE_DIR)
@@ -79,6 +81,34 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
     temporary.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(path)
+    if path.name == "snapshot.json" and payload.get("run_id"):
+        _persist_snapshot(payload)
+
+
+def _persist_snapshot(snapshot: dict[str, Any]) -> bool:
+    """Keep a queryable durable index while preserving portable file artifacts."""
+    try:
+        from core.models import PipelineRunRecord
+        scenario_id = (
+            snapshot.get("results", {}).get("standardization", {}).get("scenario", {}).get("scenario_id")
+            or snapshot.get("scenario_request")
+            or ""
+        )
+        PipelineRunRecord.objects.update_or_create(
+            run_id=snapshot["run_id"],
+            defaults={
+                "status": snapshot.get("status", "unknown"),
+                "current_stage": snapshot.get("current_stage", ""),
+                "scenario_id": scenario_id if scenario_id != "auto" else "",
+                "original_name": snapshot.get("original_name", ""),
+                "snapshot": _json_safe(snapshot),
+                "artifact_manifest": _json_safe(snapshot.get("artifacts", {})),
+            },
+        )
+        return True
+    except (OperationalError, ProgrammingError, DatabaseOperationForbidden):
+        # Allows migrations and first-run setup to proceed before tables exist.
+        return False
 
 
 def _read_json(path: Path, default: Any = None) -> Any:
@@ -961,11 +991,13 @@ run_review_stage = _review
 run_report_stage = _analysis_report
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None, run_id: str | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid4().hex[:8]
+        run_id = run_id or datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid4().hex[:8]
+        if not run_id.replace("_", "").isalnum():
+            raise PipelineError("运行任务 ID 格式无效。")
         run_dir = RUNS_DIR / run_id
         input_dir = run_dir / "01_input"
         input_dir.mkdir(parents=True, exist_ok=True)
@@ -1169,6 +1201,13 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
 
 
 def get_run(run_id: str | None = None) -> dict[str, Any] | None:
+    try:
+        from core.models import PipelineRunRecord
+        record = PipelineRunRecord.objects.filter(run_id=run_id).first() if run_id else PipelineRunRecord.objects.order_by("-created_at").first()
+        if record:
+            return record.snapshot
+    except (OperationalError, ProgrammingError, DatabaseOperationForbidden):
+        pass
     if not run_id:
         run_id = (_read_json(LATEST_PATH, {}) or {}).get("run_id")
     if not run_id or not run_id.replace("_", "").isalnum():
@@ -1178,6 +1217,17 @@ def get_run(run_id: str | None = None) -> dict[str, Any] | None:
 
 def list_runs(limit: int = 100, scenario_id: str | None = None) -> list[dict[str, Any]]:
     """Return newest pipeline snapshots for experiment tracking."""
+    safe_limit = max(1, min(int(limit), 500))
+    try:
+        from core.models import PipelineRunRecord
+        records = PipelineRunRecord.objects.all()
+        if scenario_id:
+            records = records.filter(scenario_id=scenario_id)
+        database_snapshots = [record.snapshot for record in records[:safe_limit]]
+        if database_snapshots:
+            return database_snapshots
+    except (OperationalError, ProgrammingError, DatabaseOperationForbidden):
+        pass
     if not RUNS_DIR.exists():
         return []
     snapshots = []
@@ -1193,7 +1243,7 @@ def list_runs(limit: int = 100, scenario_id: str | None = None) -> list[dict[str
         if scenario_id and actual_scenario != scenario_id:
             continue
         snapshots.append(snapshot)
-        if len(snapshots) >= max(1, min(int(limit), 500)):
+        if len(snapshots) >= safe_limit:
             break
     return snapshots
 

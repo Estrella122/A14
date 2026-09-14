@@ -1,0 +1,68 @@
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: apc_agent
+      MYSQL_USER: processpilot
+      MYSQL_PASSWORD: "${APC_DB_PASSWORD:?set APC_DB_PASSWORD}"
+      MYSQL_ROOT_PASSWORD: "${APC_DB_ROOT_PASSWORD:?set APC_DB_ROOT_PASSWORD}"
+    volumes: ['db-data:/var/lib/mysql']
+    healthcheck:
+      test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      PROCESSPILOT_DEBUG: '0'
+      PROCESSPILOT_INLINE_WORKER: '0'
+      PROCESSPILOT_RUNTIME_ROOT: /var/lib/processpilot/runtime
+      PROCESSPILOT_SECRET_KEY: "${PROCESSPILOT_SECRET_KEY:?set PROCESSPILOT_SECRET_KEY}"
+      PROCESSPILOT_ALLOWED_HOSTS: "${PROCESSPILOT_ALLOWED_HOSTS:-localhost}"
+      PROCESSPILOT_SECURE_SSL_REDIRECT: '0'
+      APC_DB_ENGINE: mysql
+      APC_DB_HOST: db
+      APC_DB_NAME: apc_agent
+      APC_DB_USER: processpilot
+      APC_DB_PASSWORD: "${APC_DB_PASSWORD:?set APC_DB_PASSWORD}"
+    volumes:
+      - 'runtime-data:/var/lib/processpilot/runtime'
+    command: sh -c "python manage.py migrate --noinput && gunicorn heating_furnace_apc.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/api/health/")']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      PROCESSPILOT_DEBUG: '0'
+      PROCESSPILOT_INLINE_WORKER: '0'
+      PROCESSPILOT_RUNTIME_ROOT: /var/lib/processpilot/runtime
+      PROCESSPILOT_SECRET_KEY: "${PROCESSPILOT_SECRET_KEY:?set PROCESSPILOT_SECRET_KEY}"
+      APC_DB_ENGINE: mysql
+      APC_DB_HOST: db
+      APC_DB_NAME: apc_agent
+      APC_DB_USER: processpilot
+      APC_DB_PASSWORD: "${APC_DB_PASSWORD:?set APC_DB_PASSWORD}"
+    volumes:
+      - 'runtime-data:/var/lib/processpilot/runtime'
+    command: python manage.py run_runtime_worker
+    depends_on:
+      api: {condition: service_healthy}
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports: ['8080:80']
+    depends_on: [api]
+volumes:
+  runtime-data:
+  db-data:

@@ -1,11 +1,14 @@
 from django.urls import path
 
-from . import agent_api, api, integration_api, optimization_api, pipeline_api
+from . import agent_api, api, integration_api, optimization_api, pipeline_api, runtime_api
 
 
 urlpatterns = [
     path('', api.api_index, name='api-index'),
+    path('health/', runtime_api.health, name='health'),
+    path('runtime/jobs/<slug:job_id>/', runtime_api.job_detail, name='runtime-job-detail'),
     path('security/session/', api.security_session, name='security-session'),
+    path('scenes/', api.scene_registry, name='scene-registry'),
     path('integration/', integration_api.integration_summary, name='integration-summary'),
     path('integration/<slug:module_key>/', integration_api.integration_module, name='integration-module'),
     path('agent/chat/', agent_api.agent_chat, name='agent-chat'),
@@ -26,6 +29,8 @@ urlpatterns = [
     path('optimization/studies/<int:study_id>/', optimization_api.study_detail, name='optimization-study-detail'),
     path('optimization/studies/<int:study_id>/step/', optimization_api.study_step, name='optimization-study-step'),
     path('optimization/studies/<int:study_id>/accept/', optimization_api.study_accept, name='optimization-study-accept'),
+    path('optimization/studies/<int:study_id>/control-approvals/', optimization_api.control_approval_collection, name='control-approval-collection'),
+    path('optimization/control-approvals/<slug:approval_id>/review/', optimization_api.control_approval_review, name='control-approval-review'),
     path('optimization/studies/<int:study_id>/export/', optimization_api.study_export, name='optimization-study-export'),
     path('<slug:table_key>/', api.table_collection, name='api-table-collection'),
 ]

@@ -6,11 +6,14 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
+from django.conf import settings
 from django.http import FileResponse, JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .services.pipeline import PipelineError, _json_safe, get_run, list_runs, rerun_pipeline, resolve_artifact, run_pipeline
+from .services.pipeline import PipelineError, STAGES, _json_safe, _persist_snapshot, get_run, list_runs, rerun_pipeline, resolve_artifact, run_pipeline
+from .services.jobs import enqueue, start_local_worker
 
 
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -47,7 +50,8 @@ def _response(payload, status=200):
     return response
 
 
-def _run_pipeline_async(temporary: Path, options: dict, ready: threading.Event, state: dict) -> None:
+def _legacy_async_for_unmigrated_database(temporary: Path, options: dict, ready: threading.Event, state: dict) -> None:
+    """Compatibility fallback used only when the durable queue tables are unavailable."""
     def created(snapshot):
         state["run_id"] = snapshot["run_id"]
         ready.set()
@@ -56,8 +60,6 @@ def _run_pipeline_async(temporary: Path, options: dict, ready: threading.Event, 
     except Exception as exc:
         state["error"] = str(exc)
         ready.set()
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 @require_http_methods(["GET", "POST", "OPTIONS"])
@@ -102,14 +104,33 @@ def pipeline_collection(request):
             ingest_timing={"csv_upload_ms": upload_ms, "spans": {"csv_upload": {"start_time": upload_started_at, "end_time": upload_finished_at, "elapsed_ms": upload_ms}}},
         )
         if request.POST.get("async_analysis", "").lower() in {"1", "true", "yes"}:
-            ready = threading.Event()
-            state = {}
-            threading.Thread(target=_run_pipeline_async, args=(temporary, options, ready, state), daemon=True, name="pipeline-upload").start()
-            if not ready.wait(10):
-                return _response({"ok": False, "message": "流水线任务创建超时。"}, status=503)
-            if not state.get("run_id"):
-                return _response({"ok": False, "message": state.get("error") or "流水线任务创建失败。"}, status=422)
-            snapshot = get_run(state["run_id"])
+            run_id = datetime.now().strftime("%Y%m%d_%H%M%S_") + uuid4().hex[:8]
+            input_dir = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / "job_inputs"
+            input_dir.mkdir(parents=True, exist_ok=True)
+            queued_source = input_dir / f"{run_id}.csv"
+            temporary.replace(queued_source)
+            temporary = None
+            now = datetime.now().astimezone().isoformat(timespec="seconds")
+            snapshot = {
+                "run_id": run_id, "status": "queued", "current_stage": "queued",
+                "original_name": upload.name, "project_scene": options["project_scene"] or None,
+                "scenario_request": options["scenario_id"], "instruction": options["instruction"],
+                "mapping_overrides": options["overrides"], "created_at": now, "updated_at": now,
+                "stages": [{"key": key, "label": label, "status": "pending", "message": "等待 Worker"} for key, label in STAGES],
+                "artifacts": {}, "results": {},
+            }
+            persisted = _persist_snapshot(snapshot)
+            if not persisted:
+                queued_source.replace(temporary := Path(tempfile.mkstemp(prefix="processpilot_compat_", suffix=".csv")[1]))
+                ready, state = threading.Event(), {}
+                threading.Thread(target=_legacy_async_for_unmigrated_database, args=(temporary, options, ready, state), daemon=True).start()
+                if not ready.wait(10) or not state.get("run_id"):
+                    return _response({"ok": False, "message": state.get("error") or "流水线任务创建失败。"}, status=422)
+                return _response({"ok": True, "data": get_run(state["run_id"])}, status=202)
+            job = enqueue("pipeline", {"source_path": str(queued_source), "run_id": run_id, **options}, result_ref=run_id)
+            snapshot["job"] = {"job_id": job.job_id, "status": job.status, "durable": True}
+            _persist_snapshot(snapshot)
+            start_local_worker()
             return _response({"ok": True, "data": snapshot}, status=202)
         snapshot = run_pipeline(temporary, **options)
         return _response({"ok": True, "data": snapshot}, status=201)

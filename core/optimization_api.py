@@ -7,12 +7,14 @@ from collections.abc import Mapping
 from decimal import Decimal
 
 from django.db import IntegrityError, OperationalError, transaction
+from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .api import api_response, parse_json_body
-from .models import OptimizationRun, OptimizationStudy
+from .models import ControlApproval, OptimizationRun, OptimizationStudy
+from .services.control_safety import assess_candidate
 from .services.pipeline import get_run
 from .services.optimization import (
     DEFAULT_CONSTRAINTS,
@@ -114,6 +116,7 @@ def study_to_dict(study, include_iterations=True):
     dataset_snapshot = pipeline_run_id or benchmark_snapshot_id(study.project_code, study.random_seed)
     benchmark_profile = _benchmark_profile(study.project_code)
     completed = study.status in ('completed', 'accepted')
+    safety = assess_candidate(study, study.best_run) if study.best_run_id else None
     return {
         'contract_version': 'clso.study.v2',
         'id': study.pk,
@@ -175,6 +178,9 @@ def study_to_dict(study, include_iterations=True):
         'started_at': study.started_at.isoformat() if study.started_at else None,
         'finished_at': study.finished_at.isoformat() if study.finished_at else None,
         'accepted_at': study.accepted_at.isoformat() if study.accepted_at else None,
+        'control_safety': safety,
+        'delivery_scope': 'offline_candidate_only',
+        'actuation_allowed': False,
         'created_at': study.created_at.isoformat(),
         'updated_at': study.updated_at.isoformat(),
         'iterations': [iteration_to_dict(run) for run in iterations],
@@ -597,11 +603,75 @@ def study_accept(request, study_id):
             study.save()
             return api_response({
                 'ok': True,
-                'message': '最优演示策略已固化，可通过标准 JSON 契约交付',
+                'message': '最优离线候选策略已固化；仍禁止直接下发现场设备',
                 'data': study_to_dict(study),
             })
     except OptimizationStudy.DoesNotExist:
         return api_response({'ok': False, 'message': '寻优任务不存在'}, status=404)
+
+
+def _approval_to_dict(approval):
+    return {
+        'approval_id': approval.approval_id, 'study_id': approval.study_id,
+        'candidate_run_id': approval.candidate_run_id, 'status': approval.status,
+        'safety_assessment': approval.safety_assessment,
+        'authorization_scope': 'shadow_trial_only' if approval.status == 'approved' else 'none',
+        'actuation_allowed': False, 'requested_by': approval.requested_by,
+        'reviewed_by': approval.reviewed_by, 'review_comment': approval.review_comment,
+        'created_at': approval.created_at.isoformat(),
+        'reviewed_at': approval.reviewed_at.isoformat() if approval.reviewed_at else None,
+    }
+
+
+@require_http_methods(['GET', 'POST', 'OPTIONS'])
+def control_approval_collection(request, study_id):
+    if request.method == 'OPTIONS':
+        return api_response({'ok': True})
+    try:
+        study = _get_study(study_id)
+    except OptimizationStudy.DoesNotExist:
+        return api_response({'ok': False, 'message': '寻优任务不存在'}, status=404)
+    if request.method == 'GET':
+        return api_response({'ok': True, 'results': [_approval_to_dict(item) for item in study.control_approvals.all()]})
+    if not settings.PROCESSPILOT_CONTROL_APPROVALS:
+        return api_response({'ok': False, 'message': '审批记录功能已关闭'}, status=403)
+    candidate = study.accepted_run or study.best_run
+    if not candidate:
+        return api_response({'ok': False, 'message': '没有可申请审批的候选策略'}, status=409)
+    assessment = assess_candidate(study, candidate)
+    if not assessment['shadow_trial_eligible']:
+        return api_response({'ok': False, 'message': '候选策略尚未达到影子试运行申请条件', 'assessment': assessment}, status=409)
+    approval = ControlApproval.objects.create(
+        approval_id=f"approval-{study.pk}-{candidate.pk}-{int(time.time())}", study=study,
+        candidate_run=candidate, safety_assessment=assessment,
+        requested_by=request.user.get_username() if request.user.is_authenticated else 'local-demo-user',
+    )
+    return api_response({'ok': True, 'message': '已创建影子试运行审批，仍不可下发设备', 'data': _approval_to_dict(approval)}, status=201)
+
+
+@require_http_methods(['POST', 'OPTIONS'])
+def control_approval_review(request, approval_id):
+    if request.method == 'OPTIONS':
+        return api_response({'ok': True})
+    try:
+        approval = ControlApproval.objects.select_related('study', 'candidate_run').get(approval_id=approval_id)
+    except ControlApproval.DoesNotExist:
+        return api_response({'ok': False, 'message': '审批记录不存在'}, status=404)
+    if settings.PROCESSPILOT_REQUIRE_AUTH and not request.user.is_staff:
+        return api_response({'ok': False, 'message': '只有已认证的审批人员可以审核'}, status=403)
+    try:
+        payload = parse_json_body(request)
+        decision = payload.get('decision')
+        if decision not in ('approved', 'rejected'):
+            raise ValueError('decision 仅支持 approved 或 rejected')
+        approval.status = decision
+        approval.reviewed_by = request.user.get_username() if request.user.is_authenticated else 'local-demo-reviewer'
+        approval.review_comment = str(payload.get('comment', ''))[:2000]
+        approval.reviewed_at = timezone.now()
+        approval.save(update_fields=('status', 'reviewed_by', 'review_comment', 'reviewed_at'))
+        return api_response({'ok': True, 'message': '审批已记录；授权范围仅限影子试运行', 'data': _approval_to_dict(approval)})
+    except ValueError as exc:
+        return api_response({'ok': False, 'message': str(exc)}, status=400)
 
 
 @require_http_methods(['GET', 'OPTIONS'])

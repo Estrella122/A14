@@ -13,9 +13,13 @@ export default defineConfig({
     },
   },
   build: {
+    // Three.js is isolated behind the lazy digital-twin route; gzip size is
+    // about one quarter of the raw chunk, so warn only above the vendor budget.
+    chunkSizeWarningLimit: 650,
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('/three/')) return 'three-runtime'
           // Keep the chart runtime cached, but split its independently loaded
           // subsystems so no single lazy chunk dominates first navigation.
           if (id.includes('/zrender/')) return 'chart-renderer'

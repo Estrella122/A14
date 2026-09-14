@@ -64,15 +64,13 @@ def list_skills() -> dict[str, Any]:
 
 
 def _entities(message: str) -> dict[str, Any]:
+    from core.services.scene_registry import get_scene_config, identify_registered_scene
+    registered = identify_registered_scene(message)
     equipment = re.search(r"(\d+)\s*号\s*(钢铁高炉|炼铁高炉|脱丁烷塔|脱丁烷精馏塔|精馏塔|工业干燥器|干燥器|干燥机|烘干机|高炉|塔|炉)", message)
     equipment_id = f"{equipment.group(1)}号{equipment.group(2)}" if equipment else None
     scene_id, scene_name, _scene_family = identify_scene_from_text(message, equipment_id)
-    # 兼容规则只做意图解码，不替换现网三套执行场景以外的主流程约束。
-    selected_scene_id = scene_id if scene_id in {"blast_furnace", "debutanizer_column", "industrial_dryer"} else None
-    selected_scene = scene_name
-    if not selected_scene and equipment_id and equipment_id.endswith("塔"):
-        selected_scene = "炼油脱丁烷精馏塔"
-        selected_scene_id = "debutanizer_column"
+    selected_scene_id = registered["id"] if registered else scene_id if get_scene_config(scene_id) else None
+    selected_scene = registered["name"] if registered else scene_name
     return {
         "equipment_id": equipment_id,
         "scenario": selected_scene,

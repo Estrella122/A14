@@ -36,6 +36,7 @@
 
 html {
   min-width: 0;
+  overflow-x: hidden;
   background: var(--bg);
 }
 
@@ -43,6 +44,7 @@ body {
   min-width: 0;
   min-height: 100vh;
   margin: 0;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 70% -10%, rgba(37, 99, 235, 0.055), transparent 28%),
     var(--bg);
@@ -1086,14 +1088,14 @@ input[type="range"] {
   .brand-lockup,
   .sidebar-runtime,
   .sidebar-user { display: none; }
-  .side-navigation { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; }
+  .side-navigation { display: flex; width: calc(100vw - 20px); max-width: calc(100vw - 20px); min-width: 0; gap: 3px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; }
   .side-navigation::-webkit-scrollbar { display: none; }
-  .nav-group { display: flex; gap: 3px; }
+  .nav-group { display: flex; flex: 0 0 auto; gap: 3px; }
   .side-navigation a { width: 58px; min-width: 58px; min-height: 48px; flex-direction: column; gap: 3px; padding: 6px 3px 4px; font-size: 8px; }
   .side-navigation a > span { display: block; max-width: 54px; }
   .side-navigation a::before { left: 12px; bottom: -8px; width: 34px; height: 2px; }
   .nav-live-dot { top: 7px; right: 12px; }
-  .content-topbar { position: relative; min-height: 58px; padding: 9px 14px; }
+  .content-topbar { position: relative; min-height: 58px; gap: 8px; padding: 9px 14px; overflow: hidden; }
   .mobile-brand { display: flex; }
   .mobile-brand strong { font-size: 13px; }
   .topbar-breadcrumb,
@@ -1104,6 +1106,10 @@ input[type="range"] {
   .topbar-mismatch { display: none; }
   .project-selector select { width: min(50vw, 220px); }
   .runtime-project-context { width: min(58vw, 250px); }
+  .topbar-actions { flex: 0 0 auto; }
+  .command-trigger { width: 38px; min-width: 38px; padding: 0; justify-content: center; }
+  .command-trigger span,
+  .command-trigger kbd { display: none; }
   .content-main { padding: 20px 14px 32px; }
   .view-stack { gap: 14px; }
   .page-heading { min-height: 0; gap: 16px; }

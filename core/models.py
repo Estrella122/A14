@@ -329,3 +329,103 @@ class ExportRecord(models.Model):
 
     def __str__(self):
         return self.export_file_name
+
+
+class RuntimeJob(models.Model):
+    """Durable queue entry used by both pipeline and Agent workers."""
+
+    STATUS_CHOICES = (
+        ('queued', '排队中'), ('running', '运行中'), ('completed', '已完成'),
+        ('failed', '失败'), ('cancelled', '已取消'),
+    )
+    job_id = models.CharField('任务ID', max_length=64, unique=True, db_index=True)
+    job_type = models.CharField('任务类型', max_length=40, db_index=True)
+    status = models.CharField('任务状态', max_length=20, choices=STATUS_CHOICES, default='queued', db_index=True)
+    payload = models.JSONField('任务参数', default=dict)
+    result_ref = models.CharField('结果引用', max_length=160, blank=True)
+    error = models.TextField('错误信息', blank=True)
+    attempts = models.PositiveSmallIntegerField('尝试次数', default=0)
+    max_attempts = models.PositiveSmallIntegerField('最大尝试次数', default=3)
+    locked_by = models.CharField('执行节点', max_length=120, blank=True)
+    locked_at = models.DateTimeField('锁定时间', null=True, blank=True)
+    available_at = models.DateTimeField('可执行时间', auto_now_add=True, db_index=True)
+    started_at = models.DateTimeField('开始时间', null=True, blank=True)
+    finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'runtime_jobs'
+        ordering = ('created_at',)
+        indexes = [models.Index(fields=('status', 'available_at'), name='runtime_job_ready_idx')]
+
+
+class PipelineRunRecord(models.Model):
+    """Database index for pipeline state; large artifacts stay on durable storage."""
+
+    run_id = models.CharField('运行ID', max_length=64, unique=True, db_index=True)
+    status = models.CharField('运行状态', max_length=24, db_index=True)
+    current_stage = models.CharField('当前阶段', max_length=40, blank=True)
+    scenario_id = models.CharField('场景ID', max_length=80, blank=True, db_index=True)
+    original_name = models.CharField('源文件名', max_length=255, blank=True)
+    snapshot = models.JSONField('运行快照', default=dict)
+    artifact_manifest = models.JSONField('产物清单', default=dict)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'pipeline_run_records'
+        ordering = ('-created_at',)
+
+
+class SkillRunRecord(models.Model):
+    skill_run_id = models.CharField('Skill运行ID', max_length=64, unique=True, db_index=True)
+    pipeline_run_id = models.CharField('流水线运行ID', max_length=64, blank=True, db_index=True)
+    status = models.CharField('运行状态', max_length=24, default='running', db_index=True)
+    last_sequence = models.PositiveIntegerField('最后事件序号', default=0)
+    event_count = models.PositiveIntegerField('事件数量', default=0)
+    payload_bytes = models.PositiveBigIntegerField('事件载荷字节数', default=0)
+    result = models.JSONField('运行结果', null=True, blank=True)
+    error = models.TextField('错误信息', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'skill_run_records'
+        ordering = ('-created_at',)
+
+
+class SkillRunEvent(models.Model):
+    run = models.ForeignKey(SkillRunRecord, related_name='events', on_delete=models.CASCADE)
+    sequence = models.PositiveIntegerField('事件序号')
+    event_type = models.CharField('事件类型', max_length=64)
+    stage = models.CharField('阶段', max_length=64)
+    status = models.CharField('状态', max_length=32)
+    message = models.TextField('消息', blank=True)
+    payload = models.JSONField('完整事件', default=dict)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'skill_run_events'
+        ordering = ('sequence',)
+        constraints = [models.UniqueConstraint(fields=('run', 'sequence'), name='unique_skill_run_sequence')]
+
+
+class ControlApproval(models.Model):
+    """Human approval record. It never sends commands to plant equipment."""
+
+    STATUS_CHOICES = (('pending', '待审批'), ('approved', '已批准'), ('rejected', '已拒绝'), ('expired', '已过期'))
+    approval_id = models.CharField('审批ID', max_length=64, unique=True, db_index=True)
+    study = models.ForeignKey(OptimizationStudy, related_name='control_approvals', on_delete=models.CASCADE)
+    candidate_run = models.ForeignKey(OptimizationRun, related_name='+', on_delete=models.PROTECT)
+    status = models.CharField('审批状态', max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    safety_assessment = models.JSONField('安全评估', default=dict)
+    requested_by = models.CharField('申请人', max_length=150, blank=True)
+    reviewed_by = models.CharField('审批人', max_length=150, blank=True)
+    review_comment = models.TextField('审批意见', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    reviewed_at = models.DateTimeField('审批时间', null=True, blank=True)
+
+    class Meta:
+        db_table = 'control_approvals'
+        ordering = ('-created_at',)

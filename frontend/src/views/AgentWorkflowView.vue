@@ -144,6 +144,7 @@ async function pollLiveRun(live, timelineMessage) {
   let after = Number(live.after ?? 0)
   pollController?.abort()
   pollController = new AbortController()
+  let delay = 350
   while (true) {
     const payload = await getAgentSkillEvents(live.skill_run_id, after, { signal: pollController.signal })
     timelineMessage.events = mergeRuntimeEvents(timelineMessage.events, payload.events ?? [])
@@ -160,7 +161,8 @@ async function pollLiveRun(live, timelineMessage) {
     await scrollToLatest()
     if (payload.status === 'completed') return payload.result
     if (payload.status === 'failed') throw new Error(payload.error || 'Agent 执行失败')
-    await new Promise((resolve) => window.setTimeout(resolve, 450))
+    delay = (payload.events?.length ?? 0) > 0 ? 350 : Math.min(2_500, Math.round(delay * 1.6))
+    await new Promise((resolve) => window.setTimeout(resolve, document.hidden ? Math.max(delay, 5_000) : delay))
   }
 }
 
@@ -194,13 +196,15 @@ async function executeLiveMessage(userText, runId, prefix = '') {
 
 async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
   const started = Date.now()
+  let delay = 500
   while (Date.now() - started < timeoutMs) {
     const snapshot = await getPipelineRun(runId)
     latestRun.value = snapshot
     selectedRun.value = snapshot
     announcePipelineUpdate(snapshot)
     if (predicate(snapshot)) return snapshot
-    await new Promise((resolve) => window.setTimeout(resolve, 700))
+    await new Promise((resolve) => window.setTimeout(resolve, document.hidden ? 5_000 : delay))
+    delay = Math.min(3_000, Math.round(delay * 1.45))
   }
   throw new Error(`基础分析在 ${Math.round(timeoutMs / 1000)} 秒内未返回`)
 }

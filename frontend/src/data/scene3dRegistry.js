@@ -2,10 +2,10 @@ const defaultCamera = Object.freeze({ position: [15, 10, 17], target: [0, 2.7, 0
 const defaultTransform = Object.freeze({ scale: 1, position: [0, 0, 0], rotation: [0, 0, 0] })
 const scene = (config) => Object.freeze({
   engine: 'three-webgl', asset_status: 'missing_3d_asset', model_url: null,
-  camera: defaultCamera, transform: defaultTransform, lod: { mode: 'single_asset', level: 0 }, ...config,
+  camera: defaultCamera, transform: defaultTransform, lod: { mode: 'single_asset', level: 0 }, semantic_nodes: [], flows: [], ...config,
 })
 
-export const SCENE_3D_REGISTRY = Object.freeze({
+const DETAILED_SCENE_3D_REGISTRY = Object.freeze({
   industrial_dryer: scene({
     id: 'industrial_dryer', code: 'DR—03', label: '连续回转干燥系统', eyebrow: 'THERMAL DRYING',
     title: '连续回转干燥设备现场', description: '回转干燥筒、进料、热风、风机、尾气、出料、平台和工艺管线组成的真实空间结构。', accent: '#e7a45d',
@@ -76,6 +76,13 @@ export const SCENE_3D_REGISTRY = Object.freeze({
   }),
 })
 
+// scenes.json is the single inventory used by Django and the browser. Detailed
+// geometry metadata remains optional, so adding a new scene never requires a JS edit.
+export const SCENE_3D_REGISTRY = Object.freeze(Object.fromEntries(sceneCatalog.map((metadata) => {
+  const detailed = DETAILED_SCENE_3D_REGISTRY[metadata.id] ?? {}
+  return [metadata.id, scene({ ...metadata, ...detailed, asset_status: metadata.asset_status, model_url: metadata.model_url ?? detailed.model_url ?? null })]
+})))
+
 export const UNKNOWN_SCENE_3D = scene({
   id: 'unknown_scene', code: 'SC—?', label: '未知数据场景', eyebrow: 'SCENE UNRESOLVED', title: '尚未确认工业场景',
   description: '当前数据场景尚未确认，不能选择真实三维设备模型。', accent: '#7e93a8', required_asset: null, semantic_nodes: [], flows: [],
@@ -130,3 +137,4 @@ export function resolveScene3DView(sceneState, preferredScope = 'auto') {
 export function listMissingSceneAssets() {
   return Object.values(SCENE_3D_REGISTRY).filter((item) => item.asset_status !== 'installed').map((item) => ({ scene_id: item.id, required_asset: item.required_asset }))
 }
+import sceneCatalog from './scenes.json' with { type: 'json' }

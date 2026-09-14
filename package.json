@@ -7,6 +7,7 @@
     "dev:frontend": "npm --prefix frontend run dev -- --host 127.0.0.1 --port 5176",
     "build": "npm --prefix frontend run build",
     "backend": "node scripts/python.mjs manage.py runserver 127.0.0.1:8000",
+    "worker": "node scripts/python.mjs manage.py run_runtime_worker",
     "test:backend": "node scripts/python.mjs manage.py test core",
     "test:frontend": "npm --prefix frontend test",
     "test": "npm run test:backend && npm run test:frontend && npm --prefix frontend run lint && npm run build",

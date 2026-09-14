@@ -4,6 +4,7 @@ from .models import (
     AgentReview,
     CleaningRecord,
     CollinearityResult,
+    ControlApproval,
     DataFile,
     DynamicSegment,
     ExportRecord,
@@ -11,10 +12,45 @@ from .models import (
     ModelResult,
     OptimizationRun,
     OptimizationStudy,
+    PipelineRunRecord,
+    RuntimeJob,
     ScenarioTemplate,
     StandardCheck,
+    SkillRunRecord,
     VariableMapping,
 )
+
+
+@admin.register(RuntimeJob)
+class RuntimeJobAdmin(admin.ModelAdmin):
+    list_display = ('job_id', 'job_type', 'status', 'attempts', 'max_attempts', 'result_ref', 'locked_by', 'created_at', 'finished_at')
+    search_fields = ('job_id', 'job_type', 'result_ref', 'locked_by', 'error')
+    list_filter = ('job_type', 'status', 'created_at')
+    readonly_fields = ('job_id', 'payload', 'attempts', 'locked_by', 'locked_at', 'created_at', 'updated_at', 'started_at', 'finished_at')
+
+
+@admin.register(PipelineRunRecord)
+class PipelineRunRecordAdmin(admin.ModelAdmin):
+    list_display = ('run_id', 'status', 'current_stage', 'scenario_id', 'original_name', 'created_at', 'updated_at')
+    search_fields = ('run_id', 'scenario_id', 'original_name')
+    list_filter = ('status', 'current_stage', 'scenario_id')
+    readonly_fields = ('run_id', 'status', 'current_stage', 'scenario_id', 'original_name', 'snapshot', 'artifact_manifest', 'created_at', 'updated_at')
+
+
+@admin.register(SkillRunRecord)
+class SkillRunRecordAdmin(admin.ModelAdmin):
+    list_display = ('skill_run_id', 'pipeline_run_id', 'status', 'event_count', 'last_sequence', 'created_at', 'updated_at')
+    search_fields = ('skill_run_id', 'pipeline_run_id', 'error')
+    list_filter = ('status', 'created_at')
+    readonly_fields = ('skill_run_id', 'pipeline_run_id', 'status', 'last_sequence', 'event_count', 'payload_bytes', 'result', 'error', 'created_at', 'updated_at')
+
+
+@admin.register(ControlApproval)
+class ControlApprovalAdmin(admin.ModelAdmin):
+    list_display = ('approval_id', 'study', 'candidate_run', 'status', 'requested_by', 'reviewed_by', 'created_at', 'reviewed_at')
+    search_fields = ('approval_id', 'study__project_code', 'requested_by', 'reviewed_by')
+    list_filter = ('status', 'created_at')
+    readonly_fields = ('approval_id', 'study', 'candidate_run', 'safety_assessment', 'requested_by', 'created_at')
 
 
 admin.site.site_header = '流程工业 APC 建模数据优选 Agent 工作台'

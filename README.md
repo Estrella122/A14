@@ -28,6 +28,7 @@ npm run dev
 npm run test:backend
 npm run test:frontend
 npm run build
+npm --prefix frontend run test:e2e
 ```
 
 运行产物清理默认只预览；确认清单后再执行：
@@ -42,3 +43,5 @@ npm run runtime:prune -- --keep 100 --days 30 --apply
 脱丁烷塔数据的上游公开副本没有明确再分发许可证，因此仓库仅保留适配代码和来源说明，不重新发布数据文件。取得合法数据副本后，按 `datasets/public/debutanizer/README.md` 操作。
 
 更完整的说明见 [使用说明.md](使用说明.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
+
+场景清单统一维护在 `frontend/src/data/scenes.json`；新增场景先登记 ID、别名和三维资产状态，再添加标准化模板。生产后台任务使用数据库队列，开发模式会自动唤醒内置 Worker，生产模式应运行独立的 `npm run worker`。

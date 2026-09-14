@@ -1,15 +1,14 @@
 import json
-import threading
 from datetime import datetime
 from uuid import uuid4
 
-from django.db import close_old_connections
 from django.http import JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from .services.agent_chat import chat
 from .services.expert_qa import coverage_summary
 from .services.pipeline import PipelineError, get_run
+from .services.jobs import enqueue, start_local_worker
 from .skills import execute_skill_plan, get_skill_run, list_skills, plan_skills
 from .skills.runtime_events import RuntimeEventStore, get_runtime_event_store
 
@@ -33,20 +32,6 @@ def agent_chat(request):
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
 
-def _run_live_chat(payload, skill_run_id):
-    close_old_connections()
-    store = RuntimeEventStore(skill_run_id, payload.get("run_id"))
-    try:
-        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"),
-                      payload.get("previous_intents"), skill_run_id=skill_run_id, event_sink=store.emit)
-        store.finish("completed", result=result)
-    except Exception as exc:  # Background failures must remain observable to the polling client.
-        store.emit("run_failed", stage="runtime", status="failed", message=str(exc), metadata={"error_type": type(exc).__name__})
-        store.finish("failed", error=str(exc))
-    finally:
-        close_old_connections()
-
-
 @require_POST
 def agent_live_chat(request):
     try:
@@ -58,8 +43,9 @@ def agent_live_chat(request):
             raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
         skill_run_id = f"skillrun_{uuid4().hex[:12]}"
         RuntimeEventStore(skill_run_id, payload.get("run_id"))
-        threading.Thread(target=_run_live_chat, args=(payload, skill_run_id), daemon=True, name=f"agent-live-{skill_run_id}").start()
-        return JsonResponse({"ok": True, "data": {"skill_run_id": skill_run_id, "run_id": payload.get("run_id"), "status": "running"}}, status=202, json_dumps_params={"ensure_ascii": False})
+        job = enqueue("agent_chat", payload, result_ref=skill_run_id)
+        start_local_worker()
+        return JsonResponse({"ok": True, "data": {"skill_run_id": skill_run_id, "run_id": payload.get("run_id"), "status": "queued", "job_id": job.job_id, "durable": True}}, status=202, json_dumps_params={"ensure_ascii": False})
     except (ValueError, PipelineError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
