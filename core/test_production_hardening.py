@@ -5,7 +5,7 @@ from django.test import TestCase, override_settings
 
 from core.models import OptimizationRun, OptimizationStudy, PipelineRunRecord, RuntimeJob
 from core.services.control_safety import assess_candidate
-from core.services.jobs import claim_next, enqueue
+from core.services.jobs import claim_next, drain_local_queue, enqueue
 from core.services.pipeline import _persist_snapshot, get_run
 from core.services.scene_registry import get_scene_config, identify_registered_scene, list_scene_configs
 from core.skills.industrial_executor import execute_capability
@@ -25,6 +25,12 @@ class RuntimePersistenceTests(TestCase):
         self.assertEqual(claimed.pk, queued.pk)
         self.assertEqual(RuntimeJob.objects.get(pk=queued.pk).status, "running")
         self.assertIsNone(claim_next())
+
+    def test_inline_worker_drains_backlog_instead_of_stranding_new_job(self):
+        enqueue("unknown", {}, max_attempts=1)
+        enqueue("unknown", {}, max_attempts=1)
+        self.assertEqual(drain_local_queue(), 2)
+        self.assertEqual(RuntimeJob.objects.filter(status="failed").count(), 2)
 
     def test_skill_events_survive_file_store_loss(self):
         store = RuntimeEventStore("skillrun_db_test", "pipeline_1")

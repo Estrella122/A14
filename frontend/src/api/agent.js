@@ -1,18 +1,23 @@
 import { apiRequest } from './client'
 
-export async function sendAgentMessage(message, runId = null, previousIntent = null, previousIntents = []) {
+export async function sendAgentMessage(message, runId = null, previousIntent = null, previousIntents = [], llm = null) {
   const payload = await apiRequest('/agent/chat/', {
     method: 'POST',
-    body: { message, run_id: runId, previous_intent: previousIntent, previous_intents: previousIntents },
+    body: { message, run_id: runId, previous_intent: previousIntent, previous_intents: previousIntents, llm },
   })
   return payload.data
 }
 
-export async function startAgentLiveRun(message, runId = null, previousIntent = null, previousIntents = []) {
+export async function startAgentLiveRun(message, runId = null, previousIntent = null, previousIntents = [], llm = null) {
   const payload = await apiRequest('/agent/chat/live/', {
     method: 'POST',
-    body: { message, run_id: runId, previous_intent: previousIntent, previous_intents: previousIntents },
+    body: { message, run_id: runId, previous_intent: previousIntent, previous_intents: previousIntents, llm },
   })
+  return payload.data
+}
+
+export async function getAgentLLMProviders({ signal } = {}) {
+  const payload = await apiRequest('/agent/llm/providers/', { signal })
   return payload.data
 }
 

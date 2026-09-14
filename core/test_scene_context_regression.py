@@ -10,6 +10,7 @@ if str(STANDARDIZATION) not in sys.path:
     sys.path.insert(0, str(STANDARDIZATION))
 
 from standard_agent import ScenarioRepository, StandardizationAgent
+from core.services.pipeline import _effective_resample_rule
 
 
 class SceneContextRegressionTests(SimpleTestCase):
@@ -62,3 +63,8 @@ class SceneContextRegressionTests(SimpleTestCase):
         mapping = self.agent.map_columns(self.vapor_columns, "vapor_pressure_soft_sensor")
         self.assertEqual(30, sum(row["status"] == "matched" for row in mapping["mappings"]))
         self.assertNotIn("bottom_butane_content", mapping["missing_required"])
+
+    def test_cross_scene_upload_uses_detected_sampling_period(self):
+        scenario = {"scenario_id": "industrial_dryer", "sampling_seconds": 10}
+        self.assertEqual(_effective_resample_rule("1h", scenario, "auto", "blast_furnace"), "10s")
+        self.assertEqual(_effective_resample_rule("30s", scenario, "industrial_dryer", "industrial_dryer"), "30s")

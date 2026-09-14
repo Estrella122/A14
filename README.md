@@ -23,6 +23,19 @@ npm run dev
 - 工业知识库：<http://127.0.0.1:5176/knowledge-base/>
 - 后端 API：<http://127.0.0.1:8000/api/>
 
+## Agent 大模型
+
+复制 `.env.example` 为 `.env` 后，可在服务端配置 DeepSeek；真实密钥不得提交：
+
+```bash
+DEEPSEEK_API_KEY=your-server-side-key
+DEEPSEEK_MODEL=deepseek-flash
+```
+
+Agent 中枢允许用户选择 Evidence Agent、DeepSeek 或本地 OpenAI 兼容模型。本地模式默认连接 `http://127.0.0.1:11434/v1`，可在页面中修改模型名与回环地址，适用于 Ollama、LM Studio 等服务。浏览器不会读取或保存服务端密钥。运行时先完成场景识别、Capability/Skill 解析和 Executor 执行，再把有限的结构化证据交给模型生成回答；界面展示的是可审计判断摘要，不是模型隐藏思维链。
+
+上传数据成功且无需人工映射复核时，前端会按后端识别出的 `scenario_id` 切换项目上下文并打开对应三维场景。后续仓库组织者提供完整算法时，应继续通过现有 Skill catalog、Executor 和 artifact registry 注册；未安装模块保持 `waiting`/`unavailable`，不得用模拟结果冒充执行成功。
+
 ## 验证
 
 ```bash

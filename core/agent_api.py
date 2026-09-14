@@ -9,6 +9,7 @@ from .services.agent_chat import chat
 from .services.expert_qa import coverage_summary
 from .services.pipeline import PipelineError, get_run
 from .services.jobs import enqueue, start_local_worker
+from .services.llm_gateway import LLMGatewayError, provider_catalog, resolve_llm_config
 from .skills import execute_skill_plan, get_skill_run, list_skills, plan_skills
 from .skills.runtime_events import RuntimeEventStore, get_runtime_event_store
 
@@ -26,10 +27,23 @@ def _duration_ms(start, end):
 def agent_chat(request):
     try:
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
-        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"), payload.get("previous_intents"))
+        llm_config = _safe_llm_config(payload.get("llm"))
+        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"), payload.get("previous_intents"), llm_config=llm_config)
         return JsonResponse({"ok": True, "data": result}, json_dumps_params={"ensure_ascii": False})
-    except (ValueError, PipelineError, json.JSONDecodeError) as exc:
+    except (ValueError, PipelineError, LLMGatewayError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
+
+
+def _safe_llm_config(value):
+    source = value if isinstance(value, dict) else {}
+    safe = {key: source.get(key) for key in ("provider", "model", "base_url") if source.get(key) is not None}
+    resolve_llm_config(safe)
+    return safe
+
+
+@require_GET
+def agent_llm_providers(request):
+    return JsonResponse({"ok": True, "data": provider_catalog()}, json_dumps_params={"ensure_ascii": False})
 
 
 @require_POST
@@ -41,12 +55,13 @@ def agent_live_chat(request):
             raise ValueError("聊天内容不能为空。")
         if not get_run(payload.get("run_id")):
             raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
+        payload["llm"] = _safe_llm_config(payload.get("llm"))
         skill_run_id = f"skillrun_{uuid4().hex[:12]}"
         RuntimeEventStore(skill_run_id, payload.get("run_id"))
         job = enqueue("agent_chat", payload, result_ref=skill_run_id)
         start_local_worker()
         return JsonResponse({"ok": True, "data": {"skill_run_id": skill_run_id, "run_id": payload.get("run_id"), "status": "queued", "job_id": job.job_id, "durable": True}}, status=202, json_dumps_params={"ensure_ascii": False})
-    except (ValueError, PipelineError, json.JSONDecodeError) as exc:
+    except (ValueError, PipelineError, LLMGatewayError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
 

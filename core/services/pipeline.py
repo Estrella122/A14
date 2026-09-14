@@ -287,6 +287,19 @@ def _effective_max_lag(requested: int, scenario: dict[str, Any]) -> int:
     return int(requested)
 
 
+def _effective_resample_rule(requested: str, scenario: dict[str, Any], scenario_request: str, project_scene: str) -> str:
+    """Use the detected scene cadence when an auto upload crosses project contexts."""
+    detected_scene = str(scenario.get("scenario_id") or "")
+    if str(scenario_request or "auto") == "auto" and project_scene and detected_scene and project_scene != detected_scene:
+        try:
+            seconds = float(scenario.get("sampling_seconds"))
+            if math.isfinite(seconds) and seconds > 0:
+                return f"{seconds:g}s"
+        except (TypeError, ValueError):
+            pass
+    return requested
+
+
 def _select_modeling_rows(cleaned: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
     from .segmentation_service import select_modeling_rows
     return select_modeling_rows(cleaned, segments, top_k, strict_first)
@@ -346,7 +359,12 @@ def _clean(
             frame = part_agent.detect_and_repair_anomalies(processed)
             if parts:
                 # A bin ending at the prior partition boundary belongs only to it.
-                frame = frame.loc[frame.index > list(parts.values())[-1].index[-1]]
+                previous = list(parts.values())[-1]
+                if previous.empty:
+                    raise PipelineError(f"{label} 分区在重采样后为空，请使用与识别场景采样周期一致的配置。")
+                frame = frame.loc[frame.index > previous.index[-1]]
+            if frame.empty:
+                raise PipelineError(f"{label} 分区在重采样后为空，请缩短重采样周期或增加数据时间范围。")
             parts[label] = frame
             if label == "train":
                 train_segments = pd.DataFrame(columns=["level", "segment_score", "start_time", "end_time"])
@@ -1042,6 +1060,13 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
         try:
             _set_stage(snapshot, run_dir, current_stage, "running", "正在识别场景、字段和单位")
             _, standardization = _standardize(stored_path, run_dir, scenario_id, instruction, overrides)
+            effective_resample_rule = _effective_resample_rule(
+                resample_rule, standardization.get("scenario", {}), scenario_id, project_scene,
+            )
+            if effective_resample_rule != resample_rule:
+                snapshot["effective_resample_rule"] = effective_resample_rule
+                standardization["scenario"]["effective_resample_rule"] = effective_resample_rule
+                standardization["scenario"]["requested_resample_rule"] = resample_rule
             effective_max_lag = _effective_max_lag(max_lag, standardization.get("scenario", {}))
             if effective_max_lag != max_lag:
                 snapshot["effective_max_lag"] = effective_max_lag
@@ -1087,7 +1112,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             primary_output = standardization.get("scenario", {}).get("primary_output")
             model_outputs = standardization.get("scenario", {}).get("model_outputs") or [primary_output]
             modeling_data, segments, cleaning = _clean(
-                standardized, standardization["dictionary"], run_dir, resample_rule, effective_max_lag,
+                standardized, standardization["dictionary"], run_dir, effective_resample_rule, effective_max_lag,
                 primary_output=primary_output,
                 selection_window=standardization.get("scenario", {}).get("selection_window_samples", 30),
                 selection_step=standardization.get("scenario", {}).get("selection_step_samples", 15),

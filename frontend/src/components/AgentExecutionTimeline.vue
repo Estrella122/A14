@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { compactRuntimeEvents, runtimeEventIsActive, visibleRuntimeEvents } from '../utils/runtimeEvents'
 
-const props = defineProps({ events: { type: Array, default: () => [] }, status: { type: String, default: 'running' }, metrics: { type: Object, default: () => ({}) } })
+const props = defineProps({ events: { type: Array, default: () => [] }, status: { type: String, default: 'running' }, metrics: { type: Object, default: () => ({}) }, draft: { type: String, default: '' } })
 const rows = computed(() => visibleRuntimeEvents(props.events))
 const expanded = ref(props.status === 'running')
 const userControlled = ref(false)
@@ -34,10 +34,12 @@ function toggleExpanded() {
         <time>{{ event.timestamp?.slice(11, 19) }}</time>
       </li>
     </ol>
+    <div v-if="draft" class="streaming-answer"><strong>模型正在组织回答</strong><p>{{ draft }}</p><i></i></div>
     <footer v-if="metrics.event_count">事件 {{ metrics.event_count }} 条 · 平均载荷 {{ metrics.average_payload_bytes }} B</footer>
   </section>
 </template>
 
 <style scoped>
 .execution-timeline{width:min(92%,620px);padding:10px 12px;border:1px solid #bfdbfe;border-radius:10px;background:#f8fbff}.execution-timeline header,.execution-timeline header>div{display:flex;align-items:center}.execution-timeline header{justify-content:space-between;gap:12px;color:#1e3a8a;font-size:9px}.execution-timeline header>div{gap:8px}.timeline-status{color:#64748b}.execution-timeline header button{padding:4px 8px;color:#315a91;font-size:8px;border:1px solid #c9dcf7;border-radius:999px;background:#fff;cursor:pointer}.execution-timeline header button:hover{border-color:#8bb0ef;background:#eff6ff}.execution-timeline ol{display:grid;gap:6px;max-height:min(48vh,430px);margin:9px 0 0;padding:0 5px 0 0;overflow:auto;list-style:none;scrollbar-width:thin}.execution-timeline ol.is-collapsed{max-height:150px}.execution-timeline li{display:grid;grid-template-columns:14px 1fr auto;gap:6px;align-items:start;color:#475569}.execution-timeline li div strong{font-size:8px}.execution-timeline li p{margin:1px 0 0;font-size:8px;line-height:1.4}.execution-timeline time,.execution-timeline footer{color:#94a3b8;font-size:7px}.execution-timeline footer{margin-top:8px}.event-failed,.event-blocked{color:#b91c1c!important}.event-partial{color:#b45309!important}
+.streaming-answer{position:relative;margin-top:9px;padding:9px;border:1px solid #dbeafe;border-radius:8px;background:#fff;color:#334155}.streaming-answer strong{display:block;margin-bottom:4px;color:#2563eb;font-size:8px}.streaming-answer p{display:inline;max-height:130px;margin:0;overflow:auto;white-space:pre-wrap;font-size:9px;line-height:1.55}.streaming-answer i{display:inline-block;width:5px;height:10px;margin-left:2px;background:#2563eb;animation:blink .8s steps(1) infinite}@keyframes blink{50%{opacity:0}}
 </style>

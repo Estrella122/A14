@@ -39,3 +39,12 @@ test('compact timeline stays bounded and keeps the terminal event', () => {
   assert.equal(compact.length, 4)
   assert.equal(compact.at(-1).event_type, 'answer_generation_completed')
 })
+
+test('timeline shows model lifecycle but leaves token deltas to the streaming draft', () => {
+  const events = visibleRuntimeEvents([
+    { sequence: 1, event_type: 'llm_generation_started', status: 'executing' },
+    { sequence: 2, event_type: 'llm_response_delta', status: 'streaming', metadata: { delta: '回答' } },
+    { sequence: 3, event_type: 'llm_generation_completed', status: 'completed' },
+  ])
+  assert.deepEqual(events.map((event) => event.sequence), [1, 3])
+})

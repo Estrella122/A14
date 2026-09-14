@@ -110,6 +110,7 @@ def _execute_agent_chat(job: RuntimeJob) -> None:
         result = chat(
             payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"),
             payload.get("previous_intents"), skill_run_id=skill_run_id, event_sink=store.emit,
+            llm_config=payload.get("llm"),
         )
         store.finish("completed", result=result)
     except Exception as exc:
@@ -130,8 +131,15 @@ def run_one() -> bool:
     return True
 
 
+def drain_local_queue(max_jobs: int = 100) -> int:
+    processed = 0
+    while processed < max_jobs and run_one():
+        processed += 1
+    return processed
+
+
 def start_local_worker() -> None:
     """Development convenience only; production uses the run_runtime_worker command."""
     if not getattr(settings, "PROCESSPILOT_INLINE_WORKER", True):
         return
-    threading.Thread(target=run_one, daemon=True, name="processpilot-db-worker").start()
+    threading.Thread(target=drain_local_queue, daemon=True, name="processpilot-db-worker").start()

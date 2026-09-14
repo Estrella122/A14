@@ -89,6 +89,17 @@ function handleStrategyAccepted(strategy) {
   })
 }
 
+function handleSceneDetected(payload) {
+  const matched = projects.find((project) => project.scenarioId === payload?.scenarioId)
+  if (matched) currentProjectId.value = matched.id
+  navigate(payload?.path || '/digital-twin/')
+  showToast({
+    tone: matched ? 'success' : 'warning',
+    title: matched ? `已进入${matched.shortName}场景` : '已完成场景识别',
+    message: matched ? `任务 ${payload?.runId || ''} 已绑定对应项目、三维场景和 Skill 上下文。` : '当前识别结果尚无对应的前端项目模板。',
+  })
+}
+
 function executeCommand(command) {
   commandPaletteOpen.value = false
   navigate(command.path)
@@ -212,6 +223,7 @@ onBeforeUnmount(() => {
           @navigate="navigate"
           @notify="showToast"
           @strategy-accepted="handleStrategyAccepted"
+          @scene-detected="handleSceneDetected"
         />
       </main>
 

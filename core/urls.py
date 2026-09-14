@@ -16,6 +16,7 @@ urlpatterns = [
     path('integration/<slug:module_key>/', integration_api.integration_module, name='integration-module'),
     path('agent/chat/', agent_api.agent_chat, name='agent-chat'),
     path('agent/chat/live/', agent_api.agent_live_chat, name='agent-live-chat'),
+    path('agent/llm/providers/', agent_api.agent_llm_providers, name='agent-llm-providers'),
     path('agent/skills/', agent_api.agent_skills, name='agent-skills'),
     path('agent/plans/', agent_api.agent_plan, name='agent-plan'),
     path('agent/skill-runs/', agent_api.agent_skill_run_collection, name='agent-skill-run-collection'),

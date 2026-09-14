@@ -15,6 +15,23 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_local_env(path: Path) -> None:
+    """Load a simple development .env without overriding deployment variables."""
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        if key and key.replace('_', '').isalnum():
+            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
+_load_local_env(BASE_DIR / '.env')
 PROCESSPILOT_RUNTIME_ROOT = Path(os.getenv('PROCESSPILOT_RUNTIME_ROOT', str(BASE_DIR / 'runtime'))).expanduser().resolve()
 
 
@@ -174,6 +191,13 @@ PROCESSPILOT_MAX_CSV_ROWS = int(os.getenv('PROCESSPILOT_MAX_CSV_ROWS', '1000000'
 PROCESSPILOT_MAX_CSV_COLUMNS = int(os.getenv('PROCESSPILOT_MAX_CSV_COLUMNS', '500'))
 PROCESSPILOT_INLINE_WORKER = os.getenv('PROCESSPILOT_INLINE_WORKER', '1' if DEBUG else '0').strip().lower() in {'1', 'true', 'yes', 'on'}
 PROCESSPILOT_JOB_STALE_SECONDS = int(os.getenv('PROCESSPILOT_JOB_STALE_SECONDS', '900'))
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
+DEEPSEEK_API_BASE_URL = os.getenv('DEEPSEEK_API_BASE_URL', 'https://api.deepseek.com')
+DEEPSEEK_MODEL = os.getenv('DEEPSEEK_MODEL', 'deepseek-flash')
+PROCESSPILOT_LOCAL_LLM_BASE_URL = os.getenv('PROCESSPILOT_LOCAL_LLM_BASE_URL', 'http://127.0.0.1:11434/v1')
+PROCESSPILOT_LOCAL_LLM_MODEL = os.getenv('PROCESSPILOT_LOCAL_LLM_MODEL', 'qwen2.5:7b')
+PROCESSPILOT_LOCAL_LLM_API_KEY = os.getenv('PROCESSPILOT_LOCAL_LLM_API_KEY', '')
+PROCESSPILOT_LLM_TIMEOUT_SECONDS = int(os.getenv('PROCESSPILOT_LLM_TIMEOUT_SECONDS', '90'))
 # Control recommendations are advisory by design. Enabling this flag only allows
 # approval records; no equipment protocol adapter is shipped or called.
 PROCESSPILOT_CONTROL_APPROVALS = os.getenv('PROCESSPILOT_CONTROL_APPROVALS', '1').strip().lower() in {'1', 'true', 'yes', 'on'}

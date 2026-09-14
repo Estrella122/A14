@@ -9,7 +9,7 @@ import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
 import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
-import { getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun } from '../api/agent'
+import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
@@ -17,7 +17,7 @@ import { buildRuntimeObservability } from '../utils/runtimeObservability'
 import { applyRuntimeEvents, mergeRuntimeEvents } from '../utils/runtimeEvents'
 
 const props = defineProps({ project: { type: Object, required: true } })
-const emit = defineEmits(['notify', 'navigate'])
+const emit = defineEmits(['notify', 'navigate', 'scene-detected'])
 
 const chatStorageKey = `processpilot-chat-${props.project.id}`
 function readSavedChat() {
@@ -46,6 +46,10 @@ const selectedRun = ref(null)
 const skillCatalog = ref(null)
 const skillCatalogLoading = ref(true)
 const skillCatalogError = ref('')
+const llmCatalog = ref(null)
+const llmProvider = ref('evidence')
+const llmModel = ref('')
+const localLLMBaseUrl = ref('http://127.0.0.1:11434/v1')
 const messages = ref(savedChat?.messages?.length ? savedChat.messages : [welcomeMessage])
 const liveLogs = ref(savedChat?.liveLogs ?? [])
 const logsNewestFirst = ref(true)
@@ -83,6 +87,27 @@ const planNodes = computed(() => {
 const intent = computed(() => responseState.value?.intent ?? { key: 'overview', confidence: 0, keywords: [] })
 const contextRunId = computed(() => responseState.value?.run_id ?? activeRun.value?.run_id ?? '尚无任务')
 const reportUrl = computed(() => activeRun.value?.artifacts?.analysis_report_md ? artifactUrl(activeRun.value.run_id, 'analysis_report_md') : '')
+const activeLLMProvider = computed(() => llmCatalog.value?.providers?.find((item) => item.id === llmProvider.value))
+
+function readLLMPreference() {
+  try { return JSON.parse(window.localStorage.getItem('processpilot-llm-preference') || 'null') } catch { return null }
+}
+
+function llmRequestConfig() {
+  return {
+    provider: llmProvider.value,
+    model: llmModel.value || activeLLMProvider.value?.model,
+    ...(llmProvider.value === 'local' ? { base_url: localLLMBaseUrl.value } : {}),
+  }
+}
+
+watch([llmProvider, llmModel, localLLMBaseUrl], () => {
+  try { window.localStorage.setItem('processpilot-llm-preference', JSON.stringify(llmRequestConfig())) } catch { /* preference persistence is optional */ }
+})
+
+function handleLLMProviderChange() {
+  llmModel.value = activeLLMProvider.value?.model || ''
+}
 
 watch([messages, responseState, runtimeHistory, liveLogs, prompt], () => {
   try {
@@ -151,6 +176,7 @@ async function pollLiveRun(live, timelineMessage) {
     after = Number(payload.next_sequence ?? after)
     timelineMessage.status = payload.status
     timelineMessage.metrics = payload.metrics ?? {}
+    timelineMessage.draft = (timelineMessage.draft || '') + (payload.events ?? []).filter((event) => event.event_type === 'llm_response_delta').map((event) => event.metadata?.delta || '').join('')
     activeLiveRun.value = { ...live, after, status: payload.status }
     liveProgress.value = [...timelineMessage.events].reverse().find((event) => Number.isFinite(event.progress))?.progress ?? null
     responseState.value = {
@@ -174,7 +200,7 @@ function appendAgentResult(result, prefix = '') {
     id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
     skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity, execution_state: item.execution_state, executor_selection_kind: item.executor_selection_kind })) ?? [],
     skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
-    runId: result.run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    runId: result.run_id, llm: result.llm, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   })
   if (result.snapshot) {
     latestRun.value = result.snapshot
@@ -184,8 +210,8 @@ function appendAgentResult(result, prefix = '') {
 }
 
 async function executeLiveMessage(userText, runId, prefix = '') {
-  const started = await startAgentLiveRun(userText, runId, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [])
-  const timelineMessage = { id: Date.now() + 1, role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
+  const started = await startAgentLiveRun(userText, runId, responseState.value?.intent?.key, responseState.value?.intent?.matched ?? [], llmRequestConfig())
+  const timelineMessage = { id: Date.now() + 1, role: 'runtime', events: [], draft: '', status: 'running', metrics: {}, skillRunId: started.skill_run_id, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
   messages.value.push(timelineMessage)
   const result = await pollLiveRun(started, timelineMessage)
   appendAgentResult(result, prefix)
@@ -291,6 +317,8 @@ async function handleCsv(event) {
     ].slice(0, 18)
     emit('notify', { tone: 'success', title: 'CSV基础分析已完成', message: `任务 ${snapshot.run_id} 已返回首版结果，深度分析在后台继续。` })
     void monitorExtendedAnalysis(snapshot.run_id)
+    const detectedScenario = snapshot.results?.standardization?.scenario?.scenario_id
+    if (detectedScenario) emit('scene-detected', { scenarioId: detectedScenario, runId: snapshot.run_id, path: '/digital-twin/' })
   } catch (error) {
     messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'CSV分析失败', message: error.message })
@@ -302,6 +330,7 @@ async function handleCsv(event) {
 }
 
 onMounted(async () => {
+  const savedLLM = readLLMPreference()
   await Promise.allSettled([
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
     listPipelineRuns({ limit: 20 }).then((payload) => {
@@ -309,9 +338,18 @@ onMounted(async () => {
       const restored = recentRuns.value.find((run) => run.run_id === savedChat?.selectedRunId)
       if (restored) selectedRun.value = restored
     }),
+    getAgentLLMProviders().then((result) => {
+      llmCatalog.value = result
+      const candidate = result.providers?.find((item) => item.id === savedLLM?.provider && item.configured)
+        ?? result.providers?.find((item) => item.id === result.default_provider && item.configured)
+        ?? result.providers?.[0]
+      llmProvider.value = candidate?.id || 'evidence'
+      llmModel.value = savedLLM?.model || candidate?.model || ''
+      localLLMBaseUrl.value = savedLLM?.base_url || result.providers?.find((item) => item.id === 'local')?.base_url || localLLMBaseUrl.value
+    }).catch(() => { llmProvider.value = 'evidence' }),
   ])
   if (activeLiveRun.value?.skill_run_id && activeLiveRun.value.status === 'running') {
-    const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
+    const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], draft: '', status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
     if (!messages.value.includes(timelineMessage)) messages.value.push(timelineMessage)
     try {
       const result = await pollLiveRun(activeLiveRun.value, timelineMessage)
@@ -377,10 +415,11 @@ function switchRun(event) {
 
         <div ref="chatThread" class="chat-thread">
           <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
-            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" />
+            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" :draft="message.draft" />
             <div v-if="message.role === 'agent'" class="message-avatar"><AppIcon name="spark" :size="17" /></div>
             <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
               <p>{{ message.text }}</p>
+              <span v-if="message.llm" class="message-model"><AppIcon name="spark" :size="11" />{{ message.llm.used ? `${message.llm.provider} · ${message.llm.model}` : message.llm.fallback ? '大模型不可用 · Evidence 回退' : 'Evidence Agent' }}</span>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">
                 <div><AppIcon name="network" :size="13" /><strong v-if="message.skillSummary?.read != null">Skill 证据核验 · 取证 {{ message.skillSummary?.read ?? 0 }} · 规划 {{ message.skillSummary?.planned ?? 0 }} · 缺证据 {{ message.skillSummary?.unavailable ?? 0 }} · 阻断 {{ message.skillSummary?.blocked ?? 0 }}</strong><strong v-else>历史 Skill 记录（未经新版证据核验）</strong><code>{{ message.skillRunId }}</code></div>
@@ -394,6 +433,13 @@ function switchRun(event) {
             </div>
           </div>
 
+        </div>
+
+        <div class="model-selector" aria-label="回答模型设置">
+          <label><span>回答模型</span><select v-model="llmProvider" @change="handleLLMProviderChange"><option v-for="provider in llmCatalog?.providers ?? []" :key="provider.id" :value="provider.id" :disabled="!provider.configured">{{ provider.label }}{{ provider.configured ? '' : '（未配置）' }}</option></select></label>
+          <label v-if="llmProvider !== 'evidence'"><span>模型名称</span><input v-model.trim="llmModel" maxlength="120" autocomplete="off" /></label>
+          <label v-if="llmProvider === 'local'" class="model-endpoint"><span>本地接口</span><input v-model.trim="localLLMBaseUrl" inputmode="url" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" /></label>
+          <small>{{ activeLLMProvider?.description || '正在读取模型配置…' }}</small>
         </div>
 
         <div class="prompt-templates">
@@ -482,6 +528,12 @@ function switchRun(event) {
 .agent-delivery-bar a { padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; color: #334155; background: #fff; text-decoration: none; font-size: 8px; }
 .agent-delivery-bar .report-link { display: inline-flex; align-items: center; gap: 4px; border-color: #93c5fd; color: #1d4ed8; background: #eff6ff; }
 .message-error { border-color: #fecaca; background: #fff7f7; }
+.message-model { display: inline-flex!important; align-items: center; gap: 3px; margin-top: 7px!important; padding: 3px 6px; border: 1px solid #dbeafe; border-radius: 999px; color: #1d4ed8!important; background: #eff6ff; font-size: 7px!important; }
+.model-selector { display: grid; grid-template-columns: 150px 170px minmax(220px, 1fr); gap: 8px; align-items: end; margin: 10px 16px; padding: 10px; border: 1px solid #dbe7f5; border-radius: 10px; background: #f8fbff; }
+.model-selector label { display: grid; gap: 4px; color: #64748b; font-size: 8px; }
+.model-selector select, .model-selector input { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid #cbd8e8; border-radius: 7px; outline: 0; color: #243b5a; background: #fff; font: inherit; font-size: 9px; }
+.model-selector select:focus, .model-selector input:focus { border-color: #6e9ff0; box-shadow: 0 0 0 2px rgba(37, 99, 235, .08); }
+.model-selector small { grid-column: 1 / -1; color: #718198; font-size: 8px; }
 .message-skill-chain { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(148, 163, 184, .22); }
 .message-skill-chain > div { display: flex; align-items: center; gap: 5px; width: 100%; color: #334155; }
 .message-skill-chain > div strong { font-size: 8px; }
@@ -494,5 +546,5 @@ function switchRun(event) {
 .message-deliverables strong, .message-deliverables a { display: inline-flex; align-items: center; gap: 3px; font-size: 7px; }
 .message-deliverables strong { color: #475569; }
 .message-deliverables a { padding: 3px 6px; border: 1px solid #a7f3d0; border-radius: 5px; color: #047857; background: #ecfdf5; text-decoration: none; }
-@media (max-width: 680px) { .agent-delivery-bar span { width: 100%; margin-right: 0; } }
+@media (max-width: 680px) { .agent-delivery-bar span { width: 100%; margin-right: 0; } .model-selector { grid-template-columns: 1fr; margin-inline: 11px; } .model-selector small { grid-column: auto; } }
 </style>

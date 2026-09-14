@@ -8,6 +8,7 @@ from core.skills import execute_skill_plan, plan_skills
 
 from .expert_qa import answer_expert_question
 from .pipeline import PipelineError, get_run, rerun_pipeline
+from .llm_gateway import LLMGatewayError, generate_grounded_answer
 from core.skills.catalog import resolve_scene_family
 from django.conf import settings
 from core.skills.response_renderer import DeterministicResponseRenderer
@@ -371,7 +372,7 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
 
 def chat(message: str, run_id: str | None = None, previous_intent: str | None = None,
          previous_intents: list[str] | None = None, *, skill_run_id: str | None = None,
-         event_sink=None) -> dict[str, Any]:
+         event_sink=None, llm_config: dict[str, Any] | None = None) -> dict[str, Any]:
     message = str(message or "").strip()
     if not message:
         raise ValueError("聊天内容不能为空。")
@@ -568,6 +569,45 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "logs": logs,
         "snapshot": snapshot if executed else None,
     }
+    if llm_config and llm_config.get("provider") not in {None, "", "evidence"}:
+        deterministic_answer = response["answer"]
+        if event_sink:
+            event_sink("llm_generation_started", stage="answer", status="executing", message=f"正在调用 {llm_config.get('provider')} 生成证据约束回答")
+        emitted_characters = 0
+        delta_buffer: list[str] = []
+
+        def flush_delta() -> None:
+            nonlocal delta_buffer
+            delta = "".join(delta_buffer)
+            if delta and event_sink:
+                event_sink("llm_response_delta", stage="answer", status="streaming", message=f"模型已生成 {emitted_characters} 字", metadata={"delta": delta, "generated_characters": emitted_characters})
+            delta_buffer = []
+
+        def emit_delta(delta: str) -> None:
+            nonlocal emitted_characters
+            emitted_characters += len(delta)
+            delta_buffer.append(delta)
+            if len("".join(delta_buffer)) >= 48:
+                flush_delta()
+
+        try:
+            generated = generate_grounded_answer(
+                message=message, snapshot=snapshot, response=response, config=llm_config, on_delta=emit_delta,
+            )
+            flush_delta()
+            response["answer"] = generated["answer"]
+            response["deterministic_answer"] = deterministic_answer
+            response["llm"] = {**{key: value for key, value in generated.items() if key != "answer"}, "used": True, "fallback": False}
+            logs.append({"time": now, "level": "LLM", "text": f"{generated.get('label', generated['provider'])} · {generated['model']} · 证据约束生成完成"})
+            if event_sink:
+                event_sink("llm_generation_completed", stage="answer", status="completed", message=f"{generated.get('label', generated['provider'])} 回答生成完成", metadata={"provider": generated["provider"], "model": generated["model"]})
+        except LLMGatewayError as exc:
+            response["llm"] = {"provider": llm_config.get("provider"), "model": llm_config.get("model"), "used": False, "fallback": True, "error": str(exc)}
+            logs.append({"time": now, "level": "WARN", "text": f"大模型不可用，已回退 Evidence Agent：{exc}"})
+            if event_sink:
+                event_sink("llm_generation_failed", stage="answer", status="partial", message=f"大模型不可用，已安全回退到证据回答：{exc}")
+    else:
+        response["llm"] = {"provider": "evidence", "model": "deterministic-evidence-v1", "used": False, "fallback": False}
     if event_sink:
         event_sink("answer_generation_completed", stage="answer", status="completed", message="回答已生成")
     return response

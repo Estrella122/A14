@@ -220,7 +220,7 @@
 .message-avatar { width: 30px; height: 30px; flex: 0 0 30px; border-radius: 9px; }
 .message-bubble { padding: 11px 13px; border: 1px solid #dfe7f2; border-radius: 4px 13px 13px 13px; background: #fff; box-shadow: var(--shadow-sm); }
 .message-user .message-bubble { color: #fff; border-color: #2e6ee6; border-radius: 13px 4px 13px 13px; background: linear-gradient(145deg, #3477f1, #245bd3); }
-.message-bubble p { font-size: 10px; line-height: 1.65; }
+.message-bubble p { white-space: pre-wrap; font-size: 10px; line-height: 1.65; }
 .message-bubble > span { display: block; margin-top: 7px; color: var(--muted-2); font-size: 7px; }
 .message-user .message-bubble > span { color: #b8d0ff; text-align: right; }
 .rich-message { max-width: 610px; }

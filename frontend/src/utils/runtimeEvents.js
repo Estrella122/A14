@@ -33,7 +33,7 @@ export function applyRuntimeEvents(runtime = {}, events = []) {
 }
 
 export function visibleRuntimeEvents(events = []) {
-  const keyTypes = new Set(['task_understanding_started', 'task_understanding_completed', 'skill_selected', 'skill_loaded', 'execution_plan_created', 'executor_waiting', 'executor_started', 'executor_completed', 'executor_partial', 'executor_blocked', 'executor_failed', 'artifact_produced', 'answer_generation_started', 'answer_generation_completed', 'run_failed'])
+  const keyTypes = new Set(['task_understanding_started', 'task_understanding_completed', 'skill_selected', 'skill_loaded', 'execution_plan_created', 'executor_waiting', 'executor_started', 'executor_completed', 'executor_partial', 'executor_blocked', 'executor_failed', 'artifact_produced', 'answer_generation_started', 'llm_generation_started', 'llm_generation_completed', 'llm_generation_failed', 'answer_generation_completed', 'run_failed'])
   return events.filter((event) => keyTypes.has(event.event_type) || event.event_type.startsWith('capability_') && ['selected', 'blocked', 'deferred'].includes(event.status))
 }
 

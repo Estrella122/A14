@@ -11,7 +11,7 @@ import { buildSceneState } from '../composables/useSceneBinding'
 import { buildSimulationCsv } from '../utils/simulationCsv'
 
 const props = defineProps({ project: { type: Object, required: true } })
-const emit = defineEmits(['notify', 'navigate'])
+const emit = defineEmits(['notify', 'navigate', 'scene-detected'])
 
 const fileInput = ref(null)
 const isGenerating = ref(false)
@@ -119,6 +119,8 @@ async function runPipelineFile(file, pending = createPendingFile(file)) {
       })
     } else {
       emit('notify', { tone: 'success', title: '真实流水线执行完成', message: `${file.name} 已完成字段统一、清洗优选、系统辨识和Agent评审。` })
+      const scenarioId = standard?.scenario?.scenario_id
+      if (scenarioId) emit('scene-detected', { scenarioId, runId: latestRun.value.run_id, path: '/digital-twin/' })
     }
   } catch (error) {
     pending.status = '执行失败'
@@ -139,6 +141,10 @@ async function applyMappingReview() {
     })
     announcePipelineUpdate(latestRun.value)
     emit('notify', { tone: latestRun.value.status === 'completed' ? 'success' : 'warning', title: scenarioChanged ? '场景字段已刷新' : '人工映射已应用', message: scenarioChanged ? '已按新场景刷新标准字段，请继续确认映射。' : latestRun.value.status === 'completed' ? '已使用审核后的映射重新执行流水线。' : '映射已保存到运行记录，仍有门禁项需要复核。' })
+    if (latestRun.value.status === 'completed') {
+      const scenarioId = latestRun.value.results?.standardization?.scenario?.scenario_id
+      if (scenarioId) emit('scene-detected', { scenarioId, runId: latestRun.value.run_id, path: '/digital-twin/' })
+    }
   } catch (error) {
     emit('notify', { tone: 'warning', title: '人工映射执行失败', message: error.message })
   } finally {
