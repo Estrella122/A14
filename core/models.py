@@ -429,3 +429,133 @@ class ControlApproval(models.Model):
     class Meta:
         db_table = 'control_approvals'
         ordering = ('-created_at',)
+
+
+class KnowledgeDocument(models.Model):
+    STATUS_CHOICES = (('draft', '草稿'), ('approved', '已审核'), ('retired', '已停用'))
+    document_id = models.CharField('文档标识', max_length=120, unique=True, db_index=True)
+    title = models.CharField('标题', max_length=255)
+    source_type = models.CharField('来源类型', max_length=40, default='builtin')
+    source_uri = models.CharField('来源地址', max_length=500, blank=True)
+    scene_id = models.CharField('场景ID', max_length=80, blank=True, db_index=True)
+    version = models.CharField('版本', max_length=40, default='1.0')
+    status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='draft', db_index=True)
+    checksum = models.CharField('内容校验值', max_length=64, blank=True)
+    approved_by = models.CharField('审核人', max_length=150, blank=True)
+    effective_at = models.DateTimeField('生效时间', null=True, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'knowledge_documents'
+        ordering = ('scene_id', 'title')
+
+    def __str__(self):
+        return self.title
+
+
+class KnowledgeChunk(models.Model):
+    document = models.ForeignKey(KnowledgeDocument, related_name='chunks', on_delete=models.CASCADE)
+    chunk_id = models.CharField('知识片段标识', max_length=160, unique=True, db_index=True)
+    ordinal = models.PositiveIntegerField('片段序号', default=1)
+    content = models.TextField('知识内容')
+    keywords = models.JSONField('关键词', default=list)
+    metadata = models.JSONField('元数据', default=dict)
+    embedding_ref = models.CharField('向量引用', max_length=255, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'knowledge_chunks'
+        ordering = ('document_id', 'ordinal')
+        constraints = [models.UniqueConstraint(fields=('document', 'ordinal'), name='unique_knowledge_doc_chunk')]
+
+
+class KnowledgeEntity(models.Model):
+    STATUS_CHOICES = KnowledgeDocument.STATUS_CHOICES
+    entity_id = models.CharField('实体标识', max_length=160, unique=True, db_index=True)
+    entity_type = models.CharField('实体类型', max_length=40, db_index=True)
+    canonical_name = models.CharField('标准名称', max_length=255)
+    scene_id = models.CharField('场景ID', max_length=80, blank=True, db_index=True)
+    attributes = models.JSONField('属性', default=dict)
+    status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='draft', db_index=True)
+    source_document = models.ForeignKey(KnowledgeDocument, null=True, blank=True, related_name='entities', on_delete=models.SET_NULL)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'knowledge_entities'
+        ordering = ('entity_type', 'canonical_name')
+
+    def __str__(self):
+        return self.canonical_name
+
+
+class KnowledgeAlias(models.Model):
+    entity = models.ForeignKey(KnowledgeEntity, related_name='aliases', on_delete=models.CASCADE)
+    alias = models.CharField('别名', max_length=255)
+    normalized_alias = models.CharField('归一化别名', max_length=255, db_index=True)
+    language = models.CharField('语言', max_length=20, default='zh-CN')
+    priority = models.PositiveSmallIntegerField('优先级', default=50)
+
+    class Meta:
+        db_table = 'knowledge_aliases'
+        ordering = ('-priority', 'alias')
+        constraints = [models.UniqueConstraint(fields=('entity', 'normalized_alias'), name='unique_entity_alias')]
+
+
+class KnowledgeRelation(models.Model):
+    STATUS_CHOICES = KnowledgeDocument.STATUS_CHOICES
+    relation_id = models.CharField('关系标识', max_length=180, unique=True, db_index=True)
+    subject = models.ForeignKey(KnowledgeEntity, related_name='outgoing_relations', on_delete=models.CASCADE)
+    predicate = models.CharField('关系类型', max_length=80, db_index=True)
+    object_entity = models.ForeignKey(KnowledgeEntity, null=True, blank=True, related_name='incoming_relations', on_delete=models.CASCADE)
+    object_value = models.CharField('关系值', max_length=500, blank=True)
+    confidence = models.DecimalField('置信度', max_digits=4, decimal_places=3, default=Decimal('1.0'))
+    status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='draft', db_index=True)
+    source_document = models.ForeignKey(KnowledgeDocument, null=True, blank=True, related_name='relations', on_delete=models.SET_NULL)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        db_table = 'knowledge_relations'
+
+
+class SkillKnowledgeRule(models.Model):
+    STATUS_CHOICES = KnowledgeDocument.STATUS_CHOICES
+    rule_id = models.CharField('规则标识', max_length=180, unique=True, db_index=True)
+    skill_id = models.CharField('Skill ID', max_length=120, db_index=True)
+    scene_id = models.CharField('场景ID', max_length=80, blank=True, db_index=True)
+    intent_patterns = models.JSONField('意图表达', default=list)
+    positive_terms = models.JSONField('正向术语', default=list)
+    negative_terms = models.JSONField('排除术语', default=list)
+    requires_artifacts = models.JSONField('前置产物', default=list)
+    priority = models.PositiveSmallIntegerField('优先级', default=50)
+    confidence = models.DecimalField('基础置信度', max_digits=4, decimal_places=3, default=Decimal('0.84'))
+    status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='draft', db_index=True)
+    rationale = models.TextField('规则依据', blank=True)
+    source_document = models.ForeignKey(KnowledgeDocument, null=True, blank=True, related_name='skill_rules', on_delete=models.SET_NULL)
+    version = models.CharField('版本', max_length=40, default='1.0')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        db_table = 'skill_knowledge_rules'
+        ordering = ('-priority', 'skill_id')
+
+
+class RoutingFeedback(models.Model):
+    OUTCOME_CHOICES = (('accepted', '命中正确'), ('corrected', '已纠正'), ('rejected', '错误召回'))
+    query = models.TextField('用户问题')
+    scene_id = models.CharField('场景ID', max_length=80, blank=True, db_index=True)
+    retrieval_context = models.JSONField('检索上下文', default=dict)
+    predicted_skill_ids = models.JSONField('预测 Skill', default=list)
+    corrected_skill_ids = models.JSONField('纠正 Skill', default=list)
+    outcome = models.CharField('反馈结果', max_length=20, choices=OUTCOME_CHOICES, db_index=True)
+    reviewed_by = models.CharField('复核人', max_length=150, blank=True)
+    note = models.TextField('备注', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    reviewed_at = models.DateTimeField('复核时间', null=True, blank=True)
+
+    class Meta:
+        db_table = 'routing_feedback'
+        ordering = ('-created_at',)

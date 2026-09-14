@@ -19,6 +19,7 @@ const viewMap = {
   '/report-export/': defineAsyncComponent(() => import('./views/DeliveryView.vue')),
   '/pipeline-builder/': defineAsyncComponent(() => import('./views/PipelineBuilderView.vue')),
   '/experiments/': defineAsyncComponent(() => import('./views/ExperimentTrackerView.vue')),
+  '/knowledge-base/': defineAsyncComponent(() => import('./views/KnowledgeBaseView.vue')),
 }
 
 function normalizePath(path) {

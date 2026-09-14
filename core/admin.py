@@ -9,16 +9,71 @@ from .models import (
     DynamicSegment,
     ExportRecord,
     LagAnalysisResult,
+    KnowledgeAlias,
+    KnowledgeChunk,
+    KnowledgeDocument,
+    KnowledgeEntity,
+    KnowledgeRelation,
     ModelResult,
     OptimizationRun,
     OptimizationStudy,
     PipelineRunRecord,
     RuntimeJob,
+    RoutingFeedback,
     ScenarioTemplate,
     StandardCheck,
     SkillRunRecord,
+    SkillKnowledgeRule,
     VariableMapping,
 )
+
+
+class KnowledgeChunkInline(admin.TabularInline):
+    model = KnowledgeChunk
+    extra = 0
+
+
+@admin.register(KnowledgeDocument)
+class KnowledgeDocumentAdmin(admin.ModelAdmin):
+    list_display = ('document_id', 'title', 'scene_id', 'source_type', 'version', 'status', 'approved_by', 'updated_at')
+    search_fields = ('document_id', 'title', 'scene_id', 'source_uri')
+    list_filter = ('status', 'source_type', 'scene_id')
+    inlines = (KnowledgeChunkInline,)
+
+
+class KnowledgeAliasInline(admin.TabularInline):
+    model = KnowledgeAlias
+    extra = 0
+
+
+@admin.register(KnowledgeEntity)
+class KnowledgeEntityAdmin(admin.ModelAdmin):
+    list_display = ('entity_id', 'canonical_name', 'entity_type', 'scene_id', 'status', 'updated_at')
+    search_fields = ('entity_id', 'canonical_name', 'aliases__alias')
+    list_filter = ('status', 'entity_type', 'scene_id')
+    inlines = (KnowledgeAliasInline,)
+
+
+@admin.register(KnowledgeRelation)
+class KnowledgeRelationAdmin(admin.ModelAdmin):
+    list_display = ('relation_id', 'subject', 'predicate', 'object_entity', 'object_value', 'confidence', 'status')
+    search_fields = ('relation_id', 'subject__canonical_name', 'object_entity__canonical_name', 'object_value')
+    list_filter = ('status', 'predicate')
+
+
+@admin.register(SkillKnowledgeRule)
+class SkillKnowledgeRuleAdmin(admin.ModelAdmin):
+    list_display = ('rule_id', 'skill_id', 'scene_id', 'priority', 'confidence', 'status', 'version', 'updated_at')
+    search_fields = ('rule_id', 'skill_id', 'rationale')
+    list_filter = ('status', 'scene_id', 'version')
+
+
+@admin.register(RoutingFeedback)
+class RoutingFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('id', 'scene_id', 'outcome', 'reviewed_by', 'created_at')
+    search_fields = ('query', 'reviewed_by', 'note')
+    list_filter = ('outcome', 'scene_id', 'created_at')
+    readonly_fields = ('query', 'scene_id', 'retrieval_context', 'predicted_skill_ids', 'created_at')
 
 
 @admin.register(RuntimeJob)

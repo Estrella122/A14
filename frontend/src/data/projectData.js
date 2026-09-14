@@ -28,6 +28,7 @@ export const navGroups = [
     items: [
       { label: '流水线编排', shortLabel: '编排', path: '/pipeline-builder/', icon: 'network' },
       { label: '实验追踪', shortLabel: '实验', path: '/experiments/', icon: 'clock' },
+      { label: '知识库', shortLabel: '知识', path: '/knowledge-base/', icon: 'database' },
     ],
   },
 ]

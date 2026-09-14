@@ -16,10 +16,11 @@ npm run setup
 npm run dev
 ```
 
-`npm run setup` 会在下载后的本地工程中创建 `.venv`、安装 Python 和前端依赖，并执行 Django 配置检查。浏览器入口为：
+`npm run setup` 会在下载后的本地工程中创建 `.venv`、安装 Python 和前端依赖，执行数据库迁移并幂等初始化知识库。浏览器入口为：
 
 - Agent 中枢：<http://127.0.0.1:5176/agent-review/>
 - 项目驾驶舱：<http://127.0.0.1:5176/overview/>
+- 工业知识库：<http://127.0.0.1:5176/knowledge-base/>
 - 后端 API：<http://127.0.0.1:8000/api/>
 
 ## 验证
@@ -42,6 +43,6 @@ npm run runtime:prune -- --keep 100 --days 30 --apply
 
 脱丁烷塔数据的上游公开副本没有明确再分发许可证，因此仓库仅保留适配代码和来源说明，不重新发布数据文件。取得合法数据副本后，按 `datasets/public/debutanizer/README.md` 操作。
 
-更完整的说明见 [使用说明.md](使用说明.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
+更完整的说明见 [使用说明.md](使用说明.md)，知识库设计见 [docs/knowledge_base.md](docs/knowledge_base.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
 
 场景清单统一维护在 `frontend/src/data/scenes.json`；新增场景先登记 ID、别名和三维资产状态，再添加标准化模板。生产后台任务使用数据库队列，开发模式会自动唤醒内置 Worker，生产模式应运行独立的 `npm run worker`。

@@ -256,6 +256,26 @@ SIMPLEUI_CONFIG = {
                     'icon': 'fas fa-file-export',
                     'url': '/admin/core/exportrecord/',
                 },
+                {
+                    'name': '知识文档管理',
+                    'icon': 'fas fa-book',
+                    'url': '/admin/core/knowledgedocument/',
+                },
+                {
+                    'name': '知识实体管理',
+                    'icon': 'fas fa-sitemap',
+                    'url': '/admin/core/knowledgeentity/',
+                },
+                {
+                    'name': 'Skill 路由规则',
+                    'icon': 'fas fa-route',
+                    'url': '/admin/core/skillknowledgerule/',
+                },
+                {
+                    'name': '路由反馈复核',
+                    'icon': 'fas fa-comments',
+                    'url': '/admin/core/routingfeedback/',
+                },
             ],
         },
         {

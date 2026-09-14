@@ -89,6 +89,7 @@ try {
   console.log('\n[ProcessPilot] 正在检查数据库迁移…')
   await waitForExit(run(python, ['-c', 'import django, pandas, numpy, rapidfuzz, pandera, matplotlib']))
   await waitForExit(run(python, ['manage.py', 'migrate', '--noinput']))
+  await waitForExit(run(python, ['manage.py', 'seed_knowledge_base']))
 
   const managedServices = []
   const backendUrl = 'http://127.0.0.1:8000/api/'

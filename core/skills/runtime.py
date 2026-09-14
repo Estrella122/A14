@@ -196,13 +196,27 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                  "source": "model_unavailable", "full_pipeline_requested": False,
                  "negative_clauses": [], "error": type(exc).__name__}
     mark("candidate_recall_ms")
-    recalled_skill_ids, relevance_scores = route["direct"], route["scores"]
+    recalled_skill_ids, relevance_scores = set(route["direct"]), dict(route["scores"])
     lexical_candidates = [candidate for decision in route["decisions"] for candidate in decision["candidates"]]
     if snapshot is None and run_id:
         from core.services.pipeline import get_run
         snapshot = get_run(run_id)
     data_context = build_data_context(snapshot, run_id).public()
     mark("data_context_ms")
+    detected_scene_id = data_context.get("detected_scene")
+    if not detected_scene_id:
+        detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
+    from core.services.knowledge_base import routing_skill_ids
+    knowledge_ids, knowledge_scores, knowledge_retrieval = routing_skill_ids(text, detected_scene_id or '')
+    knowledge_ids -= set(route["denied"])
+    recalled_skill_ids |= knowledge_ids
+    for skill_id in knowledge_ids:
+        relevance_scores[skill_id] = max(relevance_scores.get(skill_id, 0), knowledge_scores[skill_id])
+        lexical_candidates.append({
+            "skill_id": skill_id, "score": knowledge_scores[skill_id],
+            "reason": "已审核知识规则命中", "selected": True, "source": "knowledge_base",
+        })
+    mark("knowledge_retrieval_ms")
     discovered_skills, _discovery_metrics = discover_skills(default_skill_roots())
     mark("skill_discovery_ms")
     skill_resolution = resolve_skills(task_understanding, data_context, discovered_skills, recalled_skill_ids, lexical_candidates)
@@ -223,9 +237,6 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         execution_mode = "analyze"
     if execution_mode == "explain":
         execution_mode = "analyze"
-    detected_scene_id = data_context.get("detected_scene")
-    if not detected_scene_id:
-        detected_scene_id, _detected_scene_name, _detected_family = identify_scene_from_text(text)
     documents = capability_resolution["selected"] + capability_resolution["documentation"]
     skill_runtime = load_skill_context(
         text,
@@ -277,12 +288,20 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                          "core": core_execution_plan,
                      },
                      "skill_runtime": skill_runtime,
+                     "knowledge_retrieval": knowledge_retrieval,
                      "timing_trace": timing_trace,
                      "agent_context": {
                          "base_agent_context": "ProcessPilot Agent Runtime",
                          "loaded_skill_context": skill_runtime["context"],
                          "task_context": {"objective": task_understanding["objective"], "user_message": text, "run_id": run_id},
                          "data_context": data_context,
+                         "knowledge_context": {
+                             "retrieval_mode": knowledge_retrieval["retrieval_mode"],
+                             "skill_suggestions": knowledge_retrieval["skill_suggestions"],
+                             "entities": knowledge_retrieval["entities"],
+                             "documents": knowledge_retrieval["documents"],
+                             "provenance": knowledge_retrieval["provenance"],
+                         },
                      }})
     runtime_skills = {"industrial_intent_parser", "skill_capability_matcher", "workflow_dag_planner", "evidence_audit_reproducer"}
     if execution_mode == "execute":

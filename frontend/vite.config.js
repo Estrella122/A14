@@ -42,6 +42,7 @@ export default defineConfig({
         reportExport: 'report-export/index.html',
         pipelineBuilder: 'pipeline-builder/index.html',
         experiments: 'experiments/index.html',
+        knowledgeBase: 'knowledge-base/index.html',
       },
     },
   },

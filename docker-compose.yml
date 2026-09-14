@@ -30,7 +30,7 @@ services:
       APC_DB_PASSWORD: "${APC_DB_PASSWORD:?set APC_DB_PASSWORD}"
     volumes:
       - 'runtime-data:/var/lib/processpilot/runtime'
-    command: sh -c "python manage.py migrate --noinput && gunicorn heating_furnace_apc.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+    command: sh -c "python manage.py migrate --noinput && python manage.py seed_knowledge_base && gunicorn heating_furnace_apc.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
     depends_on:
       db: {condition: service_healthy}
     healthcheck:

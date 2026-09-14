@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import agent_api, api, integration_api, optimization_api, pipeline_api, runtime_api
+from . import agent_api, api, integration_api, knowledge_api, optimization_api, pipeline_api, runtime_api
 
 
 urlpatterns = [
@@ -9,6 +9,9 @@ urlpatterns = [
     path('runtime/jobs/<slug:job_id>/', runtime_api.job_detail, name='runtime-job-detail'),
     path('security/session/', api.security_session, name='security-session'),
     path('scenes/', api.scene_registry, name='scene-registry'),
+    path('knowledge/summary/', knowledge_api.knowledge_summary, name='knowledge-summary'),
+    path('knowledge/search/', knowledge_api.knowledge_search, name='knowledge-search'),
+    path('knowledge/feedback/', knowledge_api.knowledge_feedback, name='knowledge-feedback'),
     path('integration/', integration_api.integration_summary, name='integration-summary'),
     path('integration/<slug:module_key>/', integration_api.integration_module, name='integration-module'),
     path('agent/chat/', agent_api.agent_chat, name='agent-chat'),

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 test('核心页面可导航且没有横向溢出', async ({ page }) => {
-  for (const path of ['/overview/', '/scenario-data/', '/digital-twin/', '/agent-review/']) {
+  for (const path of ['/overview/', '/scenario-data/', '/digital-twin/', '/agent-review/', '/knowledge-base/']) {
     await page.goto(path)
     await expect(page.locator('#app')).toBeVisible()
     await expect(page.locator('main')).toBeVisible()
