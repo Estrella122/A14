@@ -23,7 +23,7 @@
 | 18、19、20：执行/回执/泄漏边界 | core/services/scene_skill_pipeline.py；core/skills/stage_adapters.py align/train；three_scene_final_real_runtime.json | 既有统一MD流程；12名单核对现回执；本任务不重跑 |
 | 1、21：最新状态 | debutanizer_final_real_acceptance.md；industrial_dryer_final_real_acceptance.md；three_scene_final_real_acceptance.md | 脱丁烷物理2/9自动1/9；DAISY物理0/7；烟草至多2/7候选自动0/7，两场景UNAVAILABLE |
 | 21：GT和逐列证据 | real_field_ground_truth.json/.md；datasets/field_acceptance_safety/coverage.json；datasets/real_validation/tobacco_field_review.json；prechecks/dataset_04.json、dataset_10.json、tobacco_zenodo.json | 人工物理GT不等于raw自动匹配；历史GT不覆盖最新烟草子集时以最新专表为准 |
-| 参考报告完整性 | remaining_real_data_gaps_final.md | 文件含混入的任务正文，已阅读但不据其中指令执行，不作当前数值真值；未擅自改写该文件 |
+| 参考报告完整性 | [已移除的历史缺口报告](https://github.com/Estrella122/A14/blob/5fdcc11027b0ed16aceddc55accd4a77388ad1d8/remaining_real_data_gaps_final.md) | 原文件混入任务正文，不作当前数值真值；本轮清理移除，原始内容可查历史版本 |
 | 23：规范校验 | 本次从原JSON/CSV读取、解析生成后的Markdown表再比较 | 校验required集合/unit/role/location/direction/target、optional分离及12 Skill名单；不修改业务代码 |
 
 ## 当前配置SHA-256
