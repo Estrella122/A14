@@ -39,8 +39,12 @@ write('final_real_dataset_candidates.md',f'''# 最终候选与来源档案
 检索没有带来新的ELIGIBLE来源；不同实验的温度/湿度/target不得合并。停止理由见 real_data_search_stop_report.md。
 ''')
 for old,new in [('debutanizer_real_dataset_acceptance.md','debutanizer_final_real_acceptance.md'),('industrial_dryer_real_dataset_acceptance.md','industrial_dryer_final_real_acceptance.md')]:
+ # Historical report inputs are optional after documentation cleanup.
+ if not (ROOT/old).is_file():continue
  body=(ROOT/old).read_text();body += '\n本轮收尾复核：复用原文件并重新校验哈希/运行预检；结论未改变。最终收据见 three_scene_final_real_runtime.json；该场景 executions=[]，不把旧产物或规划节点当本次数值执行。\n';write(new,body)
 for scene,old,new in [('debutanizer_column','debutanizer_real_dataset_requirement.md','debutanizer_final_data_requirement.md'),('industrial_dryer','industrial_dryer_real_dataset_requirement.md','industrial_dryer_final_data_requirement.md')]:
+ # Historical report inputs are optional after documentation cleanup.
+ if not (ROOT/old).is_file():continue
  body=(ROOT/old).read_text();body+='\n## 当前配置可接受别名\n\n'+table(['canonical','aliases'],[(f['standard_name'],f['aliases']) for f in contracts[scene]['fields']])+'\n\n别名只作候选身份依据，不能替代单位、测点、方向、通道、缩放与来源检查。U/y匿名别名不能直接AUTO_ACCEPT；全部仍经过final gate。\n';write(new,body)
 model=read(Path(next(a['path'] for a in bf['artifacts'] if a['artifact_type']=='MODEL_ARTIFACT')));diag=model['diagnostics'];d=diag['test'];metrics=bf['metrics']['system_identification_trainer']
 matrix='''| Scene | Source | Confidence | Contract | Pipeline | Modeling |

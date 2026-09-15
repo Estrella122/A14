@@ -6,9 +6,10 @@
 - [使用说明](../使用说明.md)
 - [接口说明](../接口说明.md)
 - [部署配置](production_deployment.md)
-- [Skill Runtime架构](../md_skill_runtime_architecture.md)
-- [统一字段安全门禁](../unified_field_acceptance_design.md)
-- [3D资产来源与迁移说明](../real_3d_scene_migration_report.md)
+
+- [Skill 使用与结构](../core/skills/README.md)
+- [Skill 执行契约](skill_execution_contracts.md)
+- [3D资产与许可](../frontend/public/models/README.md)
 
 ## 当前真实数据接入
 
@@ -26,10 +27,9 @@
 - [最终剩余缺口](../final_remaining_gaps.md)
 - [公开数据检索停止理由](../real_data_search_stop_report.md)
 - [真实验收回归报告](../final_regression_report.md)
-- [最近GitHub合并验证](../github_sync_compatibility.md)
 
 当前真实Pipeline：高炉PASS，脱丁烷塔和工业干燥器UNAVAILABLE，整体PARTIAL。规范一致性PASS不代表真实数据验收完成。
 
 ## 历史文档
 
-重复进度、旧候选清单及被新版覆盖的阶段验收已从工作目录移除，可从[清理前版本](https://github.com/Estrella122/A14/tree/1979be022c32b5992e77df8c9ff2420d5c6a7599)查询。仍保留的历史报告包含来源/设计证据，或是离线报告生成脚本实际读取的输入；仅作为历史输出的重复报告已移除；判断当前状态请以上述“当前验收与边界”为准。
+早期架构阶段说明、开发验收、旧版数据规格和重复报告已移除。历史内容可从[Git记录](https://github.com/Estrella122/A14/commits/main/)查找；当前接口、部署与数据接入以本页列出的文档为准。
