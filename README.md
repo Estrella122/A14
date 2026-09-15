@@ -59,3 +59,7 @@ npm run runtime:prune -- --keep 100 --days 30 --apply
 更完整的说明见 [使用说明.md](使用说明.md)，知识库设计见 [docs/knowledge_base.md](docs/knowledge_base.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
 
 场景清单统一维护在 `frontend/src/data/scenes.json`；新增场景先登记 ID、别名和三维资产状态，再添加标准化模板。生产后台任务使用数据库队列，开发模式会自动唤醒内置 Worker，生产模式应运行独立的 `npm run worker`。
+
+## 文档导航
+
+数据需求、当前验收与架构说明统一见[项目文档入口](docs/README.md)。
