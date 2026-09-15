@@ -16,17 +16,10 @@
 - [脱丁烷塔正式数据需求](../debutanizer_final_data_requirement.md)
 - [工业干燥器正式数据需求](../industrial_dryer_final_data_requirement.md)
 - [接收检查表](../real_data_acquisition_checklist.md)
-- [规范来源追踪](../real_data_requirement_source_trace.md)
-- [当前契约](../final_real_data_contracts.md)
-- [候选及来源档案](../final_real_dataset_candidates.md)
 - [数据许可说明](../real_data_source_and_license_report.md)
 
-## 当前验收与边界
+## 数据接入边界
 
-- [三场景真实验收](../three_scene_final_real_acceptance.md)
-- [最终剩余缺口](../final_remaining_gaps.md)
-- [公开数据检索停止理由](../real_data_search_stop_report.md)
-- [真实验收回归报告](../final_regression_report.md)
 
 当前真实Pipeline：高炉PASS，脱丁烷塔和工业干燥器UNAVAILABLE，整体PARTIAL。规范一致性PASS不代表真实数据验收完成。
 

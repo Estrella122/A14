@@ -2,13 +2,13 @@
 
 版本日期：2026-09-14。scenario_id：`industrial_dryer`。本规范仅说明现有契约与接入要求，不修改程序。
 
-标记约定：**配置**是仓库现值；**代码行为**是当前实现；**交付要求**是来源与可验收性要求；**建议**不增加软件硬阈值。逐项出处及SHA-256见 [来源追踪](real_data_requirement_source_trace.md)。
+标记约定：**配置**是仓库现值；**代码行为**是当前实现；**交付要求**是来源与可验收性要求；**建议**不增加软件硬阈值。逐项出处及SHA-256见 [来源追踪](https://github.com/Estrella122/A14/blob/b0f3e360f0eecffb77c4a709e4275aed17dd9793/real_data_requirement_source_trace.md)。
 
 ## 1. 场景说明
 
 当前过程单元：连续式热风工业干燥装置。输入用于时序质量、动态段、时滞与ARX辨识，主目标是 `product_moisture`。输入角色从 template.field_roles 读取；数据场景由标准化结果确定，项目UI场景不能替代数据场景。
 
-当前 Contract FAIL、Pipeline UNAVAILABLE、12 Skill未执行、Modeling NOT_EXECUTED；具体已读候选限制见第21节。来源：[industrial_dryer_final_real_acceptance.md](industrial_dryer_final_real_acceptance.md)、[最新三场景验收](three_scene_final_real_acceptance.md)。
+当前 Contract FAIL、Pipeline UNAVAILABLE、12 Skill未执行、Modeling NOT_EXECUTED；具体已读候选限制见第21节。来源：[industrial_dryer_final_real_acceptance.md](https://github.com/Estrella122/A14/blob/b0f3e360f0eecffb77c4a709e4275aed17dd9793/industrial_dryer_final_real_acceptance.md)、[最新三场景验收](https://github.com/Estrella122/A14/blob/b0f3e360f0eecffb77c4a709e4275aed17dd9793/three_scene_final_real_acceptance.md)。
 
 ## 2. Required Fields（配置，共7项）
 
@@ -235,4 +235,4 @@ DAISY 本轮重新读原始说明：867 点、10 秒采样；输入是燃料流�
 
 ## 23. 规范与代码一致性
 
-本版required/unit/target/role/location及optional按当前配置逐项核对，推荐值已单独标记。Requirement Spec Validation: PASS。源文件SHA-256、具体函数和章节映射见[来源追踪](real_data_requirement_source_trace.md)。此PASS只指规范一致性，不代表本场景真实Pipeline完成。
+本版required/unit/target/role/location及optional按当前配置逐项核对，推荐值已单独标记。Requirement Spec Validation: PASS。源文件SHA-256、具体函数和章节映射见[来源追踪](https://github.com/Estrella122/A14/blob/b0f3e360f0eecffb77c4a709e4275aed17dd9793/real_data_requirement_source_trace.md)。此PASS只指规范一致性，不代表本场景真实Pipeline完成。
