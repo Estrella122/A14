@@ -64,7 +64,7 @@ class SkillMDLoaderTests(SimpleTestCase):
 
     def test_registry_list_get_search_and_duplicates(self):
         registry = get_registry("md")
-        self.assertEqual(12, len(registry.list()))
+        self.assertEqual(13, len(registry.list()))
         self.assertIsNotNone(registry.get(SNR))
         self.assertEqual(SNR, registry.search("信噪比")[0]["skill_id"])
         with self.assertRaisesRegex(ManifestError, "duplicate"):
@@ -138,7 +138,7 @@ class MDSkillRuntimeTests(SimpleTestCase):
         self.assertEqual({}, result["core_skill_execution_results"][0]["metrics"])
 
     def test_api_details_and_plan(self):
-        self.assertEqual(12, self.client.get("/api/agent/skills/").json()["data"]["total"])
+        self.assertEqual(13, self.client.get("/api/agent/skills/").json()["data"]["total"])
         detail = self.client.get(f"/api/agent/skills/{SNR}/").json()["data"]
         self.assertEqual("SKILL.md", detail["manifest_source"])
         response = self.client.post("/api/agent/plans/", data=json.dumps({"message": "当前数据的信噪比是多少？"}), content_type="application/json")

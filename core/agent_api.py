@@ -3,7 +3,7 @@ import time
 from datetime import datetime
 from uuid import uuid4
 
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from .services.agent_chat import chat
@@ -216,3 +216,23 @@ def agent_trace(request, run_id):
     ]
     payload = {"source": "api", "run_id": run_id, "total_duration_ms": total_duration, "nodes": nodes, "toolchain": ["数据清洗", "动态筛选", "时滞解耦", "系统辨识", "指标评估"]}
     return JsonResponse({"ok": True, "data": payload}, json_dumps_params={"ensure_ascii": False})
+
+
+@require_GET
+def agent_skill_chart(request, skill_run_id, chart_index):
+    from pathlib import Path
+    from .skills.chart_artifacts import chart_artifacts
+    from .skills.runtime import RUNS_DIR
+    payload = get_skill_run(skill_run_id)
+    charts = chart_artifacts(payload or {})
+    if chart_index < 0 or chart_index >= len(charts):
+        return JsonResponse({"ok": False, "message": "图表不存在或尚未生成。"}, status=404)
+    path = Path(charts[chart_index]["path"]).resolve()
+    root = (RUNS_DIR / skill_run_id).resolve()
+    if not path.is_relative_to(root) or path.suffix != ".svg" or not path.is_file():
+        return JsonResponse({"ok": False, "message": "图表文件不可用。"}, status=404)
+    response = FileResponse(path.open("rb"), content_type="image/svg+xml",
+                            as_attachment=request.GET.get("download") == "1", filename=path.name)
+    response["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

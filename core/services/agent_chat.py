@@ -542,7 +542,9 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     } for item in skill_run["executions"])
     if event_sink:
         event_sink("answer_generation_started", stage="answer", status="executing", message="正在整理执行证据与回答")
+    from core.skills.chart_artifacts import public_charts
     response = {
+        "charts": public_charts(skill_run["skill_run_id"], skill_run),
         "answer": answer,
         "run_id": snapshot["run_id"],
         "executed": executed,

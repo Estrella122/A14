@@ -7,11 +7,15 @@ from .context import build_data_context
 
 def plan_from_manifests(message, task, snapshot, run_id, registry):
     from .runtime import _entities
-    candidates = registry.search(message)
+    chart_request = "charts" in task.get("requested_outputs", []) and task.get("execution_mode") == "execute"
+    # The normalized output intent enriches recall; manifests still decide the Skill.
+    candidates = registry.search(message + (" 可视化 图表 曲线" if chart_request else ""))
     denied = {row["skill_id"] for clause in task.get("negations", [])
               for row in registry.search(clause) if row["score"] >= .45}
     selected = [row["skill_id"] for row in candidates if row["score"] >= .45 and row["skill_id"] not in denied]
     boundary = bool(re.search(r"如果|假如|假设|按钮|原话|原文|引用|这句话|提示|(?:不要|禁止|无需).{0,8}(?:执行|运行|计算)|会不会|能不能|可不可以", message))
+    if chart_request:
+        boundary = False
     boundary = boundary or bool(re.search(r"^\s*(?:请)?(?:介绍|解释)(?:一下)?|怎么证明|做过.+吗|请结合.+说明", message))
     # Reading existing stage results is not authorization to rerun a stage.
     evidence_query = task.get("execution_mode") != "execute" and bool(re.search(

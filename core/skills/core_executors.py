@@ -568,34 +568,16 @@ class VisualizationExecutor:
 
     def execute(self, skill_id, capability_ids, task_spec, data_context, inputs, runtime_context):
         started = perf_counter()
+        from .visualization import build_charts
         snapshot = inputs.get("snapshot", {})
-        preview = snapshot.get("results", {}).get("modeling", {}).get("prediction_preview", [])
-        if not preview:
-            path = _artifact_path(snapshot, "test_predictions_csv")
-            if path:
-                preview = pd.read_csv(path).head(240).to_dict("records")
-        points = [(float(row.get("y_true")), float(row.get("y_pred"))) for row in preview
-                  if pd.notna(row.get("y_true")) and pd.notna(row.get("y_pred"))]
-        if not points:
-            return _result(skill_id, started, status="blocked", limitations=["缺少真实预测序列，未生成占位图。"])
-        values = [value for point in points for value in point]
-        low, high = min(values), max(values)
-        span = high - low or 1.0
-        width, height, margin = 900, 360, 42
-        def polyline(index):
-            return " ".join(f"{margin + i * (width - 2 * margin) / max(1, len(points)-1):.1f},{height-margin-(point[index]-low)*(height-2*margin)/span:.1f}" for i, point in enumerate(points))
-        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
-               '<rect width="100%" height="100%" fill="white"/><text x="42" y="24" font-family="sans-serif" font-size="16">Measured vs predicted</text>'
-               f'<polyline fill="none" stroke="#172033" stroke-width="2" points="{polyline(0)}"/>'
-               f'<polyline fill="none" stroke="#2563eb" stroke-width="2" points="{polyline(1)}"/>'
-               '<text x="690" y="24" fill="#172033" font-family="sans-serif" font-size="11">measured</text>'
-               '<text x="770" y="24" fill="#2563eb" font-family="sans-serif" font-size="11">predicted</text></svg>')
-        output = Path(runtime_context["output_dir"]) / "visualization" / "prediction_comparison.svg"
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(svg, encoding="utf-8")
-        return _result(skill_id, started, capabilities=capability_ids, facts=[f"由真实预测产物生成 {len(points)} 点工程曲线。"],
-                       metrics={"point_count": len(points), "source": "pipeline_prediction"}, artifacts=[str(output)],
-                       evidence=[snapshot.get("run_id")], trace=[{"step": "render_prediction_svg", "status": "completed"}])
+        charts, warnings = build_charts(snapshot, task_spec, data_context, runtime_context["output_dir"], _artifact_path)
+        if not charts:
+            return _result(skill_id, started, status="blocked", limitations=warnings or ["没有真实数值序列，未生成占位图。"])
+        return _result(skill_id, started, capabilities=capability_ids,
+                       facts=[f"已根据当前真实数据生成 {len(charts)} 张图表，可在对话中查看和下载。"],
+                       metrics={"point_count": sum(chart["point_count"] for chart in charts), "charts": charts},
+                       artifacts=[chart["path"] for chart in charts], evidence=[snapshot.get("run_id")],
+                       warnings=warnings, trace=[{"step": "render_real_series", "status": "completed"}])
 
 
 class ExperimentExecutor:

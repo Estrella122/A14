@@ -10,6 +10,8 @@ import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
 import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
 import ChatOptimizationSummary from '../components/ChatOptimizationSummary.vue'
+import ChatCharts from '../components/ChatCharts.vue'
+import PipelineChatProgress from '../components/PipelineChatProgress.vue'
 import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
@@ -43,7 +45,8 @@ const historyOpen = ref(false)
 const detailsOpen = ref(false)
 const preferredSkill = ref('')
 const noDataContext = ref(savedChat?.noDataContext ?? false)
-const conversationBusy = computed(() => isRunning.value || uploading.value || activeRun.value?.status === 'running')
+const conversationBusy = computed(() => isRunning.value || uploading.value)
+const deletingConversation = ref(null)
 function conversationSnapshot() {
   return {
     id: conversationId.value, title: messages.value.find((item) => item.role === 'user')?.text.slice(0, 48) || '新对话',
@@ -57,6 +60,25 @@ function saveConversation() {
   const entry = JSON.parse(JSON.stringify(conversationSnapshot()))
   conversations.value = [entry, ...conversations.value.filter((item) => item.id !== entry.id)].slice(0, 30)
   try { window.localStorage.setItem(historyKey, JSON.stringify(conversations.value)) } catch { /* Storage may be full. */ }
+}
+function deleteConversation(entry) {
+  if (entry.id === conversationId.value && conversationBusy.value) return
+  if (entry.id === conversationId.value) {
+    // Reset without archiving the conversation that the user just deleted.
+    conversationId.value = crypto.randomUUID()
+    messages.value = [{ ...welcomeMessage, text: '聊天记录已删除。关联的数据和分析结果仍保留，可以继续提问。' }]
+    prompt.value = ''
+    responseState.value = null
+    runtimeHistory.value = {}
+    liveLogs.value = []
+    activeLiveRun.value = null
+    preferredSkill.value = ''
+    window.localStorage.removeItem(chatStorageKey)
+    window.sessionStorage.removeItem(chatStorageKey)
+  }
+  conversations.value = conversations.value.filter(item => item.id !== entry.id)
+  try { window.localStorage.setItem(historyKey, JSON.stringify(conversations.value)) } catch { /* Storage unavailable. */ }
+  deletingConversation.value = null
 }
 function newConversation() {
   if (conversationBusy.value) return
@@ -146,6 +168,17 @@ let pollController
 let scrollFrame
 let disposed = false
 const activeRun = computed(() => noDataContext.value ? null : selectedRun.value ?? latestRun.value)
+watch(latestRun, (run) => {
+  if (run && selectedRun.value?.run_id === run.run_id) selectedRun.value = run
+  if (run?.status === 'completed' && activeRun.value?.run_id === run.run_id) {
+    for (const message of messages.value) {
+      if ((message.pipelineWaitTimeout && message.runId === run.run_id) || /^CSV执行失败：基础分析在 \d+ 秒内未返回$/.test(message.text || '')) {
+        message.text = '此前前端等待超时；后台现已完成处理，结果已可查看。'
+        message.error = false
+      }
+    }
+  }
+})
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
 const hasRuntimeObservation = computed(() => Boolean(
@@ -262,7 +295,13 @@ function skillActivityText(skill) {
 
 async function scrollToLatest() {
   await nextTick()
-  if (chatThread.value) chatThread.value.scrollTop = chatThread.value.scrollHeight
+  if (chatThread.value) {
+    const charts = chatThread.value.querySelectorAll('.chat-charts')
+    const chart = charts[charts.length - 1]
+    if (props.userBoard && messages.value.at(-1)?.charts?.length && chart) {
+      chatThread.value.scrollTop += chart.getBoundingClientRect().top - chatThread.value.getBoundingClientRect().top - 16
+    } else chatThread.value.scrollTop = chatThread.value.scrollHeight
+  }
 }
 
 function scheduleScrollToLatest() {
@@ -368,7 +407,7 @@ function appendAgentResult(result, prefix = '', draftMessage = null) {
     id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
     skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity, execution_state: item.execution_state, executor_selection_kind: item.executor_selection_kind })) ?? [],
     skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
-    runId: result.run_id, llm: result.llm, streaming: false, phase: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    runId: result.run_id, charts: result.charts ?? [], llm: result.llm, streaming: false, phase: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
   if (draftMessage) Object.assign(draftMessage, completedMessage, { id: draftMessage.id })
   else messages.value.push(completedMessage)
@@ -399,10 +438,12 @@ async function executeLiveMessage(userText, runId, prefix = '') {
 }
 
 async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
+  const threadId = conversationId.value
   const started = Date.now()
   let delay = 500
   while (Date.now() - started < timeoutMs) {
     const snapshot = await getPipelineRun(runId)
+    if (disposed || conversationId.value !== threadId) throw new DOMException('对话已切换', 'AbortError')
     latestRun.value = snapshot
     selectedRun.value = snapshot
     announcePipelineUpdate(snapshot)
@@ -410,10 +451,13 @@ async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
     await new Promise((resolve) => window.setTimeout(resolve, document.hidden ? 5_000 : delay))
     delay = Math.min(3_000, Math.round(delay * 1.45))
   }
-  throw new Error(`基础分析在 ${Math.round(timeoutMs / 1000)} 秒内未返回`)
+  const error = new Error('等待暂时结束，后台任务未被取消。')
+  error.code = 'PIPELINE_WAIT_TIMEOUT'
+  throw error
 }
 
 async function monitorExtendedAnalysis(runId) {
+  const threadId = conversationId.value
   try {
     const snapshot = await waitForPipeline(runId, (item) => ['completed', 'failed', 'needs_review'].includes(item.status), 10 * 60 * 1000)
     if (disposed) return
@@ -423,7 +467,7 @@ async function monitorExtendedAnalysis(runId) {
       messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析失败：${snapshot.error?.message ?? '未知错误'}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     }
   } catch (error) {
-    if (!disposed) messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析状态：${error.message}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    if (!disposed && conversationId.value === threadId && error.name !== 'AbortError') messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析状态：${error.message}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
   }
 }
 
@@ -514,6 +558,11 @@ async function handleCsv(event) {
     const detectedScenario = snapshot.results?.standardization?.scenario?.scenario_id
     if (detectedScenario) emit('scene-detected', { scenarioId: detectedScenario, runId: snapshot.run_id, path: '/digital-twin/' })
   } catch (error) {
+    if (error.code === 'PIPELINE_WAIT_TIMEOUT') {
+      messages.value.push({ id: Date.now() + 1, role: 'agent', pipelineWaitTimeout: true, runId: activeRun.value?.run_id, text: '已等待 60 秒，后台仍在处理。这不是执行失败；上方的数据处理进度会继续更新，完成后可直接提问。' })
+      if (activeRun.value?.run_id) void monitorExtendedAnalysis(activeRun.value.run_id)
+      return
+    }
     if (!error.renderedInConversation) messages.value.push({ id: Date.now() + 1, role: 'agent', text: `CSV执行失败：${error.message}`, error: true, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     emit('notify', { tone: 'warning', title: 'CSV分析失败', message: error.message })
   } finally {
@@ -591,7 +640,11 @@ async function switchRun(event) {
       <button class="new-conversation" type="button" :disabled="conversationBusy" @click="newConversation">＋ 新建对话</button>
       <span class="history-label">历史对话 · 保存在此浏览器</span>
       <nav aria-label="历史对话">
-        <button v-for="entry in conversations" :key="entry.id" type="button" :disabled="conversationBusy" :class="{ active: entry.id === conversationId }" @click="openConversation(entry)">{{ entry.title }}</button>
+        <div v-for="entry in conversations" :key="entry.id" class="history-row">
+          <button type="button" :disabled="conversationBusy" :class="{ active: entry.id === conversationId }" @click="openConversation(entry)">{{ entry.title }}</button>
+          <button class="delete-chat" type="button" :aria-label="`删除对话：${entry.title}`" :disabled="entry.id === conversationId && conversationBusy" @click="deletingConversation = entry.id">×</button>
+          <div v-if="deletingConversation === entry.id" class="delete-chat-confirm"><p>仅删除此浏览器中的聊天记录，保留数据和分析任务。</p><button type="button" @click="deleteConversation(entry)">确认删除</button><button type="button" @click="deletingConversation = null">取消</button></div>
+        </div>
         <p v-if="!conversations.length">你的对话会显示在这里。</p>
       </nav>
       <button type="button" class="staff-link" @click="emit('navigate', '/agent-review/')">打开工作人员模式 ↗</button>
@@ -637,11 +690,13 @@ async function switchRun(event) {
         <input v-if="userBoard" ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
         <div v-if="userBoard" class="conversation-context"><span>{{ activeRun?.original_name || '未关联数据 · 上传 CSV 开始分析' }}</span><span v-if="activeRun">{{ sceneState.data_scene.display_name }} · {{ activeRunStatusText }}</span></div>
         <div ref="chatThread" class="chat-thread">
+          <PipelineChatProgress v-if="userBoard && activeRun?.stages?.length" :run="activeRun" />
           <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
             <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" :compact="userBoard" />
             <div v-if="message.role === 'agent'" class="message-avatar"><AppIcon name="spark" :size="17" /></div>
             <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
               <span v-if="message.streaming" class="streaming-phase"><AppIcon name="loop" class="spinning" :size="11" />{{ message.phase }}</span>
+              <ChatCharts v-if="message.charts?.length" :charts="message.charts" />
               <p>{{ message.text || (message.streaming ? '正在读取数据证据与 Skill 执行结果…' : '') }}<i v-if="message.streaming" class="streaming-cursor"></i></p>
               <span v-if="message.llm" class="message-model"><AppIcon name="spark" :size="11" />{{ message.llm.used ? `${message.llm.provider} · ${message.llm.model}` : message.llm.fallback ? '大模型不可用 · Evidence 回退' : 'Evidence Agent' }}</span>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
@@ -1421,4 +1476,11 @@ async function switchRun(event) {
 .is-user-board .message-model { font-size:11px; }
 .detail-run-picker { display:grid; gap:8px; margin-top:20px; }.detail-run-picker select { width:100%; padding:10px; border:1px solid #dce4dd; border-radius:8px; background:#fff; font-size:13px; }
 .agent-view.is-user-board .message-user { width:auto; max-width:85%; margin-left:auto; }
+
+.history-row { display:flex; flex-wrap:wrap; align-items:center; position:relative; }
+.conversation-sidebar nav .history-row>button:first-child { flex:1; width:0; }
+.conversation-sidebar nav .delete-chat { width:30px; flex:0 0 30px; padding:8px; font-size:20px; color:#76675f; text-align:center; }
+.delete-chat-confirm { width:100%; padding:10px; background:#fff; border:1px solid #e4d6cf; border-radius:8px; }
+.conversation-sidebar nav .delete-chat-confirm button { width:auto; padding:8px; }
+.is-user-board .chat-thread>.pipeline-chat-progress { flex-shrink:0; }
 </style>

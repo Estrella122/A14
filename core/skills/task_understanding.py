@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 from .answer_intent import resolve_answer_intent
+from .visualization_request import requests_chart
 
 
 @dataclass
@@ -151,6 +152,12 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             response_intent = "capability"
         else:
             response_intent = "diagnosis" if "root_cause_analysis" in intents else "overview"
+        if requests_chart(text):
+            task_kind = "artifact_request"
+            execution_mode = "execute"
+            objective = "基于当前真实数据生成可视化图表"
+            outputs = ["charts"]
+            requires_clarification = False
         entity_rows = []
         for match in re.finditer(r"(?:(\d+)\s*号)?(高炉|锅炉|脱丁烷塔|精馏塔|干燥器|设备)", text):
             entity_rows.append({"type": "equipment", "value": match.group(0), "equipment_type": match.group(2), "equipment_id": match.group(1)})
@@ -163,7 +170,8 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             objective=objective, task_kind=task_kind, semantic_intents=intents,
             requested_capabilities=list(dict.fromkeys(capabilities)), requested_outputs=outputs or ["findings"], entities=entity_rows, parameters=parameter_rows,
             execution_mode=execution_mode, negations=negations,
-            constraints={"use_existing_model": bool(re.search(r"已有模型|现有模型", normalized)),
+            constraints={"chart_request": text if requests_chart(text) else None,
+                         "use_existing_model": bool(re.search(r"已有模型|现有模型", normalized)),
                          "use_existing_artifacts": bool(re.search(r"已有|现有|当前结果", normalized)),
                          "deep_analysis": bool(re.search(r"完整深度分析|全面深度分析|所有能力|full deep analysis", normalized)),
                          "selection_only": bool(re.search(r"适合建模.{0,8}(?:动态|工况|数据)?段", normalized)

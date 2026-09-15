@@ -22,6 +22,7 @@ urlpatterns = [
     path('agent/plans/', agent_api.agent_plan, name='agent-plan'),
     path('agent/skill-runs/', agent_api.agent_skill_run_collection, name='agent-skill-run-collection'),
     path('agent/skill-runs/<slug:skill_run_id>/', agent_api.agent_skill_run_detail, name='agent-skill-run-detail'),
+    path('agent/skill-runs/<slug:skill_run_id>/charts/<int:chart_index>/', agent_api.agent_skill_chart, name='agent-skill-chart'),
     path('agent/skill-runs/<slug:skill_run_id>/events/', agent_api.agent_skill_run_events, name='agent-skill-run-events'),
     path('agent/skill-runs/<slug:skill_run_id>/stream/', agent_api.agent_skill_run_stream, name='agent-skill-run-stream'),
     path('agent/runs/<slug:run_id>/trace/', agent_api.agent_trace, name='agent-trace'),

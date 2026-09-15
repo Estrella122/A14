@@ -118,7 +118,7 @@ class ThreeSceneSkillTests(SimpleTestCase):
     def test_api_compatibility_and_boundaries(self):
         response = self.client.get('/api/agent/skills/')
         self.assertEqual(200,response.status_code)
-        self.assertEqual(12,response.json()['data']['total'])
+        self.assertEqual(13,response.json()['data']['total'])
         for message in ['介绍一下系统辨识','不要计算信噪比，只解释原理']:
             plan = plan_skills(message)
             self.assertFalse(plan.get('analysis',{}).get('execution_plan',{}).get('core',{}).get('steps'))
