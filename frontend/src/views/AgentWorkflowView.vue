@@ -16,7 +16,10 @@ import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildRuntimeObservability } from '../utils/runtimeObservability'
 import { applyRuntimeEvents, mergeRuntimeEvents } from '../utils/runtimeEvents'
 
-const props = defineProps({ project: { type: Object, required: true } })
+const props = defineProps({
+  project: { type: Object, required: true },
+  userBoard: { type: Boolean, default: false },
+})
 const emit = defineEmits(['notify', 'navigate', 'scene-detected'])
 
 const chatStorageKey = `processpilot-chat-${props.project.id}`
@@ -54,6 +57,21 @@ const messages = ref(savedChat?.messages?.length ? savedChat.messages : [welcome
 const liveLogs = ref(savedChat?.liveLogs ?? [])
 const logsNewestFirst = ref(true)
 const displayedLogs = computed(() => logsNewestFirst.value ? liveLogs.value : [...liveLogs.value].reverse())
+const rightModuleOptions = [
+  { id: 'pipeline', label: '算法流水线' },
+  { id: 'console', label: '工作日志' },
+]
+const selectedRightModules = ref(rightModuleOptions.map((item) => item.id))
+const selectedRightModuleSet = computed(() => new Set(selectedRightModules.value))
+
+function toggleRightModule(id) {
+  const idx = selectedRightModules.value.indexOf(id)
+  if (idx >= 0) {
+    selectedRightModules.value.splice(idx, 1)
+  } else {
+    selectedRightModules.value.push(id)
+  }
+}
 const { latestRun } = useLatestPipelineRun()
 let pollController
 let scrollFrame
@@ -61,6 +79,17 @@ let disposed = false
 const activeRun = computed(() => selectedRun.value ?? latestRun.value)
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
+const hasRuntimeObservation = computed(() => Boolean(
+  runtimeObservation.value?.capabilities?.length ||
+  runtimeObservation.value?.execution_dag?.steps?.length
+))
+const activeRunStatusText = computed(() => {
+  if (uploading.value) return '上传数据后正在生成基础分析'
+  if (isRunning.value) return liveProgress.value == null ? 'Agent 正在同步运行事件' : `Agent 正在运行 · ${liveProgress.value}%`
+  if (activeRun.value?.status === 'completed') return '当前任务已完成'
+  if (activeRun.value?.status === 'running') return '深度分析进行中'
+  return '等待上传或提问'
+})
 
 const promptTemplates = computed(() => ({
   blast_furnace: ['提取高炉高信噪比动态数据并评估铁水硅模型', '判断矿焦比和鼓风流量是否存在共线性', '以稳健性优先重新执行闭环寻优'],
@@ -175,6 +204,7 @@ function scheduleScrollToLatest() {
 function applyLivePayload(live, timelineMessage, draftMessage, payload) {
   const events = payload.events ?? []
   timelineMessage.events = mergeRuntimeEvents(timelineMessage.events, events)
+  pushRuntimeLogs(events)
   const after = Number(payload.next_sequence ?? events.at(-1)?.sequence ?? activeLiveRun.value?.after ?? 0)
   timelineMessage.status = payload.status ?? timelineMessage.status
   timelineMessage.metrics = payload.metrics ?? timelineMessage.metrics
@@ -191,6 +221,30 @@ function applyLivePayload(live, timelineMessage, draftMessage, payload) {
   }
   scheduleScrollToLatest()
   return after
+}
+
+function runtimeLogLevel(event) {
+  if (['failed', 'blocked'].includes(event.status) || event.event_type === 'run_failed') return 'WARN'
+  if (event.event_type?.startsWith('executor_') || event.event_type === 'artifact_produced') return 'TOOL'
+  if (event.status === 'completed' || event.status === 'success') return 'BEST'
+  return 'INFO'
+}
+
+function pushRuntimeLogs(events = []) {
+  const visible = events
+    .filter((event) => event.event_type !== 'llm_response_delta' && event.message)
+    .map((event) => ({
+      sequence: event.sequence,
+      time: event.timestamp || new Date().toISOString(),
+      level: runtimeLogLevel(event),
+      text: `${event.executor || event.capability_id || event.skill_id || event.stage || event.event_type}：${event.message}`,
+    }))
+  if (!visible.length) return
+  const existing = new Set(liveLogs.value.map((log) => log.sequence == null ? `${log.time}-${log.text}` : `seq-${log.sequence}`))
+  liveLogs.value = [
+    ...visible.filter((log) => !existing.has(log.sequence == null ? `${log.time}-${log.text}` : `seq-${log.sequence}`)).reverse(),
+    ...liveLogs.value,
+  ].slice(0, 40)
 }
 
 async function pollLiveRun(live, timelineMessage, draftMessage, initialAfter = null) {
@@ -344,8 +398,10 @@ async function handleCsv(event) {
   uploading.value = true
   basicAnalysisReady.value = false
   isRunning.value = true
+  liveProgress.value = null
   const uploadMessage = { id: Date.now(), role: 'user', text: `上传并分析CSV：${file.name}`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
   messages.value.push(uploadMessage)
+  liveLogs.value = [{ time: new Date().toISOString(), level: 'INFO', text: `已接收 ${file.name}，准备上传并启动 Agent 总控流水线。` }, ...liveLogs.value].slice(0, 40)
   await scrollToLatest()
   try {
     const created = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag, asyncAnalysis: true })
@@ -354,13 +410,18 @@ async function handleCsv(event) {
     prompt.value = ''
     messages.value = [uploadMessage]
     responseState.value = null
-    liveLogs.value = []
+    liveLogs.value = [{ time: created.created_at ?? new Date().toISOString(), level: 'TOOL', text: `任务 ${created.run_id} 已创建，正在等待基础分析结果。` }]
     latestRun.value = created
     selectedRun.value = created
     announcePipelineUpdate(created)
     const snapshot = await waitForPipeline(created.run_id, (item) => Boolean(item.results?.cleaning) || ['failed', 'needs_review'].includes(item.status))
     if (snapshot.status === 'failed') throw new Error(snapshot.error?.message ?? '流水线基础分析失败')
     basicAnalysisReady.value = true
+    liveLogs.value = [
+      { time: snapshot.updated_at ?? new Date().toISOString(), level: 'BEST', text: `基础分析完成，已进入 Agent 决策摘要与工具轨迹同步阶段。` },
+      ...snapshot.stages.map((stage) => ({ time: stage.finished_at ?? snapshot.updated_at ?? new Date().toISOString(), level: stage.status === 'completed' ? 'TOOL' : 'WARN', text: `${stage.label}：${stage.message}` })),
+      ...liveLogs.value,
+    ].slice(0, 40)
     const result = await executeLiveMessage('快速分析当前上传数据的数据概况、数据质量、能源表现和变化趋势', snapshot.run_id, `已接收 ${file.name}。基础分析已完成；深度建模与寻优正在后台继续。`)
     liveLogs.value = [
       ...(result.logs ?? []),
@@ -431,8 +492,20 @@ function switchRun(event) {
 </script>
 
 <template>
-  <div class="view-stack agent-view">
+  <div class="view-stack agent-view" :class="{ 'is-user-board': userBoard }">
+    <div v-if="userBoard" class="user-mode-bar">
+      <div class="user-mode-brand">
+        <span class="brand-symbol small"><i></i><b></b><em></em></span>
+        <strong>ProcessPilot</strong>
+      </div>
+      <div class="user-mode-bar-spacer"></div>
+      <button class="user-mode-staff-btn" type="button" @click="emit('navigate', '/agent-review/')">
+        <AppIcon name="shield" :size="15" /> 工作人员模式
+      </button>
+    </div>
+
     <PageHeader
+      v-if="!userBoard"
       eyebrow="Natural Language Orchestration"
       title="Agent 智能中枢"
       description="用工业自然语言描述目标，Agent 自动拆解意图、组装算法流水线，并以辨识指标驱动预处理策略持续自演进。"
@@ -447,23 +520,16 @@ function switchRun(event) {
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="agent" />
-
-    <AgentSkillCenter
-      :catalog="skillCatalog"
-      :executions="responseState?.skill_executions ?? []"
-      :loading="skillCatalogLoading"
-      :error="skillCatalogError"
-    />
-
-    <RuntimeObservabilityPanel :runtime="runtimeObservation" />
-
     <div class="agent-layout">
       <section class="panel chat-panel">
         <div class="chat-header">
           <div class="agent-avatar"><AppIcon name="spark" /></div>
           <div><strong>ProcessPilot Agent</strong><span><i></i> 工业建模智能中枢</span></div>
-          <button class="icon-button" type="button" aria-label="导出当前对话" title="导出当前对话" @click="exportConversation"><AppIcon name="download" /></button>
+          <div class="chat-header-actions">
+            <input v-if="userBoard" ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
+            <button v-if="userBoard" class="icon-button" type="button" :disabled="uploading" aria-label="上传 CSV 并分析" title="上传 CSV 并分析" @click="chooseCsv"><AppIcon :name="uploading ? 'loop' : 'upload'" :class="{ spinning: uploading }" /></button>
+            <button class="icon-button" type="button" aria-label="导出当前对话" title="导出当前对话" @click="exportConversation"><AppIcon name="download" /></button>
+          </div>
         </div>
 
         <div ref="chatThread" class="chat-thread">
@@ -489,13 +555,6 @@ function switchRun(event) {
 
         </div>
 
-        <div class="model-selector" aria-label="回答模型设置">
-          <label><span>回答模型</span><select v-model="llmProvider" @change="handleLLMProviderChange"><option v-for="provider in llmCatalog?.providers ?? []" :key="provider.id" :value="provider.id" :disabled="!provider.configured">{{ provider.label }}{{ provider.configured ? '' : '（未配置）' }}</option></select></label>
-          <label v-if="llmProvider !== 'evidence'"><span>模型名称</span><input v-model.trim="llmModel" maxlength="120" autocomplete="off" /></label>
-          <label v-if="llmProvider === 'local'" class="model-endpoint"><span>本地接口</span><input v-model.trim="localLLMBaseUrl" inputmode="url" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" /></label>
-          <small>{{ activeLLMProvider?.description || '正在读取模型配置…' }}</small>
-        </div>
-
         <div class="prompt-templates">
           <button v-for="item in (responseState?.suggestions ?? promptTemplates)" :key="item" type="button" @click="setTemplate(item)">{{ item }}</button>
         </div>
@@ -513,6 +572,15 @@ function switchRun(event) {
           <textarea v-model="prompt" rows="3" aria-label="输入问题或工业建模指令" placeholder="例如：这批数据最大的问题是什么？为什么第3轮最好？"></textarea>
           <div class="composer-footer">
             <div><span class="composer-tag">当前任务</span><span>{{ contextRunId }}</span></div>
+            <div class="composer-model-controls" aria-label="回答模型设置">
+              <label class="composer-model-pill">
+                <select v-model="llmProvider" aria-label="回答模型" @change="handleLLMProviderChange">
+                  <option v-for="provider in llmCatalog?.providers ?? []" :key="provider.id" :value="provider.id" :disabled="!provider.configured">{{ provider.label }}{{ provider.configured ? '' : '（未配置）' }}</option>
+                </select>
+              </label>
+              <input v-if="llmProvider !== 'evidence'" v-model.trim="llmModel" class="composer-model-input" maxlength="120" aria-label="模型名称" autocomplete="off" :placeholder="activeLLMProvider?.model || '模型名称'" />
+              <input v-if="llmProvider === 'local'" v-model.trim="localLLMBaseUrl" class="composer-model-input endpoint" inputmode="url" aria-label="本地模型接口" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" />
+            </div>
             <button class="send-button" type="button" :disabled="isRunning || !prompt.trim()" @click="runWorkflow">
               <AppIcon :name="isRunning ? 'loop' : 'arrow'" :class="{ spinning: isRunning }" />
               {{ isRunning ? (liveProgress == null ? '处理中' : `处理中 ${liveProgress}%`) : '发送' }}
@@ -522,60 +590,294 @@ function switchRun(event) {
         </div>
       </section>
 
-      <aside class="agent-side-stack">
-        <section class="panel intent-panel">
-          <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">任务理解 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
-          <dl class="intent-list">
-            <div><dt>当前任务</dt><dd><code>{{ contextRunId }}</code></dd></div>
-            <div><dt>识别意图</dt><dd>{{ intentLabels[intent.key] ?? intent.key }}</dd></div>
-            <div><dt>候选召回线索</dt><dd>{{ intent.keywords?.join(' · ') || '语义与上下文' }}</dd></div>
-            <div><dt>执行模式</dt><dd>{{ responseState?.blocked ? '设备门禁阻断' : responseState?.executed ? '真实重跑' : '只读证据分析' }}</dd></div>
-            <div><dt>页面焦点</dt><dd>{{ intentLabels[intent.key] ?? '任务总览' }}</dd></div>
-          </dl>
-        </section>
-        <section class="panel runtime-panel">
-          <div class="section-heading compact"><div><span class="section-kicker">运行环境</span><h2>安全与资源</h2></div></div>
-          <div class="runtime-grid">
-            <div><span class="runtime-icon"><AppIcon name="shield" /></span><p><strong>本地任务目录</strong><small>独立产物 · 源数据留存</small></p><StatusPill tone="success" dot>在线</StatusPill></div>
-            <div><span class="runtime-icon"><AppIcon name="spark" /></span><p><strong>Evidence Agent</strong><small>意图路由 · 证据回答</small></p><StatusPill tone="brand">可追溯</StatusPill></div>
-            <div><span class="runtime-icon"><AppIcon name="model" /></span><p><strong>Python Pipeline</strong><small>pandas · ARX · 互相关</small></p><StatusPill tone="success" dot>就绪</StatusPill></div>
+      <aside v-if="!userBoard" class="agent-side-stack agent-live-stack">
+        <section class="panel current-run-panel">
+          <div class="section-heading compact">
+            <div><span class="section-kicker">Current Run</span><h2>当前运行</h2></div>
+            <StatusPill :tone="isRunning ? 'brand' : activeRun?.status === 'completed' ? 'success' : 'neutral'" dot>{{ activeRunStatusText }}</StatusPill>
+          </div>
+          <div class="current-run-id"><span>任务编号</span><code>{{ contextRunId }}</code></div>
+          <div v-if="isRunning && liveProgress != null" class="current-run-progress"><span :style="{ width: `${liveProgress}%` }"></span></div>
+          <div class="module-switches" aria-label="右侧模块显示选项">
+            <span class="module-switches-label">模块</span>
+            <div class="module-switch-group">
+              <button
+                v-for="item in rightModuleOptions"
+                :key="item.id"
+                type="button"
+                :class="['module-switch-btn', { 'is-active': selectedRightModuleSet.has(item.id) }]"
+                @click="toggleRightModule(item.id)"
+              >{{ item.label }}</button>
+            </div>
           </div>
         </section>
+
+        <div class="agent-live-modules">
+          <section v-if="selectedRightModuleSet.has('pipeline')" class="panel plan-panel">
+            <div class="section-heading compact">
+              <div><span class="section-kicker">动态编排计划</span><h2>Agent 算法流水线</h2></div>
+              <div class="plan-summary"><span>{{ planNodes.length }} 阶段</span><span>{{ responseState?.blocked ? '门禁阻断' : responseState?.executed ? '真实执行' : '证据分析' }}</span></div>
+            </div>
+            <div class="plan-flow">
+              <div v-if="!planNodes.length" class="plan-empty-state">
+                <span><AppIcon name="network" /></span>
+                <div><strong>暂无编排阶段</strong><small>上传 CSV 或发送分析指令后，这里会显示 Agent 规划出的算法步骤。</small></div>
+              </div>
+              <article
+                v-for="(node, index) in planNodes"
+                :key="node.name"
+                class="plan-node"
+                :class="{ 'is-complete': ['completed', 'success'].includes(node.status), 'is-partial': node.status === 'partial', 'is-blocked': node.status === 'blocked', 'is-failed': node.status === 'failed', 'is-current': node.status === 'executing', 'is-waiting': ['pending', 'skipped', 'queued', 'waiting', 'deferred'].includes(node.status) }"
+              >
+                <span class="plan-node-icon"><AppIcon :name="node.icon" :size="14" /></span>
+                <span class="plan-node-num">{{ stepNumber(index) }}</span>
+                <span class="plan-node-name" :title="node.name">{{ node.name }}</span>
+                <span class="plan-node-state" :title="executionStatus(node.status).label"><AppIcon :name="node.status === 'executing' ? 'loop' : executionStatus(node.status).icon" :size="9" :class="{ spinning: node.status === 'executing' }" /></span>
+              </article>
+            </div>
+          </section>
+
+          <section v-if="selectedRightModuleSet.has('console')" class="panel console-panel">
+            <div class="console-header"><div><i class="console-dot red"></i><i class="console-dot amber"></i><i class="console-dot green"></i></div><strong>AGENT TRACE · {{ contextRunId }}</strong><button type="button" @click="logsNewestFirst = !logsNewestFirst">{{ logsNewestFirst ? '最新优先' : '时间顺序' }}</button></div>
+            <div class="console-body" role="log" aria-label="Agent 执行日志">
+              <p v-if="!liveLogs.length"><time>--:--:--</time><span class="level-info">INFO</span><code>发送指令或上传 CSV 后显示真实意图解析与工具访问日志</code></p>
+              <p v-for="(log, index) in displayedLogs" :key="`${log.time}-${index}`"><time>{{ log.time.slice(11, 19) }}</time><span :class="`level-${log.level.toLowerCase()}`">{{ log.level }}</span><code>{{ log.text }}</code></p>
+            </div>
+          </section>
+        </div>
+
       </aside>
     </div>
 
-    <section class="panel plan-panel">
-      <div class="section-heading">
-        <div><span class="section-kicker">动态编排计划</span><h2>Agent 自动组装的算法流水线</h2></div>
-        <div class="plan-summary"><span>{{ planNodes.length }} 阶段</span><span>{{ responseState?.blocked ? '设备门禁阻断' : responseState?.executed ? '已真实执行' : '证据分析' }}</span><span>{{ contextRunId }}</span></div>
-      </div>
-      <div class="plan-flow">
-        <article
-          v-for="(node, index) in planNodes"
-          :key="node.name"
-          class="plan-node"
-          :class="{ 'is-complete': ['completed', 'success'].includes(node.status), 'is-partial': node.status === 'partial', 'is-blocked': node.status === 'blocked', 'is-failed': node.status === 'failed', 'is-current': node.status === 'executing', 'is-waiting': ['pending', 'skipped', 'queued', 'waiting', 'deferred'].includes(node.status) }"
-        >
-          <span class="plan-node-icon"><AppIcon :name="node.icon" /></span>
-          <div><span>{{ stepNumber(index) }}</span><strong>{{ node.name }}</strong><code>{{ node.tool }}</code><small>{{ node.output }}</small></div>
-          <span class="plan-node-state" :title="executionStatus(node.status).label"><AppIcon :name="node.status === 'executing' ? 'loop' : executionStatus(node.status).icon" :class="{ spinning: node.status === 'executing' }" /></span>
-        </article>
-      </div>
-    </section>
+    <section v-if="!userBoard" class="agent-evidence-stack">
+      <AgentTracePanel
+        :run-id="contextRunId === '尚无任务' ? '' : contextRunId"
+        :running="isRunning"
+        :scenario-id="project.scenarioId"
+        :fallback-scenario-id="sceneState.data_scene.id || props.project.scenarioId"
+      />
 
-    <AgentTracePanel :run-id="contextRunId === '尚无任务' ? '' : contextRunId" :running="isRunning" :scenario-id="project.scenarioId" :fallback-scenario-id="sceneState.data_scene.id || props.project.scenarioId" />
+      <AgentSkillCenter
+        :catalog="skillCatalog"
+        :executions="responseState?.skill_executions ?? []"
+        :loading="skillCatalogLoading"
+        :error="skillCatalogError"
+      />
+      <div class="agent-support-grid" :class="{ 'no-observability': !hasRuntimeObservation }">
+        <RuntimeObservabilityPanel v-if="hasRuntimeObservation" :runtime="runtimeObservation" />
+        <aside class="agent-verification-rail">
+          <IntegratedEvidencePanel module="agent" />
+          <section class="panel intent-panel">
+            <div class="section-heading compact"><div><span class="section-kicker">结构化意图</span><h2>Agent 解析结果</h2></div><StatusPill :tone="responseState ? 'success' : 'neutral'">任务理解 {{ (intent.confidence * 100).toFixed(0) }}%</StatusPill></div>
+            <dl class="intent-list">
+              <div><dt>当前任务</dt><dd><code>{{ contextRunId }}</code></dd></div>
+              <div><dt>识别意图</dt><dd>{{ intentLabels[intent.key] ?? intent.key }}</dd></div>
+              <div><dt>候选召回线索</dt><dd>{{ intent.keywords?.join(' · ') || '语义与上下文' }}</dd></div>
+              <div><dt>执行模式</dt><dd>{{ responseState?.blocked ? '设备门禁阻断' : responseState?.executed ? '真实重跑' : '只读证据分析' }}</dd></div>
+              <div><dt>页面焦点</dt><dd>{{ intentLabels[intent.key] ?? '任务总览' }}</dd></div>
+            </dl>
+          </section>
 
-    <section class="panel console-panel">
-      <div class="console-header"><div><i class="console-dot red"></i><i class="console-dot amber"></i><i class="console-dot green"></i></div><strong>AGENT TRACE · {{ contextRunId }}</strong><button type="button" @click="logsNewestFirst = !logsNewestFirst">{{ logsNewestFirst ? '最新优先' : '时间顺序' }}</button></div>
-      <div class="console-body" role="log" aria-label="Agent 执行日志">
-        <p v-if="!liveLogs.length"><time>--:--:--</time><span class="level-info">INFO</span><code>发送指令后显示真实意图解析与工具访问日志</code></p>
-        <p v-for="(log, index) in displayedLogs" :key="`${log.time}-${index}`"><time>{{ log.time.slice(11, 19) }}</time><span :class="`level-${log.level.toLowerCase()}`">{{ log.level }}</span><code>{{ log.text }}</code></p>
+          <section class="panel runtime-panel">
+            <div class="section-heading compact"><div><span class="section-kicker">运行环境</span><h2>安全与资源</h2></div></div>
+            <div class="runtime-grid">
+              <div><span class="runtime-icon"><AppIcon name="shield" /></span><p><strong>本地任务目录</strong><small>独立产物 · 源数据留存</small></p><StatusPill tone="success" dot>在线</StatusPill></div>
+              <div><span class="runtime-icon"><AppIcon name="spark" /></span><p><strong>Evidence Agent</strong><small>意图路由 · 证据回答</small></p><StatusPill tone="brand">可追溯</StatusPill></div>
+              <div><span class="runtime-icon"><AppIcon name="model" /></span><p><strong>Python Pipeline</strong><small>pandas · ARX · 互相关</small></p><StatusPill tone="success" dot>就绪</StatusPill></div>
+            </div>
+          </section>
+        </aside>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
+/* ── 用户模式顶部切换栏 ── */
+.user-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  /* break out of parent max-width to span full viewport */
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  padding: 10px clamp(18px, 3vw, 32px);
+  border-bottom: 1px solid rgba(207, 218, 232, 0.86);
+  background: rgba(248, 250, 253, 0.92);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.user-mode-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.user-mode-brand .brand-symbol.small { width: 22px; height: 22px; }
+.user-mode-brand .brand-symbol.small i,
+.user-mode-brand .brand-symbol.small b,
+.user-mode-brand .brand-symbol.small em { border-radius: 3px; }
+.user-mode-brand strong { color: #10233e; font-size: 13px; letter-spacing: -.02em; }
+
+.user-mode-bar-spacer { flex: 1; }
+
+.user-mode-staff-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid #c7d6ed;
+  border-radius: 999px;
+  color: #1e3a5f;
+  background: linear-gradient(135deg, #f0f6ff, #e6eeff);
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 180ms ease;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.10);
+}
+.user-mode-staff-btn:hover {
+  color: #1a3578;
+  border-color: #93b4e0;
+  background: linear-gradient(135deg, #e6eeff, #d6e4ff);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.18);
+}
+
+.chat-header-actions { display: flex; align-items: center; gap: 6px; }
+.agent-view .agent-layout { grid-template-columns: minmax(660px, 1.45fr) minmax(360px, .55fr); align-items: start; }
+.agent-view .chat-panel { grid-template-rows: auto minmax(0, 1fr) auto auto auto; height: clamp(560px, calc(100vh - 280px), 700px); min-height: 0; }
+.agent-view.is-user-board { max-width: 980px; min-height: calc(100vh - 56px); margin: 0 auto; align-content: start; }
+.agent-view.is-user-board .agent-layout { grid-template-columns: minmax(0, 1fr); }
+.agent-view.is-user-board .chat-panel { height: calc(100vh - 148px); min-height: 520px; }
+.agent-view .chat-thread { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.agent-view .message { min-width: 0; max-width: min(92%, 760px); }
+.agent-view .message-runtime { max-width: min(96%, 760px); }
+.agent-view .message-bubble { min-width: 0; max-width: 100%; }
+.agent-view .message-bubble p,
+.agent-view .message-bubble strong,
+.agent-view .message-bubble code,
+.agent-view .message-bubble span { overflow-wrap: anywhere; }
+.agent-live-stack { display: grid; grid-template-rows: auto minmax(0, 1fr); height: calc(100vh - 150px); min-height: 0; overflow: hidden; padding-right: 2px; }
+.agent-live-modules { --live-module-height: 255px; display: grid; grid-auto-rows: var(--live-module-height); align-content: start; gap: 14px; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-right: 2px; scrollbar-width: thin; }
+.current-run-panel { display: grid; gap: 8px; }
+.current-run-id { display: grid; gap: 5px; min-width: 0; padding: 9px 10px; border: 1px solid #dce6f3; border-radius: 9px; background: #f8fbff; }
+.current-run-id span { color: #64748b; font-size: 8px; }
+.current-run-id code { overflow: hidden; color: #2454b8; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.current-run-progress { height: 4px; overflow: hidden; border-radius: 999px; background: #e7edf5; }
+.current-run-progress span { display: block; height: 100%; background: linear-gradient(90deg, #2563eb, #22c4f0); transition: width 240ms ease; }
+.module-switches { display: flex; align-items: center; gap: 5px; min-width: 0; padding-top: 2px; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+.module-switches::-webkit-scrollbar { display: none; }
+.module-switches-label { flex: 0 0 auto; color: #7a8797; font-size: 7px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.module-switch-group { display: flex; gap: 4px; flex-wrap: nowrap; }
+.module-switch-btn {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 1px solid #dbe3ef;
+  border-radius: 999px;
+  color: #64748b;
+  background: #fff;
+  font-size: 7px;
+  font-weight: 720;
+  cursor: pointer;
+  transition: all 150ms ease;
+  white-space: nowrap;
+  min-height: 21px;
+  align-items: center;
+  display: inline-flex;
+  gap: 3px;
+}
+.module-switch-btn:hover { border-color: #a8bfdb; background: #f8fbff; }
+.module-switch-btn.is-active {
+  color: #2454b8;
+  border-color: #c8d8fb;
+  background: #f0f5ff;
+}
+.agent-live-stack .plan-panel { height: var(--live-module-height); min-height: 0; display: flex; flex-direction: column; padding: 14px; overflow: hidden; }
+.agent-live-stack .plan-flow { display: flex !important; flex-direction: column; flex: 1; gap: 2px; min-height: 0; padding-right: 2px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.agent-live-stack .plan-node {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  min-height: 0 !important;
+  min-width: 0;
+  padding: 7px 10px 7px 6px;
+  border-radius: 8px;
+  transition: background 120ms ease;
+}
+.agent-live-stack .plan-node:hover { background: #f1f5f9; }
+.agent-live-stack .plan-node::after { display: none !important; }
+.agent-live-stack .plan-node-icon {
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  overflow: hidden;
+}
+.agent-live-stack .plan-node-num {
+  flex: 0 0 auto;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}
+.agent-live-stack .plan-node-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-live-stack .plan-node-state {
+  position: static !important;
+  flex: 0 0 14px;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: #fff;
+  border-radius: 50%;
+  background: #10b981;
+}
+.agent-live-stack .plan-node.is-current .plan-node-state { background: #3b82f6; }
+.agent-live-stack .plan-node.is-waiting { opacity: .45; }
+.agent-live-stack .plan-node.is-waiting .plan-node-state { background: #cbd5e1; }
+.agent-live-stack .plan-node.is-failed .plan-node-state { background: #ef4444; }
+.agent-live-stack .plan-node code,
+.agent-live-stack .plan-node small { white-space: normal; }
+.agent-live-stack .console-panel { height: var(--live-module-height); min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.agent-live-stack .console-body { flex: 1; min-height: 0; max-height: none; overflow: auto; }
+.agent-live-stack .console-body p { grid-template-columns: 56px 38px minmax(260px, 1fr); }
+.agent-evidence-stack { display: grid; gap: 18px; }
+.agent-evidence-stack :deep(.agent-trace-panel) { padding: 20px; }
+.agent-evidence-stack :deep(.trace-timeline) { max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.agent-evidence-stack :deep(.trace-node > button) { grid-template-columns: 34px minmax(200px, 1fr) minmax(170px, 1fr) 70px 20px; gap: 12px; min-height: 52px; }
+.agent-evidence-stack :deep(.trace-toolchain) { flex-wrap: wrap; overflow-x: auto; }
+.agent-evidence-stack :deep(.trace-toolchain > div) { min-width: 0; flex: 0 0 auto; }
+.agent-evidence-stack :deep(.trace-toolchain > div strong) { white-space: nowrap; }
+.agent-evidence-stack :deep(.toolchain-node) { white-space: nowrap; }
+.agent-support-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+.agent-support-grid > * { min-width: 0; }
+.agent-verification-rail { display: grid; grid-template-columns: 1fr; gap: 14px; align-content: start; min-width: 0; }
+.agent-verification-rail :deep(.integrated-evidence-panel) { padding: 16px; }
+.agent-verification-rail :deep(.integrated-evidence-panel .section-heading) { gap: 10px; }
+.agent-verification-rail :deep(.evidence-source) { align-items: flex-start; margin: -2px 0 12px; font-size: 9px; line-height: 1.5; }
+.agent-verification-rail :deep(.evidence-kpis) { grid-template-columns: minmax(0, 1fr); gap: 7px; margin-bottom: 10px; }
+.agent-verification-rail :deep(.evidence-kpis > div) { padding: 9px 10px; }
+.agent-verification-rail :deep(.evidence-kpis span) { margin-bottom: 2px; font-size: 8px; }
+.agent-verification-rail :deep(.evidence-kpis strong) { font-size: 14px; }
+.agent-verification-rail :deep(.evidence-table-wrap) { max-height: 150px; }
+.agent-verification-rail .intent-list { gap: 0; }
+.agent-verification-rail .intent-list > div { padding: 8px 0; }
+.agent-verification-rail .runtime-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .run-switcher { display:flex;align-items:center;gap:6px;padding:5px 7px;border:1px solid #dbe3ef;border-radius:8px;background:#fff }.run-switcher span { color:#64748b;font-size:8px }.run-switcher select { max-width:185px;border:0;outline:0;color:#334155;background:transparent;font-size:8px }
 .agent-delivery-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 9px 17px; border-top: 1px solid #e2e8f0; background: #f8fafc; }
 .agent-delivery-bar span { display: inline-flex; align-items: center; gap: 5px; margin-right: auto; color: #166534; font-size: 9px; }
@@ -584,11 +886,14 @@ function switchRun(event) {
 .message-error { border-color: #fecaca; background: #fff7f7; }
 .message-model { display: inline-flex!important; align-items: center; gap: 3px; margin-top: 7px!important; padding: 3px 6px; border: 1px solid #dbeafe; border-radius: 999px; color: #1d4ed8!important; background: #eff6ff; font-size: 7px!important; }
 .streaming-phase { display:inline-flex!important;align-items:center;gap:4px;margin-bottom:7px!important;color:#2563eb!important;font-size:8px!important;font-weight:650 }.streaming-cursor{display:inline-block;width:5px;height:12px;margin-left:3px;vertical-align:-1px;background:#2563eb;animation:stream-blink .8s steps(1) infinite}@keyframes stream-blink{50%{opacity:0}}
-.model-selector { display: grid; grid-template-columns: 150px 170px minmax(220px, 1fr); gap: 8px; align-items: end; margin: 10px 16px; padding: 10px; border: 1px solid #dbe7f5; border-radius: 10px; background: #f8fbff; }
-.model-selector label { display: grid; gap: 4px; color: #64748b; font-size: 8px; }
-.model-selector select, .model-selector input { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid #cbd8e8; border-radius: 7px; outline: 0; color: #243b5a; background: #fff; font: inherit; font-size: 9px; }
-.model-selector select:focus, .model-selector input:focus { border-color: #6e9ff0; box-shadow: 0 0 0 2px rgba(37, 99, 235, .08); }
-.model-selector small { grid-column: 1 / -1; color: #718198; font-size: 8px; }
+.composer-model-controls { display: inline-flex; gap: 7px; align-items: center; margin-left: auto; min-width: 0; }
+.composer-model-pill { position: relative; display: inline-flex; align-items: center; min-width: 122px; max-width: 190px; height: 34px; border: 1px solid #c8d8fb; border-radius: 999px; background: #f0f5ff; }
+.composer-model-pill::after { content: ""; position: absolute; right: 13px; top: 50%; width: 8px; height: 8px; border-right: 2px solid #5f78a8; border-bottom: 2px solid #5f78a8; pointer-events: none; transform: translateY(-65%) rotate(45deg); }
+.composer-model-pill select { width: 100%; height: 100%; min-width: 0; padding: 0 30px 0 14px; overflow: hidden; color: #2454b8; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; border: 0; outline: 0; border-radius: inherit; background: transparent; appearance: none; }
+.composer-model-pill select:focus-visible { box-shadow: 0 0 0 3px rgba(37, 99, 235, .14); }
+.composer-model-input { width: min(170px, 20vw); height: 32px; min-width: 0; padding: 0 10px; color: #243b5a; font-size: 9px; border: 1px solid #cbd8e8; border-radius: 999px; outline: 0; background: #fff; }
+.composer-model-input.endpoint { width: min(230px, 24vw); }
+.composer-model-input:focus { border-color: #6e9ff0; box-shadow: 0 0 0 2px rgba(37, 99, 235, .08); }
 .message-skill-chain { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; padding-top: 8px; border-top: 1px solid rgba(148, 163, 184, .22); }
 .message-skill-chain > div { display: flex; align-items: center; gap: 5px; width: 100%; color: #334155; }
 .message-skill-chain > div strong { font-size: 8px; }
@@ -601,5 +906,369 @@ function switchRun(event) {
 .message-deliverables strong, .message-deliverables a { display: inline-flex; align-items: center; gap: 3px; font-size: 7px; }
 .message-deliverables strong { color: #475569; }
 .message-deliverables a { padding: 3px 6px; border: 1px solid #a7f3d0; border-radius: 5px; color: #047857; background: #ecfdf5; text-decoration: none; }
-@media (max-width: 680px) { .agent-delivery-bar span { width: 100%; margin-right: 0; } .model-selector { grid-template-columns: 1fr; margin-inline: 11px; } .model-selector small { grid-column: auto; } }
+@media (max-width: 1280px) { .agent-view .agent-layout { grid-template-columns: minmax(0, 1fr); } .agent-live-stack { max-height: none; overflow: visible; padding-right: 0; } .agent-live-modules { overflow: visible; padding-right: 0; } .agent-view .chat-panel { height: 620px; } }
+@media (max-width: 1100px) { .agent-support-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .agent-verification-rail { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .agent-delivery-bar span { width: 100%; margin-right: 0; } .agent-view .composer-footer { flex-wrap: wrap; } .composer-model-controls { order: 2; width: calc(100% - 52px); margin-left: 0; overflow-x: auto; } .composer-model-pill { min-width: 140px; } .composer-model-input { width: 150px; flex: 0 0 150px; } .composer-model-input.endpoint { width: 210px; flex-basis: 210px; } .agent-view .send-button { order: 3; width: 42px; min-width: 42px; padding: 0; } .agent-view .send-button svg + text { display: none; } }
+
+/* ══════════════════════════════════════════════════════
+   用户板块视觉美化 — 纯视觉，不改布局与交互
+   ══════════════════════════════════════════════════════ */
+
+/* ── 聊天面板容器 ── */
+.is-user-board .chat-panel {
+  border: 1px solid #dce6f3;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .03);
+}
+
+/* ── 聊天头部 ── */
+.is-user-board .chat-header {
+  padding: 16px 20px;
+  background: linear-gradient(180deg, #f8faff, #ffffff);
+  border-bottom: 1px solid #e8eef6;
+}
+
+.is-user-board .agent-avatar {
+  box-shadow: 0 3px 10px rgba(37, 99, 235, .18);
+}
+
+.is-user-board .chat-header strong {
+  font-size: 12px;
+  letter-spacing: -.01em;
+  color: #1e293b;
+}
+
+.is-user-board .chat-header span {
+  color: #64748b;
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+/* ── 聊天线程背景 ── */
+.is-user-board .chat-thread {
+  background: linear-gradient(180deg, #f6f8fc 0%, #ffffff 40%);
+}
+
+/* ── 消息卡片 ── */
+.is-user-board .message-agent .message-bubble {
+  border: 1px solid #e2e9f4;
+  border-radius: 4px 16px 16px 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .04), 0 1px 2px rgba(15, 23, 42, .02);
+  padding: 14px 16px;
+  transition: box-shadow 180ms ease;
+}
+
+.is-user-board .message-agent .message-bubble:hover {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .07), 0 1px 3px rgba(15, 23, 42, .03);
+}
+
+.is-user-board .message-user .message-bubble {
+  border-radius: 16px 4px 16px 16px;
+  box-shadow: 0 3px 12px rgba(37, 99, 235, .18);
+}
+
+.is-user-board .message-bubble p {
+  font-size: 11px;
+  line-height: 1.72;
+  color: #334155;
+}
+
+.is-user-board .message-user .message-bubble p {
+  color: #ffffff;
+}
+
+/* ── 时间戳 ── */
+.is-user-board .message-bubble > span:not(.streaming-phase):not(.message-model) {
+  color: #94a3b8;
+  font-size: 8px;
+  margin-top: 8px;
+}
+
+/* ── 流式状态 ── */
+.is-user-board .streaming-phase {
+  margin-bottom: 6px !important;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #2563eb !important;
+  font-size: 9px !important;
+  width: fit-content;
+}
+
+/* ── 模型标签 ── */
+.is-user-board .message-model {
+  margin-top: 8px !important;
+  padding: 3px 8px;
+  font-size: 8px !important;
+  border-color: #dbeafe;
+  background: #f0f7ff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, .06);
+}
+
+/* ── 实时执行时间线 ── */
+.is-user-board :deep(.execution-timeline) {
+  width: 100%;
+  max-width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #dce6f3;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fbff, #f0f6ff);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, .03);
+}
+
+.is-user-board :deep(.execution-timeline header) {
+  color: #1e40af;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.is-user-board :deep(.execution-timeline header button) {
+  padding: 4px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 8px;
+  font-weight: 600;
+  transition: all 150ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+
+.is-user-board :deep(.execution-timeline header button:hover) {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, .10);
+}
+
+.is-user-board :deep(.execution-timeline li) {
+  padding: 5px 6px;
+  border-radius: 6px;
+  transition: background 120ms ease;
+}
+
+.is-user-board :deep(.execution-timeline li:hover) {
+  background: rgba(219, 234, 254, .35);
+}
+
+.is-user-board :deep(.execution-timeline li strong) {
+  color: #1e293b;
+  font-size: 9px;
+}
+
+.is-user-board :deep(.execution-timeline li p) {
+  color: #475569;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+/* ── 提示词建议条 ── */
+.is-user-board .prompt-templates {
+  padding: 4px 18px 10px;
+  gap: 7px;
+}
+
+.is-user-board .prompt-templates button {
+  padding: 6px 12px;
+  border: 1px solid #d4e2f7;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #475569;
+  font-size: 9px;
+  font-weight: 500;
+  transition: all 180ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.is-user-board .prompt-templates button:hover {
+  color: #2563eb;
+  border-color: #93c5fd;
+  background: #f0f7ff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, .10);
+  transform: translateY(-1px);
+}
+
+/* ── 任务完成交付栏 ── */
+.is-user-board .agent-delivery-bar {
+  padding: 10px 18px;
+  border-top: 1px solid #e8eef6;
+  background: linear-gradient(180deg, #f8fbff, #ffffff);
+  border-radius: 0 0 16px 16px;
+  margin: 0;
+}
+
+.is-user-board .agent-delivery-bar span {
+  font-size: 10px;
+  font-weight: 600;
+  color: #15803d;
+}
+
+.is-user-board .agent-delivery-bar a {
+  padding: 5px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  background: #ffffff;
+  font-size: 9px;
+  font-weight: 500;
+  transition: all 150ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+  text-decoration: none;
+}
+
+.is-user-board .agent-delivery-bar a:hover {
+  border-color: #60a5fa;
+  background: #eff6ff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, .10);
+  transform: translateY(-1px);
+}
+
+.is-user-board .agent-delivery-bar .report-link {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #f0f7ff;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, .06);
+}
+
+.is-user-board .agent-delivery-bar .report-link:hover {
+  background: #dbeafe;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, .14);
+}
+
+/* ── 输入区域 ── */
+.is-user-board .prompt-composer {
+  margin: 0 16px 16px;
+  border: 1.5px solid #d4dff0;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, .04);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.is-user-board .prompt-composer:focus-within {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .10), 0 2px 12px rgba(15, 23, 42, .04);
+}
+
+.is-user-board .prompt-composer textarea {
+  padding: 14px 16px 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.is-user-board .prompt-composer textarea::placeholder {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.is-user-board .composer-footer {
+  padding: 10px 12px 11px 16px;
+  border-top: 1px solid #f0f3f8;
+}
+
+.is-user-board .composer-tag {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+/* ── 模型选择器 ── */
+.is-user-board .composer-model-pill {
+  border: 1.5px solid #d4dff0;
+  background: #f8fbff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.is-user-board .composer-model-pill:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, .08);
+}
+
+.is-user-board .composer-model-pill select:focus-visible {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .12);
+}
+
+/* ── 发送按钮 ── */
+.is-user-board .send-button {
+  border-radius: 10px;
+  padding: 0 16px;
+  min-height: 36px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  background: linear-gradient(145deg, #2563eb, #1d4ed8);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, .22);
+  transition: all 180ms ease;
+}
+
+.is-user-board .send-button:hover:not(:disabled) {
+  background: linear-gradient(145deg, #1d4ed8, #1e40af);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, .30);
+  transform: translateY(-1px);
+}
+
+.is-user-board .send-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, .18);
+}
+
+.is-user-board .send-button:disabled {
+  opacity: .5;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ── 用户模式顶部栏 ── */
+.is-user-board .user-mode-bar {
+  background: rgba(255, 255, 255, .88);
+  border-bottom-color: rgba(212, 223, 240, .8);
+  box-shadow: 0 1px 6px rgba(15, 23, 42, .03);
+}
+
+.is-user-board .user-mode-staff-btn {
+  border: 1.5px solid #bfdbfe;
+  background: linear-gradient(135deg, #f0f7ff, #e0ecff);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, .08);
+}
+
+.is-user-board .user-mode-staff-btn:hover {
+  border-color: #60a5fa;
+  background: linear-gradient(135deg, #e0ecff, #d0e0ff);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, .16);
+  transform: translateY(-1px);
+}
+
+/* ── 快捷操作栏中的按钮（用户上传、导出） ── */
+.is-user-board .chat-header-actions .icon-button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d4e2f7;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 150ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+}
+
+.is-user-board .chat-header-actions .icon-button:hover {
+  border-color: #93c5fd;
+  color: #2563eb;
+  background: #f0f7ff;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, .10);
+}
+
+.is-user-board .chat-header-actions .icon-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
 </style>

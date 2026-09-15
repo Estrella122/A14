@@ -87,7 +87,7 @@ export function buildSceneState(project, run) {
     data_scene_source: dataScene.source,
     data_scene_status_label: STATUS_LABELS[dataScene.status] || (isNonEmpty(dataScene.status) ? dataScene.status : '待识别'),
     mismatch_text: mismatch
-      ? `本次数据按【${dataScene.display_name}】处理；项目预设仍为【${projectScene.display_name}】。两者独立，不影响本次分析。`
+      ? `本次数据识别为【${dataScene.display_name}】；当前项目上下文为【${projectScene.display_name}】。两者独立，不影响本次分析。`
       : '',
   }
 }

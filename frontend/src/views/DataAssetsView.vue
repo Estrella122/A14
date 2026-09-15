@@ -238,8 +238,6 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       </template>
     </PageHeader>
 
-      <IntegratedEvidencePanel module="standardization" />
-
       <section v-if="mismatchText" class="panel scene-mismatch-panel">
         <AppIcon name="alert" :size="15" />
         <p>{{ mismatchText }}</p>
@@ -282,6 +280,11 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
           <div><span class="section-kicker">数据文件管理</span><h2>项目数据资产</h2></div>
           <div class="table-tools"><button type="button" :class="{ 'is-active': fileFilter === 'all' }" @click="setFileFilter('all')">全部来源</button><button type="button" :class="{ 'is-active': fileFilter === 'recent' }" @click="setFileFilter('recent')">最近更新</button><button class="icon-button" type="button" :class="{ 'is-active': fileFilter === 'quality' }" aria-label="只看高质量数据" title="只看质量分不低于95的数据" @click="setFileFilter('quality')"><AppIcon name="more" /></button></div>
         </div>
+        <button class="drop-zone" :class="{ 'is-dragging': dragActive }" type="button" @click="chooseFile" @dragenter.prevent="dragActive = true" @dragover.prevent="dragActive = true" @dragleave.prevent="dragActive = false" @drop.prevent="handleDrop">
+          <span><AppIcon name="upload" :size="22" /></span>
+          <strong>拖拽 CSV 到这里，或点击选择文件</strong>
+          <small>单文件不超过 200 MB · 源文件只读保存 · 自动识别时间戳、变量与质量码</small>
+        </button>
         <div class="table-wrap">
           <table class="data-table">
             <caption class="visually-hidden">项目数据文件列表</caption>
@@ -299,11 +302,6 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
           </table>
           <p v-if="!visibleFiles.length" class="empty-state">当前筛选条件下没有数据资产。</p>
         </div>
-        <button class="drop-zone" :class="{ 'is-dragging': dragActive }" type="button" @click="chooseFile" @dragenter.prevent="dragActive = true" @dragover.prevent="dragActive = true" @dragleave.prevent="dragActive = false" @drop.prevent="handleDrop">
-          <span><AppIcon name="upload" :size="22" /></span>
-          <strong>拖拽 CSV 到这里，或点击选择文件</strong>
-          <small>单文件不超过 200 MB · 源文件只读保存 · 自动识别时间戳、变量与质量码</small>
-        </button>
       </section>
 
       <section class="panel simulation-panel">
@@ -358,6 +356,8 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
         <div class="agent-tip"><span><AppIcon name="spark" /></span><p><strong>Agent 建议</strong>先隔离 2 个压力尖峰，再按 {{ project.sample }} 重采样进入动态优选，可避免异常点抬高斜率能量。</p></div>
       </section>
     </div>
+
+    <IntegratedEvidencePanel module="standardization" />
   </div>
 </template>
 

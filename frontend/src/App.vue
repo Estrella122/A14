@@ -8,6 +8,8 @@ import { useLatestPipelineRun } from './composables/useLatestPipelineRun'
 import { buildSceneState } from './composables/useSceneBinding'
 
 const viewMap = {
+  '/portal/': defineAsyncComponent(() => import('./views/PortalView.vue')),
+  '/user/': defineAsyncComponent(() => import('./views/AgentWorkflowView.vue')),
   '/overview/': defineAsyncComponent(() => import('./views/OverviewView.vue')),
   '/agent-review/': defineAsyncComponent(() => import('./views/AgentWorkflowView.vue')),
   '/digital-twin/': defineAsyncComponent(() => import('./views/DigitalTwinView.vue')),
@@ -23,7 +25,7 @@ const viewMap = {
 }
 
 function normalizePath(path) {
-  if (!path || path === '/' || path === '/index.html') return '/overview/'
+  if (!path || path === '/' || path === '/index.html') return '/portal/'
   const cleanPath = path.replace(/index\.html$/, '')
   return cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`
 }
@@ -45,12 +47,16 @@ const sceneState = computed(() => buildSceneState(currentProject.value, latestRu
 const dataSceneText = computed(() => sceneState.value.data_scene.display_name)
 const effectiveProject = computed(() => currentProject.value)
 const dataSceneStatus = computed(() => sceneState.value.data_scene_status_label)
-const isDataSceneMismatch = computed(() => sceneState.value.is_mismatch)
-const dataSceneMismatchText = computed(() => sceneState.value.mismatch_text)
 const activeLatestRun = computed(() => latestRun.value)
-const projectSceneText = computed(() => effectiveProject.value.scene ?? effectiveProject.value.shortName ?? effectiveProject.value.name)
-const activeItem = computed(() => navItems.find((item) => item.path === activePath.value) ?? navItems[0])
-const activeView = computed(() => viewMap[activePath.value] ?? viewMap['/overview/'])
+const isPortal = computed(() => activePath.value === '/portal/')
+const isUserBoard = computed(() => activePath.value === '/user/')
+const isStaffBoard = computed(() => !isPortal.value && !isUserBoard.value)
+const activeItem = computed(() => {
+  if (isPortal.value) return { label: '入口选择', shortLabel: '入口', path: '/portal/', icon: 'dashboard' }
+  if (isUserBoard.value) return { label: '用户板块', shortLabel: '用户', path: '/user/', icon: 'spark' }
+  return navItems.find((item) => item.path === activePath.value) ?? navItems[0]
+})
+const activeView = computed(() => viewMap[activePath.value] ?? viewMap['/portal/'])
 const toast = ref(null)
 const commandPaletteOpen = ref(false)
 let toastTimer
@@ -92,11 +98,13 @@ function handleStrategyAccepted(strategy) {
 function handleSceneDetected(payload) {
   const matched = projects.find((project) => project.scenarioId === payload?.scenarioId)
   if (matched) currentProjectId.value = matched.id
-  navigate(payload?.path || '/digital-twin/')
+  if (!isUserBoard.value) navigate(payload?.path || '/digital-twin/')
   showToast({
     tone: matched ? 'success' : 'warning',
-    title: matched ? `已进入${matched.shortName}场景` : '已完成场景识别',
-    message: matched ? `任务 ${payload?.runId || ''} 已绑定对应项目、三维场景和 Skill 上下文。` : '当前识别结果尚无对应的前端项目模板。',
+    title: matched ? `已识别${matched.shortName}场景` : '已完成场景识别',
+    message: matched
+      ? (isUserBoard.value ? `任务 ${payload?.runId || ''} 已绑定场景；用户板块继续保留在 Agent 中枢。` : `任务 ${payload?.runId || ''} 已绑定对应项目、三维场景和 Skill 上下文。`)
+      : '当前识别结果尚无对应的前端项目模板。',
   })
 }
 
@@ -111,6 +119,7 @@ function executeCommand(command) {
 }
 
 function handleGlobalKeydown(event) {
+  if (!isStaffBoard.value) return
   const target = event.target
   const editing = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target?.isContentEditable
   const modifier = event.metaKey || event.ctrlKey
@@ -142,9 +151,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="app-sidebar">
-      <a class="brand-lockup" href="/overview/" @click.prevent="navigate('/overview/')">
+  <div class="app-shell" :class="{ 'is-entry-shell': isPortal, 'is-user-shell': isUserBoard }">
+    <aside v-if="isStaffBoard" class="app-sidebar">
+      <a class="brand-lockup" href="/portal/" @click.prevent="navigate('/portal/')">
         <span class="brand-symbol"><i></i><b></b><em></em></span>
         <span class="brand-copy"><strong>ProcessPilot</strong><small>APC Modeling Agent</small></span>
       </a>
@@ -152,7 +161,7 @@ onBeforeUnmount(() => {
       <div class="sidebar-project-card">
         <span class="sidebar-project-label">当前项目</span>
         <strong>{{ effectiveProject.shortName }}</strong>
-        <small>{{ effectiveProject.unit }}</small>
+        <p>{{ effectiveProject.unit }}</p>
         <span class="sidebar-project-status"><i></i>{{ effectiveProject.badge }}</span>
       </div>
 
@@ -188,48 +197,46 @@ onBeforeUnmount(() => {
     </aside>
 
     <div class="app-content">
-      <header class="content-topbar">
+      <header v-if="!isPortal && !isUserBoard" class="content-topbar">
         <div class="mobile-brand"><span class="brand-symbol small"><i></i><b></b><em></em></span><strong>ProcessPilot</strong></div>
         <div class="topbar-context">
-          <span class="topbar-breadcrumb">工作台 <AppIcon name="chevron" :size="14" /> {{ activeItem.label }}</span>
-          <label class="project-selector" aria-label="切换当前项目场景">
-            <select v-model="currentProjectId">
-              <option v-for="project in projects" :key="project.id" :value="project.id">{{ project.shortName }} · {{ project.target }}</option>
-            </select>
-          </label>
-          <div class="topbar-scene-pills" aria-label="项目预设与数据识别场景">
-            <StatusPill :tone="activeLatestRun ? 'success' : 'neutral'" class="demo-mode"><span class="demo-pulse"></span>项目预设：{{ projectSceneText }}</StatusPill>
-            <AppIcon name="arrow" :size="13" />
+          <span class="topbar-breadcrumb">{{ isUserBoard ? '用户板块' : '工作人员板块' }} <AppIcon name="chevron" :size="14" /> {{ activeItem.label }}</span>
+          <div class="topbar-scene-pills" aria-label="数据识别场景">
             <StatusPill tone="brand">本次数据：{{ dataSceneText }} · {{ dataSceneStatus }}</StatusPill>
-          </div>
-          <div v-if="isDataSceneMismatch" class="topbar-mismatch" role="status">
-            <AppIcon name="info" :size="13" />
-            <span><strong>场景不同（正常）</strong>{{ dataSceneMismatchText }}</span>
           </div>
         </div>
         <div class="topbar-actions">
-          <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
-          <div class="topbar-health"><span><i></i>后端模板服务</span><strong>ONLINE</strong></div>
-          <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: activeLatestRun ? 'success' : 'info', title: '任务通知', message: activeLatestRun ? `当前场景任务 ${activeLatestRun.run_id} 状态：${activeLatestRun.status}` : '当前场景尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
-          <button class="help-button" type="button" aria-label="打开 Agent 帮助" @click="navigate('/agent-review/'); showToast({ tone: 'info', title: 'Agent 帮助', message: '已打开 Agent 中枢，可上传 CSV 或直接输入问题。' })">?</button>
+          <button v-if="isUserBoard" class="btn btn-secondary" type="button" @click="navigate('/portal/')"><AppIcon name="dashboard" />入口</button>
+          <button v-if="isUserBoard" class="btn btn-primary" type="button" @click="navigate('/overview/')"><AppIcon name="shield" />工作人员板块</button>
+          <template v-else>
+            <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
+            <button class="btn btn-secondary" type="button" @click="navigate('/user/')"><AppIcon name="spark" />用户板块</button>
+            <div class="topbar-health"><span><i></i>后端模板服务</span><strong>ONLINE</strong></div>
+            <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: activeLatestRun ? 'success' : 'info', title: '任务通知', message: activeLatestRun ? `当前场景任务 ${activeLatestRun.run_id} 状态：${activeLatestRun.status}` : '当前场景尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
+            <button class="help-button" type="button" aria-label="打开 Agent 帮助" @click="navigate('/agent-review/'); showToast({ tone: 'info', title: 'Agent 帮助', message: '已打开 Agent 中枢，可上传 CSV 或直接输入问题。' })">?</button>
+          </template>
         </div>
       </header>
 
-      <main class="content-main">
+      <main class="content-main" :class="{ 'portal-main': isPortal, 'user-main': isUserBoard }">
         <component
           :is="activeView"
           :key="`${activePath}-${effectiveProject.id}`"
           :project="effectiveProject"
+          :projects="projects"
+          :current-project-id="currentProjectId"
+          :user-board="isUserBoard"
           @navigate="navigate"
           @notify="showToast"
+          @project-change="currentProjectId = $event"
           @strategy-accepted="handleStrategyAccepted"
           @scene-detected="handleSceneDetected"
         />
       </main>
 
-      <footer class="app-footer">
+      <footer v-if="!isPortal" class="app-footer">
         <span>ProcessPilot · 基于 Agent 的流程工业建模数据智能优选与闭环寻优系统</span>
-        <span>Demo Build 2026.07 · A14 和利时企业命题</span>
+        <span>{{ isUserBoard ? '用户板块 · Agent 智能中枢' : '工作人员板块 · 全量工程界面' }}</span>
       </footer>
     </div>
 
@@ -240,6 +247,6 @@ onBeforeUnmount(() => {
         <button type="button" aria-label="关闭通知" @click="closeToast">×</button>
       </div>
     </Transition>
-    <CommandPalette :open="commandPaletteOpen" :nav-items="navItems" @close="commandPaletteOpen = false" @select="executeCommand" />
+    <CommandPalette v-if="isStaffBoard" :open="commandPaletteOpen" :nav-items="navItems" @close="commandPaletteOpen = false" @select="executeCommand" />
   </div>
 </template>

@@ -981,3 +981,19 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
     </section>
   </div>
 </template>
+
+<style scoped>
+.optimization-view > .pipeline-optimization-summary,
+.optimization-view > .optimization-error,
+.optimization-view > .optimization-legacy-banner { order: 1; }
+.optimization-view > .optimization-run-settings { order: 2; }
+.optimization-view > .optimization-loop-card { order: 3; }
+.optimization-view > .optimization-source-strip,
+.optimization-view > .optimization-history-panel { order: 4; }
+.optimization-view > .metric-grid { order: 5; }
+.optimization-view > .content-grid { order: 6; }
+.optimization-view > .iteration-panel { order: 7; }
+.optimization-view > .strategy-explanation { order: 8; }
+.optimization-view > .best-strategy-card { order: 9; }
+.optimization-view > .optimization-trust-panel { order: 10; }
+</style>

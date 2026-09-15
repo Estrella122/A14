@@ -136,14 +136,14 @@ function freezeDataset() {
       </template>
     </PageHeader>
 
-    <DataQualityDashboard :latest-run="latestRun" />
-
     <section class="metric-grid four-col">
       <article class="metric-card"><span class="metric-label">检测候选段</span><div class="metric-value">{{ candidateCount }} <small>段</small></div><p>当前任务 {{ latestRun?.run_id ?? '等待运行' }}</p><span class="metric-trend neutral">真实滑动窗口结果</span></article>
       <article class="metric-card accent-cyan"><span class="metric-label">训练达标窗口</span><div class="metric-value">{{ selectedCount }} <small>段</small></div><p>建模数据 {{ liveCleaning.modeling_row_count ?? '—' }} 行</p><span class="metric-trend positive">动态分≥80且SNR代理≥10 dB</span></article>
       <article class="metric-card"><span class="metric-label">建模数据保留率</span><div class="metric-value">{{ (modelingRate * 100).toFixed(1) }}%</div><p>规整后 {{ liveCleaning.cleaned_row_count ?? '—' }} 行</p><span class="metric-trend positive">候选不足时使用Top窗口兜底</span></article>
       <article class="metric-card"><span class="metric-label">候选质量均分</span><div class="metric-value">{{ averageScore.toFixed(1) }}</div><p>综合五维动态评分</p><span class="metric-trend positive">来自本次CSV</span></article>
     </section>
+
+    <DataQualityDashboard :latest-run="latestRun" />
 
     <section class="panel segment-chart-panel">
       <div class="section-heading compact">

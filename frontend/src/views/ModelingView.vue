@@ -118,8 +118,6 @@ async function showFrequencyAnalysis() {
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="modeling" />
-
     <div class="model-analysis-tabs" role="tablist" aria-label="模型分析视图">
       <button type="button" role="tab" :aria-selected="activeAnalysisTab === 'identification'" :class="{ 'is-active': activeAnalysisTab === 'identification' }" @click="activeAnalysisTab = 'identification'"><AppIcon name="model" :size="16" />时域辨识与解耦</button>
       <button type="button" role="tab" :aria-selected="activeAnalysisTab === 'frequency'" :class="{ 'is-active': activeAnalysisTab === 'frequency' }" @click="showFrequencyAnalysis"><AppIcon name="segments" :size="16" />频率特性分析</button>
@@ -236,6 +234,8 @@ async function showFrequencyAnalysis() {
     </div>
 
     <FrequencyAnalysisPanel v-show="activeAnalysisTab === 'frequency'" :model="liveModel" />
+
+    <IntegratedEvidencePanel module="modeling" />
   </div>
 </template>
 

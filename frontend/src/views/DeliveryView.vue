@@ -86,6 +86,17 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       <StatusPill :tone="reviewPassed ? 'success' : 'warning'"><AppIcon :name="reviewPassed ? 'check' : 'alert'" :size="14" /> {{ reviewPassed ? '已生成证据' : '需要复核' }}</StatusPill>
     </section>
 
+    <section class="panel artifacts-panel">
+      <div class="section-heading compact"><div><span class="section-kicker">一键交付</span><h2>本次运行产物</h2></div><StatusPill tone="success">4 / 4 已生成</StatusPill></div>
+      <div class="artifact-grid">
+        <article v-for="artifact in artifacts" :key="artifact.type" class="artifact-card">
+          <span class="artifact-icon"><AppIcon :name="artifact.icon" :size="24" /></span>
+          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p></div>
+          <button class="btn btn-secondary" type="button" @click="exportArtifact(artifact)"><AppIcon name="download" :size="16" />{{ artifact.action }}</button>
+        </article>
+      </div>
+    </section>
+
     <div class="content-grid content-grid-8-4 delivery-top-grid">
       <section class="panel report-preview-panel">
         <div class="section-heading compact"><div><span class="section-kicker">Agent 工程报告预览</span><h2>{{ project.name }}</h2></div><div class="report-page-count">第 {{ activeReportMeta.number }} 章 / 共 07 章</div></div>
@@ -157,17 +168,6 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       </section>
     </div>
 
-    <section class="panel artifacts-panel">
-      <div class="section-heading compact"><div><span class="section-kicker">一键交付</span><h2>本次运行产物</h2></div><StatusPill tone="success">4 / 4 已生成</StatusPill></div>
-      <div class="artifact-grid">
-        <article v-for="artifact in artifacts" :key="artifact.type" class="artifact-card">
-          <span class="artifact-icon"><AppIcon :name="artifact.icon" :size="24" /></span>
-          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p></div>
-          <button class="btn btn-secondary" type="button" @click="exportArtifact(artifact)"><AppIcon name="download" :size="16" />{{ artifact.action }}</button>
-        </article>
-      </div>
-    </section>
-
     <div class="content-grid content-grid-7-5">
       <section class="panel traceability-panel">
         <div class="section-heading compact"><div><span class="section-kicker">全链路可追溯</span><h2>数据、策略、模型与算法版本</h2></div></div>
@@ -194,3 +194,126 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
     </section>
   </div>
 </template>
+
+<style scoped>
+.delivery-top-grid,
+.delivery-view .content-grid-7-5 {
+  align-items: stretch;
+}
+
+.report-preview-panel {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 16px;
+}
+
+.report-document {
+  flex: 1;
+  min-height: clamp(420px, 48vh, 500px);
+  margin-top: 8px;
+}
+
+.report-page {
+  margin-top: 12px;
+  padding: 20px 26px 18px;
+}
+
+.report-toc {
+  padding-block: 14px;
+}
+
+.report-page h3 {
+  margin-top: 13px;
+}
+
+.report-page h4 {
+  margin-top: 12px;
+}
+
+.report-page > p,
+.report-highlight,
+.report-kpis,
+.mini-report-chart {
+  margin-top: 10px;
+}
+
+.traceability-panel,
+.coverage-summary-panel,
+.review-checklist-panel {
+  align-self: stretch;
+}
+
+.traceability-panel,
+.coverage-summary-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.coverage-summary-panel .compact-coverage-list {
+  flex: 1;
+  align-content: start;
+}
+
+.traceability-panel {
+  overflow: hidden;
+}
+
+.traceability-panel .version-chain {
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: start;
+  justify-content: stretch;
+  margin-top: 16px;
+  gap: 10px;
+}
+
+.traceability-panel .version-chain > .app-icon {
+  display: none;
+}
+
+.traceability-panel .version-chain article {
+  position: relative;
+  min-width: 0;
+  padding: 12px 10px 10px;
+}
+
+.traceability-panel .version-chain article::before {
+  content: "0" counter(version-step);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  color: #9aa8b7;
+  font: 700 7px monospace;
+}
+
+.traceability-panel .version-chain {
+  counter-reset: version-step;
+}
+
+.traceability-panel .version-chain article {
+  counter-increment: version-step;
+}
+
+.traceability-panel .version-chain article strong,
+.traceability-panel .version-chain article p {
+  max-width: 100%;
+}
+
+@media (max-width: 1180px) {
+  .traceability-panel .version-chain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .report-document {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .traceability-panel .version-chain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

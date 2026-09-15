@@ -31,6 +31,8 @@ export default defineConfig({
       },
       input: {
         main: 'index.html',
+        portal: 'portal/index.html',
+        user: 'user/index.html',
         overview: 'overview/index.html',
         digitalTwin: 'digital-twin/index.html',
         scenarioData: 'scenario-data/index.html',

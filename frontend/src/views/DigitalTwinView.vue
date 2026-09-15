@@ -9,8 +9,12 @@ import { resolveScene3DView } from '../data/scene3dRegistry'
 
 const SceneModel3D = defineAsyncComponent(() => import('../components/SceneModel3D.vue'))
 
-const props = defineProps({ project: { type: Object, required: true } })
-const emit = defineEmits(['navigate'])
+const props = defineProps({
+  project: { type: Object, required: true },
+  projects: { type: Array, default: () => [] },
+  currentProjectId: { type: String, default: '' },
+})
+const emit = defineEmits(['navigate', 'project-change'])
 const sceneModel = ref(null)
 // The project selector controls which equipment the digital-twin page opens.
 // Data evidence remains visible and can be inspected explicitly when its
@@ -44,6 +48,10 @@ function toggleModelScope() {
   preferredModelScope.value = sceneView.value.scope === 'data' ? 'project' : 'data'
 }
 
+function changeProject(event) {
+  emit('project-change', event.target.value)
+}
+
 watch(() => props.project.scenarioId, (next, previous) => {
   if (previous && next !== previous) preferredModelScope.value = 'project'
 })
@@ -59,6 +67,19 @@ watch(() => sceneState.value.data_scene.id, (next, previous) => {
       :title="sceneContent.title"
       :description="sceneContent.description"
     >
+      <template #meta>
+        <div class="inline-scene-selector" aria-label="项目预设与数据识别场景">
+          <label class="inline-project-select" aria-label="切换当前项目场景">
+            <span class="scene-dot"></span>
+            <span>项目预设：</span>
+            <select :value="currentProjectId || project.id" @change="changeProject">
+              <option v-for="item in projects" :key="item.id" :value="item.id">{{ item.scene ?? item.shortName }}</option>
+            </select>
+          </label>
+          <AppIcon name="arrow" :size="13" />
+          <StatusPill tone="brand">本次数据：{{ sceneState.data_scene.display_name }} · {{ sceneState.data_scene_status_label }}</StatusPill>
+        </div>
+      </template>
       <template #actions>
         <StatusPill :tone="sceneView.usedProjectFallback ? 'warning' : latestRun ? 'success' : 'neutral'" dot>{{ modelScopeLabel }}</StatusPill>
         <button v-if="canSwitchModelScope" class="btn btn-secondary" type="button" @click="toggleModelScope">
@@ -73,8 +94,8 @@ watch(() => sceneState.value.data_scene.id, (next, previous) => {
       <aside class="twin-side">
         <section class="twin-context">
           <span class="section-kicker">Scene context</span>
-          <h2>{{ sceneState.project_scene.display_name }}</h2>
-          <p>项目预设场景，不会被上传数据覆盖。</p>
+          <h2>{{ sceneState.data_scene.display_name }}</h2>
+          <p>本次数据识别结果用于说明当前任务场景。</p>
           <dl>
             <div><dt>当前数据场景</dt><dd>{{ sceneState.data_scene.display_name }}<code>{{ sceneState.data_scene.status_label }}</code></dd></div>
             <div><dt>场景绑定</dt><dd>{{ sceneState.is_mismatch ? '已分离' : '一致' }}<code>{{ sceneState.data_scene.source }}</code></dd></div>
@@ -102,11 +123,12 @@ watch(() => sceneState.value.data_scene.id, (next, previous) => {
 
 <style scoped>
 .twin-view { --twin-ink:#16202b; --twin-muted:#667482; }
+.inline-scene-selector{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:#8aa0ba}.inline-project-select{display:inline-flex;gap:5px;align-items:center;min-height:25px;max-width:100%;padding:3px 8px;color:#526075;font-size:9px;font-weight:720;line-height:1;border:1px solid #dfe5ed;border-radius:999px;background:#f8fafc}.inline-project-select .scene-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#68adff;box-shadow:0 0 0 3px rgba(104,173,255,.18)}.inline-project-select select{max-width:min(360px,52vw);padding:0 18px 0 0;color:#34455a;font:inherit;font-weight:760;border:0;background:transparent;outline:0}.inline-project-select:focus-within{border-color:#bdd2f3;box-shadow:0 0 0 3px rgba(37,99,235,.08)}
 .twin-layout { display:grid;grid-template-columns:minmax(0,1fr) 282px;gap:14px;align-items:stretch;animation:reveal .62s cubic-bezier(.16,1,.3,1) both }.twin-side{display:grid;gap:12px}.twin-context,.zone-list{padding:20px;border:1px solid var(--line);border-radius:12px;background:#fff}.twin-context h2{margin-top:9px;color:var(--twin-ink);font-size:21px;letter-spacing:-.025em}.twin-context>p{margin-top:5px;color:var(--twin-muted);font-size:10px}.twin-context dl{display:grid;gap:0;margin-top:20px}.twin-context dl>div{padding:12px 0;border-top:1px solid #edf1f5}.twin-context dt{color:#84909c;font-size:9px}.twin-context dd{display:flex;justify-content:space-between;gap:8px;margin-top:5px;color:#263544;font-size:11px;font-weight:650}.twin-context code{color:#788896;font-size:8px;font-weight:500}.section-title{display:flex;justify-content:space-between;align-items:center}.section-title span{color:#263544;font-size:11px;font-weight:700}.section-title small{color:#93a0ac;font-size:8px}.zone-list ol{display:grid;gap:5px;margin:14px 0 0;padding:0;list-style:none}.zone-list li{border-bottom:1px solid #f0f3f6}.zone-list li:last-child{border-bottom:0}.zone-list button{display:grid;grid-template-columns:30px 1fr;gap:2px 8px;align-items:center;width:100%;padding:9px 0;color:#536373;text-align:left;border:0;background:transparent;cursor:pointer}.zone-list button:hover,.zone-list button:focus-visible{color:#225f8f}.zone-list button span{grid-row:1/3;color:#a0acb7;font:8px monospace}.zone-list button strong{font-size:10px;font-weight:600}.zone-list button small{overflow:hidden;color:#9aa8b4;font:7px monospace;text-overflow:ellipsis;white-space:nowrap}
 .evidence-strip{display:grid;grid-template-columns:1.4fr repeat(3,1fr);overflow:hidden;border:1px solid var(--line);border-radius:12px;background:#fff;animation:reveal .62s .08s cubic-bezier(.16,1,.3,1) both}.evidence-strip article{display:grid;gap:5px;min-width:0;padding:17px 19px;border-right:1px solid var(--line-soft)}.evidence-strip article:last-child{border-right:0}.evidence-strip span{color:#7e8b98;font-size:9px}.evidence-strip strong{overflow:hidden;color:#1d2b38;font-size:17px;letter-spacing:-.02em;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums}.evidence-strip small{color:#98a3ad;font-size:8px}
 .process-story{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(0,1.3fr);gap:42px;align-items:center;padding:28px 30px 31px;border:1px solid var(--line);border-radius:12px;background:#fff;animation:reveal .62s .16s cubic-bezier(.16,1,.3,1) both}.story-copy h2{margin-top:8px;color:#16202b;font-size:22px;letter-spacing:-.03em}.story-copy p{max-width:54ch;margin-top:8px;color:#667482;font-size:10px;line-height:1.7}.story-flow{display:grid;grid-template-columns:repeat(4,1fr);margin:0;padding:0;list-style:none}.story-flow li{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:center;min-width:0;padding-right:18px}.story-flow li>span{display:grid;place-items:center;width:24px;height:24px;color:#315f87;font:700 8px monospace;border:1px solid #cbdce9;border-radius:6px;background:#f2f7fa}.story-flow strong,.story-flow small{display:block}.story-flow strong{overflow:hidden;color:#31404e;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.story-flow small{margin-top:3px;color:#a0aab4;font:7px monospace}.story-flow .app-icon{position:absolute;right:3px;color:#b5c0ca}
 @keyframes reveal{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:1040px){.twin-layout{grid-template-columns:1fr}.twin-side{grid-template-columns:1fr 1fr}.evidence-strip{grid-template-columns:repeat(2,1fr)}.evidence-strip article:nth-child(2){border-right:0}.evidence-strip article:nth-child(-n+2){border-bottom:1px solid var(--line-soft)}.process-story{grid-template-columns:1fr}}
-@media(max-width:680px){.twin-side{grid-template-columns:1fr}.evidence-strip{grid-template-columns:1fr}.evidence-strip article{border-right:0;border-bottom:1px solid var(--line-soft)}.story-flow{grid-template-columns:1fr 1fr;gap:18px}.process-story{padding:22px}.page-heading-actions .status-pill{display:none}}
+@media(max-width:680px){.inline-scene-selector{align-items:flex-start;flex-direction:column}.inline-project-select,.inline-project-select select{width:100%;max-width:100%}.twin-side{grid-template-columns:1fr}.evidence-strip{grid-template-columns:1fr}.evidence-strip article{border-right:0;border-bottom:1px solid var(--line-soft)}.story-flow{grid-template-columns:1fr 1fr;gap:18px}.process-story{padding:22px}.page-heading-actions .status-pill{display:none}}
 @media(prefers-reduced-motion:reduce){.twin-layout,.evidence-strip,.process-story{animation:none}}
 </style>

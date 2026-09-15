@@ -88,8 +88,6 @@ async function executeCleaning() {
       </template>
     </PageHeader>
 
-    <IntegratedEvidencePanel module="cleaning" />
-
     <div class="notice-banner" :class="liveCleaning ? 'success-banner' : 'warning-banner'">
       <span class="notice-icon"><AppIcon name="alert" /></span>
       <div><strong>{{ liveCleaning ? `真实清洗质量评分 ${liveCleaning.overall_score}` : '尚未运行真实清洗任务' }}</strong><p>{{ liveCleaning ? `已完成 ${liveCleaning.cleaned_row_count} 行数据规整，筛选建模数据 ${liveCleaning.modeling_row_count} 行。` : '请先上传CSV，系统将按工艺边界检测并修复异常。' }}</p></div>
@@ -148,5 +146,7 @@ async function executeCleaning() {
       <div><span class="section-kicker">Agent 决策解释</span><h2>本次CSV实际采用的清洗策略</h2><p>时间戳按当前采样周期统一；缺失值根据缺失率使用时间插值；异常值由工艺边界、阶跃阈值和局部中位数联合识别。本次质量评分 {{ liveCleaning?.overall_score ?? '—' }}，最终保留 {{ liveCleaning?.modeling_row_count ?? 0 }} 行建模数据。</p></div>
       <button type="button" @click="emit('navigate', '/agent-review/')">追问 Agent <AppIcon name="arrow" :size="15" /></button>
     </div>
+
+    <IntegratedEvidencePanel module="cleaning" />
   </div>
 </template>
