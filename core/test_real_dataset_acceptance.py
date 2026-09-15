@@ -1,14 +1,9 @@
 """Fixed source-evidence acceptance. Rejected-data guards are not Pipeline PASS."""
-import gzip
 import hashlib
-import io
 import json
 from pathlib import Path
-import numpy as np
-import pandas as pd
 from django.test import SimpleTestCase, override_settings
 from core.skills.registry import get_registry
-from integrations.standardization.standard_agent.engine import StandardizationAgent
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -21,14 +16,13 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
         cls.scenes={s['scene']:s for s in cls.record['scenes']}
         cls.bf=cls.scenes['blast_furnace']['receipt']
 
-    def test_real_debutanizer_contract(self):
-        path=ROOT/'runtime/data_validation/real_search/stevenshaw_debutanizer.csv'
-        frame=pd.read_csv(path)
-        self.assertEqual((2394,8),frame.shape)
-        mapping=StandardizationAgent().map_columns(list(frame),'debutanizer_column',frame)
-        self.assertIn('timestamp',mapping['missing_required'])
-        self.assertIn('bottom_temperature_b',mapping['missing_required'])
-        self.assertLess(mapping['required_coverage'],1)
+    def test_recorded_debutanizer_contract(self):
+        # Recorded evidence only. Raw-source revalidation is an explicit local command.
+        result=json.loads((ROOT/'datasets/real_validation/prechecks/dataset_23.json').read_text())
+        self.assertEqual((2394,8),(result['rows'],len(result['columns'])))
+        self.assertEqual(0,result['matched_required'])
+        self.assertIn('timestamp',result['missing_fields'])
+        self.assertNotEqual('ELIGIBLE',result['final_eligibility'])
 
     def test_real_debutanizer_pipeline(self):
         # No qualified source => intentionally do not call an algorithm.
@@ -38,16 +32,13 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
         self.assertFalse(scene['executor_invoked'])
         self.assertFalse(any(c['usable'] for c in self.record['candidates'] if c['scene']==scene['scene']))
 
-    def test_real_dryer_contract(self):
-        data=gzip.decompress((ROOT/'runtime/data_validation/public_candidates/daisy_dryer.gz').read_bytes())
-        values=np.loadtxt(io.BytesIO(data))
-        self.assertEqual((867,7),values.shape)
-        self.assertFalse(np.isnan(values).any())
-        self.assertTrue((values[:,-1]<0).any())
-        description=(ROOT/'runtime/data_validation/public_candidates/daisy_dryer_description.txt').read_text()
-        self.assertIn('fuel flow rate',description)
-        self.assertIn('moisture content of raw material',description)
-        # Source target is not current product_moisture: no relabeling allowed.
+    def test_recorded_dryer_contract(self):
+        result=json.loads((ROOT/'datasets/real_validation/prechecks/dataset_10.json').read_text())
+        self.assertEqual((867,7),(result['rows'],len(result['columns'])))
+        self.assertIn('raw_material_moisture',result['columns'])
+        self.assertNotIn('product_moisture',result['columns'])
+        self.assertEqual(0,result['matched_required'])
+        self.assertNotEqual('ELIGIBLE',result['final_eligibility'])
         c=next(c for c in self.record['candidates'] if 'DAISY' in c['dataset_name'])
         self.assertFalse(c['usable'])
         self.assertEqual('FAIL',c['preflight']['physical_safety'])
@@ -97,9 +88,14 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
         for row in self.bf['executions']:
             for key in ['metrics','warnings','evidence','artifacts']:self.assertIn(key,row)
 
-    def test_real_dataset_hash_reproducibility(self):
+    def test_recorded_source_hashes_and_distributed_fixture(self):
+        # Cross-check independent checked-in manifests, not nonexistent private files.
+        candidates=json.loads((ROOT/'datasets/real_validation/closeout/candidates.json').read_text())
+        known={c['sha256'] for c in candidates if c.get('sha256')}
         for c in self.record['candidates']:
-            if c['local_path'] and c['sha256']:
-                self.assertEqual(c['sha256'],hashlib.sha256(Path(c['local_path']).read_bytes()).hexdigest())
+            if c.get('sha256'):
+                self.assertRegex(c['sha256'],r'^[0-9a-f]{64}$')
+                self.assertIn(c['sha256'],known)
         self.assertTrue(all(self.bf['comparison'].values()))
-        self.assertEqual(self.bf['dataset_sha256'],hashlib.sha256(Path(self.bf['dataset_ref']).read_bytes()).hexdigest())
+        path=ROOT/'frontend/public/datasets/blast_furnace_real_720h.csv'
+        self.assertEqual(self.bf['dataset_sha256'],hashlib.sha256(path.read_bytes()).hexdigest())

@@ -63,3 +63,15 @@ npm run runtime:prune -- --keep 100 --days 30 --apply
 ## 文档导航
 
 数据需求、当前验收与架构说明统一见[项目文档入口](docs/README.md)。
+
+### CI 与本地真实来源复验
+
+`python manage.py test core` 在干净 checkout 中运行：高炉使用仓库内可分发数据实际执行；非公开候选验证已提交的来源记录和拒绝状态，不冒充重新读取原始数据。
+
+取得合法原文件并按记录放入本地 `runtime/data_validation/` 后，运行严格来源复验：
+
+```bash
+python tools/validate_local_real_sources.py
+```
+
+该命令核验原文件哈希、烟草提取及脱丁烷/DAISY字段拒绝条件；缺文件或哈希不符直接失败。公共 CI 不获取或发布许可未核实的原始数据。两场景真实 Pipeline 仍是 UNAVAILABLE。
