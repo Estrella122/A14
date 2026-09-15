@@ -9,6 +9,7 @@ import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
 import RuntimeObservabilityPanel from '../components/RuntimeObservabilityPanel.vue'
 import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
+import ChatOptimizationSummary from '../components/ChatOptimizationSummary.vue'
 import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
@@ -32,6 +33,74 @@ function readSavedChat() {
   } catch { return null }
 }
 const savedChat = readSavedChat()
+const historyKey = `${chatStorageKey}-threads`
+function readThreads() {
+  try { return JSON.parse(window.localStorage.getItem(historyKey) || '[]') } catch { return [] }
+}
+const conversations = ref(readThreads())
+const conversationId = ref(savedChat?.conversationId || crypto.randomUUID())
+const historyOpen = ref(false)
+const detailsOpen = ref(false)
+const preferredSkill = ref('')
+const noDataContext = ref(savedChat?.noDataContext ?? false)
+const conversationBusy = computed(() => isRunning.value || uploading.value || activeRun.value?.status === 'running')
+function conversationSnapshot() {
+  return {
+    id: conversationId.value, title: messages.value.find((item) => item.role === 'user')?.text.slice(0, 48) || '新对话',
+    messages: messages.value, responseState: responseState.value, runtimeHistory: runtimeHistory.value,
+    liveLogs: liveLogs.value, selectedRun: activeRun.value, noDataContext: noDataContext.value,
+    updatedAt: new Date().toISOString(),
+  }
+}
+function saveConversation() {
+  if (uploading.value || !messages.value.some((item) => item.role === 'user')) return
+  const entry = JSON.parse(JSON.stringify(conversationSnapshot()))
+  conversations.value = [entry, ...conversations.value.filter((item) => item.id !== entry.id)].slice(0, 30)
+  try { window.localStorage.setItem(historyKey, JSON.stringify(conversations.value)) } catch { /* Storage may be full. */ }
+}
+function newConversation() {
+  if (conversationBusy.value) return
+  saveConversation()
+  conversationId.value = crypto.randomUUID()
+  messages.value = [{ ...welcomeMessage, text: activeRun.value ? `新对话已开始，当前关联 ${activeRun.value.original_name || '当前数据'}。可以继续提问，或上传另一份 CSV。` : '你好，可以上传 CSV 开始分析。上传后直接提问，就能查看答案、技能和执行过程。' }]
+  prompt.value = ''
+  responseState.value = null
+  runtimeHistory.value = {}
+  liveLogs.value = []
+  selectedRun.value = activeRun.value
+  noDataContext.value = !selectedRun.value
+  activeLiveRun.value = null
+  preferredSkill.value = ''
+  historyOpen.value = false
+}
+function openConversation(entry) {
+  if (conversationBusy.value) return
+  saveConversation()
+  const stored = JSON.parse(JSON.stringify(entry))
+  conversationId.value = stored.id
+  messages.value = stored.messages
+  responseState.value = stored.responseState
+  runtimeHistory.value = stored.runtimeHistory || {}
+  liveLogs.value = stored.liveLogs || []
+  selectedRun.value = stored.selectedRun
+  noDataContext.value = stored.noDataContext || !stored.selectedRun
+  prompt.value = ''
+  preferredSkill.value = ''
+  historyOpen.value = false
+  void scrollToLatest()
+}
+const artifactNames = { standardized_csv: '标准化数据 CSV', cleaned_csv: '清洗后数据 CSV', segments_csv: '动态数据段 CSV', modeling_csv: '建模数据 CSV', metrics_json: '模型指标', optimization_json: '寻优记录', analysis_report_md: '分析报告', quality_report_json: '数据质量报告' }
+function openDataView(path) {
+  if (activeRun.value) announcePipelineUpdate(activeRun.value)
+  emit('navigate', path)
+}
+function composerKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+    event.preventDefault()
+    void runWorkflow()
+  }
+}
+
 const welcomeMessage = { id: 1, role: 'agent', text: `你好，我已进入 ${props.project.name}。你可以像和工程师交流一样直接提问；当前场景存在真实运行时我会引用任务证据，只有你明确要求重跑时才会执行算法。`, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) }
 
 const prompt = ref(savedChat?.prompt ?? '')
@@ -76,7 +145,7 @@ const { latestRun } = useLatestPipelineRun()
 let pollController
 let scrollFrame
 let disposed = false
-const activeRun = computed(() => selectedRun.value ?? latestRun.value)
+const activeRun = computed(() => noDataContext.value ? null : selectedRun.value ?? latestRun.value)
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
 const hasRuntimeObservation = computed(() => Boolean(
@@ -95,7 +164,7 @@ const promptTemplates = computed(() => ({
   blast_furnace: ['提取高炉高信噪比动态数据并评估铁水硅模型', '判断矿焦比和鼓风流量是否存在共线性', '以稳健性优先重新执行闭环寻优'],
   debutanizer_column: ['提取脱丁烷塔高信噪比动态数据', '评估回流量到塔底 C4 浓度的时滞是否可信', '比较精馏塔候选模型的残差白噪声检验'],
   industrial_dryer: ['提取干燥器热风阶跃动态数据', '分析热风温度与产品含水率的动态响应', '检查多变量干燥模型的可辨识性与共线性'],
-}[props.project.scenarioId] ?? ['提取当前场景高信噪比动态数据', '分析当前模型的 R²、RMSE 和残差是否可靠', '以稳健性优先重新执行闭环寻优']))
+}[sceneState.value.data_scene.id || props.project.scenarioId] ?? ['提取当前场景高信噪比动态数据', '分析当前模型的 R²、RMSE 和残差是否可靠', '以稳健性优先重新执行闭环寻优']))
 
 const iconMap = { intent: 'spark', standardization: 'network', cleaning: 'clean', selection: 'segments', modeling: 'model', optimization: 'loop', review: 'shield', report: 'report' }
 const skillCategoryIcon = { orchestration: 'spark', data: 'database', selection: 'segments', modeling: 'model', delivery: 'report' }
@@ -109,6 +178,7 @@ const planNodes = computed(() => {
       tool: step.skill_id,
       output: `${step.reason} · 匹配 ${(Number(step.relevance_score ?? 0) * 100).toFixed(0)}%`,
       status: executionMap[step.skill_id]?.status ?? step.status,
+      activityStatus: executionMap[step.skill_id]?.execution_state ?? (executionMap[step.skill_id]?.activity === 'read' ? 'evidence_only' : null),
       icon: skillCategoryIcon[step.category] ?? 'loop',
     }))
   }
@@ -139,10 +209,11 @@ function handleLLMProviderChange() {
   llmModel.value = activeLLMProvider.value?.model || ''
 }
 
-watch([messages, responseState, runtimeHistory, liveLogs, prompt], () => {
+watch([messages, responseState, runtimeHistory, liveLogs, prompt, conversationId, noDataContext], () => {
   try {
     const persistedResponse = responseState.value ? { ...responseState.value, snapshot: null } : null
     window.localStorage.setItem(chatStorageKey, JSON.stringify({
+      conversationId: conversationId.value, noDataContext: noDataContext.value,
       prompt: prompt.value,
       messages: messages.value.slice(-60),
       responseState: persistedResponse,
@@ -151,6 +222,7 @@ watch([messages, responseState, runtimeHistory, liveLogs, prompt], () => {
       liveLogs: liveLogs.value.slice(0, 20),
       activeLiveRun: activeLiveRun.value,
     }))
+    saveConversation()
   } catch { /* Conversation persistence is best effort. */ }
 }, { deep: true })
 
@@ -301,6 +373,7 @@ function appendAgentResult(result, prefix = '', draftMessage = null) {
   if (draftMessage) Object.assign(draftMessage, completedMessage, { id: draftMessage.id })
   else messages.value.push(completedMessage)
   if (result.snapshot) {
+    noDataContext.value = false
     latestRun.value = result.snapshot
     selectedRun.value = result.snapshot
     announcePipelineUpdate(result.snapshot)
@@ -356,14 +429,20 @@ async function monitorExtendedAnalysis(runId) {
 
 async function runWorkflow() {
   if (!prompt.value.trim() || isRunning.value) return
+  if (!activeRun.value?.run_id) {
+    emit('notify', { tone: 'warning', title: '请先关联数据', message: '当前聊天服务需要数据上下文。请上传 CSV 后提问，以免引用其他任务的数据。' })
+    return
+  }
   const userText = prompt.value.trim()
-  messages.value.push({ id: Date.now(), role: 'user', text: userText, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+  messages.value.push({ id: Date.now(), role: 'user', text: userText, skillPreference: skillCatalog.value?.skills?.find((item) => item.id === preferredSkill.value)?.name, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
   prompt.value = ''
   isRunning.value = true
   await scrollToLatest()
   emit('notify', { tone: 'info', title: 'Agent 正在执行', message: '实时状态将直接来自后端 Runtime。' })
   try {
-    const result = await executeLiveMessage(userText, activeRun.value?.run_id)
+    const chosen = skillCatalog.value?.skills?.find((item) => item.id === preferredSkill.value)
+    const requestText = chosen ? `技能偏好：${chosen.name}（${chosen.id}）\n用户问题：${userText}` : userText
+    const result = await executeLiveMessage(requestText, activeRun.value?.run_id)
     emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : 'Agent 执行完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key}` })
   } catch (error) {
     activeLiveRun.value = null
@@ -394,7 +473,8 @@ function exportConversation() {
 async function handleCsv(event) {
   const file = event.target.files?.[0]
   event.target.value = ''
-  if (!file || uploading.value) return
+  if (!file || uploading.value || isRunning.value) return
+  saveConversation()
   uploading.value = true
   basicAnalysisReady.value = false
   isRunning.value = true
@@ -407,10 +487,12 @@ async function handleCsv(event) {
     const created = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景，由Agent总控从头执行并生成分析报告', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag, asyncAnalysis: true })
     // A successfully created CSV run starts a fresh evidence conversation.
     // Failed uploads keep the previous conversation so troubleshooting context is not lost.
+    conversationId.value = crypto.randomUUID()
     prompt.value = ''
     messages.value = [uploadMessage]
     responseState.value = null
     liveLogs.value = [{ time: created.created_at ?? new Date().toISOString(), level: 'TOOL', text: `任务 ${created.run_id} 已创建，正在等待基础分析结果。` }]
+    noDataContext.value = false
     latestRun.value = created
     selectedRun.value = created
     announcePipelineUpdate(created)
@@ -437,6 +519,7 @@ async function handleCsv(event) {
   } finally {
     uploading.value = false
     isRunning.value = false
+    saveConversation()
     await scrollToLatest()
   }
 }
@@ -445,10 +528,12 @@ onMounted(async () => {
   const savedLLM = readLLMPreference()
   await Promise.allSettled([
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
-    listPipelineRuns({ limit: 20 }).then((payload) => {
+    listPipelineRuns({ limit: 20 }).then(async (payload) => {
       recentRuns.value = (Array.isArray(payload) ? payload : payload?.results ?? payload?.runs ?? []).slice(0, 20)
-      const restored = recentRuns.value.find((run) => run.run_id === savedChat?.selectedRunId)
-      if (restored) selectedRun.value = restored
+      if (savedChat?.selectedRunId && !noDataContext.value) {
+        try { selectedRun.value = await getPipelineRun(savedChat.selectedRunId) }
+        catch { noDataContext.value = true; selectedRun.value = null }
+      }
     }),
     getAgentLLMProviders().then((result) => {
       llmCatalog.value = result
@@ -461,6 +546,7 @@ onMounted(async () => {
     }).catch(() => { llmProvider.value = 'evidence' }),
   ])
   if (activeLiveRun.value?.skill_run_id && activeLiveRun.value.status === 'running') {
+    isRunning.value = true
     const timelineMessage = messages.value.find((message) => message.role === 'runtime' && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now(), role: 'runtime', events: [], status: 'running', metrics: {}, skillRunId: activeLiveRun.value.skill_run_id }
     const draftMessage = messages.value.find((message) => message.role === 'agent' && message.streaming && message.skillRunId === activeLiveRun.value.skill_run_id) ?? { id: Date.now() + 1, role: 'agent', text: '', streaming: true, phase: '正在恢复 Agent 实时事件流…', skillRunId: activeLiveRun.value.skill_run_id }
     if (!messages.value.includes(timelineMessage)) messages.value.push(timelineMessage)
@@ -485,23 +571,39 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { disposed = true; pollController?.abort(); if (scrollFrame) window.cancelAnimationFrame(scrollFrame) })
 
-function switchRun(event) {
+async function switchRun(event) {
   const run = recentRuns.value.find((item) => item.run_id === event.target.value)
-  if (run) selectedRun.value = run
+  if (!run || isRunning.value) return
+  try {
+    const snapshot = await getPipelineRun(run.run_id)
+    if (props.userBoard) newConversation()
+    noDataContext.value = false
+    selectedRun.value = snapshot
+    if (props.userBoard) messages.value = [{ ...welcomeMessage, text: `已关联 ${snapshot.original_name || '所选数据'}。本次对话将使用这份数据的分析证据。` }]
+  } catch (error) { emit('notify', { tone: 'warning', title: '数据关联失败', message: error.message }) }
 }
 </script>
 
 <template>
-  <div class="view-stack agent-view" :class="{ 'is-user-board': userBoard }">
+  <div class="view-stack agent-view" :class="{ 'is-user-board': userBoard }" @keydown.esc="detailsOpen = false; historyOpen = false">
+    <aside v-if="userBoard" class="conversation-sidebar" :class="{ 'is-open': historyOpen }">
+      <strong class="sidebar-brand">ProcessPilot <span>工业数据助手</span></strong>
+      <button class="new-conversation" type="button" :disabled="conversationBusy" @click="newConversation">＋ 新建对话</button>
+      <span class="history-label">历史对话 · 保存在此浏览器</span>
+      <nav aria-label="历史对话">
+        <button v-for="entry in conversations" :key="entry.id" type="button" :disabled="conversationBusy" :class="{ active: entry.id === conversationId }" @click="openConversation(entry)">{{ entry.title }}</button>
+        <p v-if="!conversations.length">你的对话会显示在这里。</p>
+      </nav>
+      <button type="button" class="staff-link" @click="emit('navigate', '/agent-review/')">打开工作人员模式 ↗</button>
+    </aside>
     <div v-if="userBoard" class="user-mode-bar">
+      <button type="button" class="history-toggle" aria-label="展开或收起历史对话" :aria-expanded="historyOpen" @click="historyOpen = !historyOpen">☰</button>
       <div class="user-mode-brand">
         <span class="brand-symbol small"><i></i><b></b><em></em></span>
         <strong>ProcessPilot</strong>
       </div>
       <div class="user-mode-bar-spacer"></div>
-      <button class="user-mode-staff-btn" type="button" @click="emit('navigate', '/agent-review/')">
-        <AppIcon name="shield" :size="15" /> 工作人员模式
-      </button>
+      <button class="user-mode-staff-btn" type="button" :aria-expanded="detailsOpen" @click="detailsOpen = !detailsOpen"><AppIcon name="network" :size="15" />过程与结果</button>
     </div>
 
     <PageHeader
@@ -522,7 +624,7 @@ function switchRun(event) {
 
     <div class="agent-layout">
       <section class="panel chat-panel">
-        <div class="chat-header">
+        <div class="chat-header" v-if="!userBoard">
           <div class="agent-avatar"><AppIcon name="spark" /></div>
           <div><strong>ProcessPilot Agent</strong><span><i></i> 工业建模智能中枢</span></div>
           <div class="chat-header-actions">
@@ -532,9 +634,11 @@ function switchRun(event) {
           </div>
         </div>
 
+        <input v-if="userBoard" ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
+        <div v-if="userBoard" class="conversation-context"><span>{{ activeRun?.original_name || '未关联数据 · 上传 CSV 开始分析' }}</span><span v-if="activeRun">{{ sceneState.data_scene.display_name }} · {{ activeRunStatusText }}</span></div>
         <div ref="chatThread" class="chat-thread">
           <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
-            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" />
+            <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" :compact="userBoard" />
             <div v-if="message.role === 'agent'" class="message-avatar"><AppIcon name="spark" :size="17" /></div>
             <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
               <span v-if="message.streaming" class="streaming-phase"><AppIcon name="loop" class="spinning" :size="11" />{{ message.phase }}</span>
@@ -549,16 +653,17 @@ function switchRun(event) {
                 <strong><AppIcon name="download" :size="12" />结果产物</strong>
                 <a v-for="item in message.deliverables" :key="item.key" :href="artifactUrl(message.runId, item.key)">{{ item.label }}</a>
               </div>
-              <span>{{ message.time }}</span>
+              <small v-if="message.skillPreference" class="skill-preference-note">技能偏好：{{ message.skillPreference }}</small>
+              <span>{{ message.time }}<template v-if="userBoard && message.runId"> · 数据运行 {{ message.runId.slice(-8) }}</template></span>
             </div>
           </div>
 
         </div>
 
-        <div class="prompt-templates">
+        <div class="prompt-templates" v-if="!userBoard || messages.length < 3">
           <button v-for="item in (responseState?.suggestions ?? promptTemplates)" :key="item" type="button" @click="setTemplate(item)">{{ item }}</button>
         </div>
-        <div v-if="activeRun?.status === 'completed'" class="agent-delivery-bar">
+        <div v-if="!userBoard && activeRun?.status === 'completed'" class="agent-delivery-bar">
           <span><AppIcon name="check" :size="15" />任务 {{ activeRun.run_id }} 已完成</span>
           <a :href="artifactUrl(activeRun.run_id, 'standardized_csv')">标准化CSV</a>
           <a :href="artifactUrl(activeRun.run_id, 'cleaned_csv')">清洗CSV</a>
@@ -569,9 +674,11 @@ function switchRun(event) {
           <a v-if="reportUrl" class="report-link" :href="reportUrl"><AppIcon name="download" :size="14" />分析报告</a>
         </div>
         <div class="prompt-composer" :class="{ 'is-running': isRunning }">
-          <textarea v-model="prompt" rows="3" aria-label="输入问题或工业建模指令" placeholder="例如：这批数据最大的问题是什么？为什么第3轮最好？"></textarea>
+          <textarea v-model="prompt" rows="2" @keydown="composerKeydown" aria-label="输入问题或工业建模指令" placeholder="例如：这批数据最大的问题是什么？为什么第3轮最好？"></textarea>
           <div class="composer-footer">
-            <div><span class="composer-tag">当前任务</span><span>{{ contextRunId }}</span></div>
+            <div v-if="!userBoard"><span class="composer-tag">当前任务</span><span>{{ contextRunId }}</span></div>
+            <button v-if="userBoard" class="upload-chat-button" type="button" :disabled="isRunning || uploading" @click="chooseCsv" aria-label="上传 CSV 并分析"><AppIcon name="upload" :size="18" /> CSV</button>
+            <label v-if="userBoard" class="skill-picker"><select v-model="preferredSkill" :disabled="isRunning || skillCatalogLoading" aria-label="技能偏好"><option value="">技能：自动选择</option><option v-for="skill in skillCatalog?.skills ?? []" :key="skill.id" :value="skill.id">优先：{{ skill.name }}</option></select></label>
             <div class="composer-model-controls" aria-label="回答模型设置">
               <label class="composer-model-pill">
                 <select v-model="llmProvider" aria-label="回答模型" @change="handleLLMProviderChange">
@@ -586,6 +693,7 @@ function switchRun(event) {
               {{ isRunning ? (liveProgress == null ? '处理中' : `处理中 ${liveProgress}%`) : '发送' }}
             </button>
           </div>
+          <small v-if="userBoard" class="composer-hint">{{ preferredSkill ? '技能偏好随问题发送，Agent 仍会检查任务目标与数据条件。' : 'Enter 发送 · Shift + Enter 换行 · 上传会启动数据分析' }}</small>
           <div v-if="isRunning && liveProgress != null" class="composer-progress"><span :style="{ width: `${liveProgress}%` }"></span></div>
         </div>
       </section>
@@ -649,6 +757,20 @@ function switchRun(event) {
       </aside>
     </div>
 
+    <aside v-if="userBoard && detailsOpen" class="conversation-details" aria-label="过程与结果">
+      <header><h2>过程与结果</h2><button type="button" @click="detailsOpen = false" aria-label="关闭过程与结果">✕</button></header>
+      <label class="detail-run-picker">关联数据<select :value="activeRun?.run_id || ''" :disabled="conversationBusy" aria-label="选择对话数据" @change="switchRun"><option value="" disabled>选择已有数据，或上传 CSV</option><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
+      <p>{{ activeRun?.original_name || '尚未关联数据' }}</p>
+      <p v-if="activeRun">{{ sceneState.data_scene.display_name }} · {{ activeRunStatusText }}</p>
+      <section><h3>执行步骤</h3><p v-if="!planNodes.length">发送问题后，这里显示实际计划和执行状态。</p><ol><li v-for="node in planNodes" :key="node.key"><strong>{{ node.name }} · {{ executionStatus(node.activityStatus ?? node.status).label }}</strong><p>{{ node.output }}</p></li></ol></section>
+      <ChatOptimizationSummary v-if="activeRun?.results?.optimization?.iterations?.length" :report="activeRun.results.optimization" />
+      <RuntimeObservabilityPanel v-if="hasRuntimeObservation" :runtime="runtimeObservation" />
+      <details><summary>查看技能说明与本轮调用</summary><AgentSkillCenter :catalog="skillCatalog" :executions="responseState?.skill_executions ?? []" :loading="skillCatalogLoading" :error="skillCatalogError" /></details>
+      <section><h3>结果文件</h3><p v-if="!Object.keys(activeRun?.artifacts || {}).length">生成的图表、数据和报告会出现在这里。</p><a v-for="(value, key) in activeRun?.artifacts ?? {}" :key="key" :href="artifactUrl(activeRun.run_id, key)">{{ artifactNames[key] || key }}</a></section>
+      <button type="button" @click="exportConversation">导出当前对话</button>
+      <button v-if="activeRun" type="button" @click="openDataView('/closed-loop-optimization/')">打开完整寻优记录 ↗</button>
+      <button v-if="activeRun" type="button" @click="openDataView('/digital-twin/')">打开三维场景 ↗</button>
+    </aside>
     <section v-if="!userBoard" class="agent-evidence-stack">
       <AgentTracePanel
         :run-id="contextRunId === '尚无任务' ? '' : contextRunId"
@@ -1271,4 +1393,32 @@ function switchRun(event) {
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* Chat-first user workspace; staff layout remains independent. */
+.agent-view.is-user-board { --chat-ink:#202123; --chat-muted:#66706b; position:fixed; inset:0; z-index:25; margin:0; max-width:none; min-height:0; display:grid; grid-template-columns:248px minmax(0,1fr); grid-template-rows:60px minmax(0,1fr); gap:0; background:#fff; color:var(--chat-ink); }
+.is-user-board button,.is-user-board select,.is-user-board textarea { font:inherit; }
+.conversation-sidebar { grid-row:1 / -1; display:flex; flex-direction:column; gap:20px; padding:24px 16px; background:#f5f6f5; border-right:1px solid #e7e9e7; min-height:0; }
+.sidebar-brand { font-size:19px; letter-spacing:-.5px; }.sidebar-brand span { display:block; margin-top:6px; font-size:12px; font-weight:400; color:#68716d; letter-spacing:0; }
+.conversation-sidebar button { text-align:left; padding:12px; border:0; border-radius:8px; background:transparent; cursor:pointer; color:#303733; font-size:14px; }.conversation-sidebar .new-conversation { border:1px solid #d8ded9; background:white; }.conversation-sidebar nav { flex:1; overflow:auto; }.conversation-sidebar nav button { width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; margin-bottom:4px; }.conversation-sidebar nav button:hover,.conversation-sidebar nav button.active { background:#e5eae6; }.history-label,.conversation-sidebar nav p { font-size:12px; color:#68716d; }.conversation-sidebar .staff-link { border-top:1px solid #dde2de; border-radius:0; }.is-user-board button:disabled { opacity:.5; cursor:not-allowed; }
+.is-user-board .user-mode-bar { position:static; width:auto; margin:0; padding:12px 28px; background:white; border-bottom:0; backdrop-filter:none; }.is-user-board .user-mode-brand strong { font-size:18px; }.is-user-board .user-mode-staff-btn { background:white; box-shadow:none; color:#33433a; border:1px solid #dce2dd; font-size:13px; }.history-toggle { display:none; }
+.agent-view.is-user-board .agent-layout { min-height:0; display:block; padding:0 24px; }.agent-view.is-user-board .chat-panel { display:flex; flex-direction:column; width:100%; max-width:880px; height:100%; min-height:0; margin:auto; border:0; box-shadow:none; border-radius:0; background:white; padding:0; }
+.conversation-context { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px; font-size:12px; color:#68716d; padding:12px 8px; border-bottom:1px solid #edf0ed; }
+.agent-view.is-user-board .chat-thread { flex:1; padding:28px 12px; display:flex; flex-direction:column; gap:28px; }.agent-view.is-user-board .message { width:100%; max-width:100%; }.is-user-board .message-avatar { background:#edf3ef; color:#35634d; box-shadow:none; flex-shrink:0; }.is-user-board .message-agent .message-bubble { border:0; box-shadow:none; background:white; padding:0 12px; }.is-user-board .message-user { align-self:flex-end; width:auto; max-width:85%; }.is-user-board .message-user .message-bubble { color:#202123; background:#f0f2f0; border:0; box-shadow:none; border-radius:20px; padding:14px 20px; }.is-user-board .message-bubble p { font-size:16px; line-height:1.85; white-space:pre-wrap; }.is-user-board .message-bubble>span { font-size:12px; color:#6a746e; }.is-user-board .message-skill-chain>div strong,.is-user-board .message-skill-chain>span,.is-user-board .intent-chips span { font-size:12px; }.is-user-board .message-skill-chain code { display:none; }.skill-preference-note { display:block; font-size:12px; color:#607565; margin-top:8px; }
+.is-user-board .prompt-composer { margin:12px 0 18px; padding:14px 18px; border:1px solid #dce3dd; border-radius:24px; background:#f8faf8; box-shadow:0 5px 22px #243b2910; }.is-user-board .prompt-composer textarea { font-size:16px; line-height:1.6; min-height:55px; background:transparent; }.is-user-board .composer-footer { display:flex; flex-wrap:wrap; gap:8px; }.skill-picker { min-width:0; max-width:220px; }.skill-picker select { width:100%; border:0; background:transparent; padding:8px 4px; color:#415a4a; font-size:13px; }.upload-chat-button { display:flex; align-items:center; gap:4px; background:transparent; border:0; padding:8px 4px; font-size:13px!important; cursor:pointer; }.is-user-board .composer-model-controls { flex:1; }.is-user-board .composer-model-pill select { font-size:12px; }.is-user-board .send-button { background:#244c38; border-radius:14px; font-size:13px; padding:10px 14px; }.composer-hint { display:block; color:#6f7972; font-size:11px; margin-top:9px; }.is-user-board .prompt-templates { padding:12px 8px 0; flex-wrap:wrap; }.is-user-board .prompt-templates button { font-size:12px; background:white; }.is-user-board :deep(.execution-timeline) { width:100%; background:#f8faf8; border-color:#e0e7e1; padding:14px; }.is-user-board :deep(.execution-timeline header),.is-user-board :deep(.execution-timeline li div strong),.is-user-board :deep(.execution-timeline li p),.is-user-board :deep(.execution-timeline header button) { font-size:12px; }.is-user-board :deep(.execution-timeline time),.is-user-board :deep(.execution-timeline footer) { font-size:11px; }
+.conversation-details { position:absolute; right:0; top:60px; bottom:0; width:min(560px, calc(100vw - 24px)); overflow:auto; z-index:40; background:white; border-left:1px solid #dde4de; box-shadow:-16px 0 40px #1d342512; padding:24px; font-size:14px; }.conversation-details header { display:flex; justify-content:space-between; align-items:center; }.conversation-details h2 { font-size:20px; }.conversation-details h3 { font-size:15px; }.conversation-details section,.conversation-details details { margin:24px 0; }.conversation-details p { color:#637067; line-height:1.7; overflow-wrap:anywhere; }.conversation-details li { margin:14px 0; }.conversation-details a { display:block; padding:8px 0; overflow-wrap:anywhere; }.conversation-details button { background:#f1f5f2; border:1px solid #dde5de; border-radius:8px; padding:10px; cursor:pointer; margin:4px; }.conversation-details :deep(.skill-grid) { grid-template-columns:1fr; }.conversation-details :deep(.skill-heading) { flex-wrap:wrap; }.is-user-board :focus-visible { outline:2px solid #468663; outline-offset:3px; }
+@media(max-width:760px) { .agent-view.is-user-board { grid-template-columns:minmax(0,1fr); grid-template-rows:56px minmax(0,1fr); }.conversation-sidebar { display:none; }.conversation-sidebar.is-open { display:flex; position:absolute; inset:56px auto 0 0; width:min(290px,85vw); z-index:45; box-shadow:12px 0 25px #1733211a; }.history-toggle { display:block; border:0; background:none; padding:8px; cursor:pointer; }.is-user-board .user-mode-bar { padding:8px 12px; gap:8px; }.agent-view.is-user-board .agent-layout { padding:0 12px; }.is-user-board .message-avatar { display:none; }.is-user-board .message-agent .message-bubble { padding:0; }.agent-view.is-user-board .chat-thread { padding:22px 4px; }.is-user-board .prompt-composer { padding:12px; margin-bottom:10px; }.is-user-board .composer-model-input { max-width:120px; }.skill-picker { max-width:180px; }.conversation-context { font-size:11px; }.is-user-board .user-mode-staff-btn { padding:8px; }.conversation-details { top:56px; }.is-user-board .message-bubble p { font-size:15px; } }
+
+.is-user-board .send-button { flex-shrink:0; width:auto; min-width:76px; white-space:nowrap; }
+.is-user-board .composer-model-controls { flex-wrap:wrap; width:auto; overflow:visible; }
+.is-user-board .composer-model-input { flex:1 1 100px; max-width:160px; }
+.is-user-board .composer-model-pill { min-width:135px; background:#f3f6f3; border-color:#d9e2da; }
+.is-user-board .composer-model-pill select { color:#3c5545; }
+@media(max-width:760px) { .is-user-board .composer-model-controls { flex-basis:calc(100% - 90px); }.is-user-board .send-button { padding:10px; } }
+
+.is-user-board .chat-thread { background:#fff; }
+.is-user-board .message-user .message-bubble p { color:#202123; }
+.is-user-board .message-bubble > span:not(.message-model) { font-size:12px; }
+.is-user-board .message-model { font-size:11px; }
+.detail-run-picker { display:grid; gap:8px; margin-top:20px; }.detail-run-picker select { width:100%; padding:10px; border:1px solid #dce4dd; border-radius:8px; background:#fff; font-size:13px; }
+.agent-view.is-user-board .message-user { width:auto; max-width:85%; margin-left:auto; }
 </style>

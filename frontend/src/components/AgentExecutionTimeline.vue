@@ -3,16 +3,16 @@ import { computed, ref, watch } from 'vue'
 import AppIcon from './AppIcon.vue'
 import { compactRuntimeEvents, runtimeEventIsActive, visibleRuntimeEvents } from '../utils/runtimeEvents'
 
-const props = defineProps({ events: { type: Array, default: () => [] }, status: { type: String, default: 'running' }, metrics: { type: Object, default: () => ({}) } })
+const props = defineProps({ events: { type: Array, default: () => [] }, status: { type: String, default: 'running' }, metrics: { type: Object, default: () => ({}) }, compact: { type: Boolean, default: false } })
 const rows = computed(() => visibleRuntimeEvents(props.events))
-const expanded = ref(props.status === 'running')
+const expanded = ref(!props.compact && props.status === 'running')
 const userControlled = ref(false)
-const displayedRows = computed(() => expanded.value ? rows.value : compactRuntimeEvents(props.events))
+const displayedRows = computed(() => expanded.value ? rows.value : compactRuntimeEvents(props.events, props.compact ? 1 : 4))
 const icon = (status) => status === 'failed' || status === 'blocked' ? 'warning' : status === 'completed' || status === 'success' || status === 'available' ? 'check' : 'loop'
 const isActive = (event) => runtimeEventIsActive(event, props.status)
 
 watch(() => props.status, (status) => {
-  if (!userControlled.value) expanded.value = status === 'running'
+  if (!userControlled.value) expanded.value = !props.compact && status === 'running'
 })
 
 function toggleExpanded() {
