@@ -259,12 +259,21 @@ def evaluation(df, state, guard, split, detailed=True):
     return metrics, diagnostics, prediction, acf
 
 
-def search_structure_orders(train, validation, output_col, input_cols, selected, delay_map, seconds, guard):
+def search_structure_orders(train, validation, output_col, input_cols, selected, delay_map, seconds, guard, policy=None):
     """Shared candidate fitting; selection never reads the held-out test set."""
+    policy = policy or {}
     candidates, fitted = [], []
+    families = [str(value).upper() for value in policy.get('model_families', ['ARX', 'AR'])]
+    orders = [int(value) for value in policy.get('orders', [1, 2, 3])]
+    ridge_alphas = [float(value) for value in policy.get('ridge_alphas', [0., 1., 10.])]
+    family_specs = []
+    if 'ARX' in families:
+        family_specs.append(('ARX', selected, ridge_alphas))
+    if 'AR' in families:
+        family_specs.append(('AR', [], (0.,)))
     # Real order and model-family search, all on the same validation targets.
-    for family, variables, alphas in [('ARX', selected, (0., 1., 10.)), ('AR', [], (0.,))]:
-        for order in (1, 2, 3):
+    for family, variables, alphas in family_specs:
+        for order in orders:
             for alpha in alphas:
                 try:
                     x = features(train, output_col, variables, delay_map, order, seconds)
@@ -290,7 +299,8 @@ def search_structure_orders(train, validation, output_col, input_cols, selected,
     return candidates, fitted
 
 
-def run_validated_modeling(input_csv, output_col, input_cols, output_dir, validation_csv, guard, seconds, max_lag):
+def run_validated_modeling(input_csv, output_col, input_cols, output_dir, validation_csv, guard, seconds, max_lag, policy=None):
+    policy = policy or {}
     out = Path(output_dir)
     for folder in ('01_time_delay', '02_collinearity', '03_system_identification'): (out/folder).mkdir(parents=True, exist_ok=True)
     train, validation = pd.read_csv(input_csv), pd.read_csv(validation_csv)
@@ -306,7 +316,12 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     if len(diagnostic_data) < 20: raise ValueError('时滞对齐后训练样本不足')
     corr = correlation_matrix(diagnostic_data, aligned_cols)
     vif = compute_vif(diagnostic_data, aligned_cols)
-    recommendation = recommend_variables(diagnostic_data, aligned_cols, output_col)
+    corr_threshold = float(policy.get('correlation_threshold', 0.9))
+    vif_threshold = float(policy.get('vif_threshold', 10.0))
+    recommendation = recommend_variables(
+        diagnostic_data, aligned_cols, output_col,
+        corr_threshold=corr_threshold, vif_threshold=vif_threshold,
+    )
     final_vif = compute_vif(diagnostic_data, recommendation["keep"])
     recommendation["final_vif"] = final_vif.to_dict("records")
     selected = [c.removesuffix('_aligned') for c in recommendation['keep']]
@@ -314,12 +329,17 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     corr.to_csv(coldir/'correlation_matrix.csv')
     vif.to_csv(coldir/'vif_table.csv', index=False)
     final_vif.to_csv(coldir/'final_vif_table.csv', index=False)
-    highly_correlated_pairs(corr).to_csv(coldir/'high_correlation_pairs.csv', index=False)
+    highly_correlated_pairs(corr, corr_threshold).to_csv(coldir/'high_correlation_pairs.csv', index=False)
     save_json(coldir/'variable_recommendation.json', recommendation)
     delays.to_csv(lagdir/'delay_estimates.csv', index=False)
     aligned.to_csv(lagdir/'delay_compensated_data.csv', index=False)
     save_json(lagdir/'delay_summary.json', delays.to_dict('records'))
-    candidates, fitted = search_structure_orders(train, validation, output_col, input_cols, selected, delay_map, seconds, guard)
+    families = [str(value).upper() for value in policy.get('model_families', ['ARX', 'AR'])]
+    orders = [int(value) for value in policy.get('orders', [1, 2, 3])]
+    ridge_alphas = [float(value) for value in policy.get('ridge_alphas', [0., 1., 10.])]
+    candidates, fitted = search_structure_orders(
+        train, validation, output_col, input_cols, selected, delay_map, seconds, guard, policy,
+    )
     save_json(modeldir/'order_search.json', candidates)
     if not fitted: raise ValueError('所有结构候选均失败：' + '; '.join(sorted({c.get('error', '') for c in candidates})))
     # Prefer the validation BIC so a marginal one-step RMSE gain cannot promote a
@@ -345,7 +365,9 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
                   train_ratio=0.6, validation_ratio=0.2, test_ratio=0.2, guard_samples=guard,
                   family=state['family'], regularization='ridge' if state.get('regularization_alpha', 0) else 'none',
                   regularization_alpha=state.get('regularization_alpha', 0), preprocessing_fit='training_only',
-                  causal_lags=True, segment_aware=True)
+                  causal_lags=True, segment_aware=True,
+                  correlation_threshold=corr_threshold, vif_threshold=vif_threshold,
+                  candidate_families=families, candidate_orders=orders, ridge_alphas=ridge_alphas)
     family_comparison = {}
     for family in ('ARX', 'AR'):
         completed = [row for row in candidates if row.get('family') == family and row.get('status') == 'completed' and row.get('eligible')]

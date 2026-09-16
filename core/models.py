@@ -336,13 +336,20 @@ class RuntimeJob(models.Model):
 
     STATUS_CHOICES = (
         ('queued', '排队中'), ('running', '运行中'), ('completed', '已完成'),
-        ('failed', '失败'), ('cancelled', '已取消'),
+        ('blocked', '已阻断'), ('failed', '失败'), ('cancelled', '已取消'),
     )
     job_id = models.CharField('任务ID', max_length=64, unique=True, db_index=True)
     job_type = models.CharField('任务类型', max_length=40, db_index=True)
     status = models.CharField('任务状态', max_length=20, choices=STATUS_CHOICES, default='queued', db_index=True)
     payload = models.JSONField('任务参数', default=dict)
     result_ref = models.CharField('结果引用', max_length=160, blank=True)
+    request_id = models.CharField('请求ID', max_length=64, blank=True, db_index=True)
+    caller_id = models.CharField('调用方', max_length=160, blank=True, db_index=True)
+    tool_name = models.CharField('工具名称', max_length=100, blank=True, db_index=True)
+    idempotency_fingerprint = models.CharField('幂等指纹', max_length=64, null=True, blank=True, unique=True)
+    current_stage = models.CharField('当前阶段', max_length=40, blank=True)
+    progress = models.JSONField('任务进度', default=dict, blank=True)
+    error_code = models.CharField('错误码', max_length=64, blank=True)
     error = models.TextField('错误信息', blank=True)
     attempts = models.PositiveSmallIntegerField('尝试次数', default=0)
     max_attempts = models.PositiveSmallIntegerField('最大尝试次数', default=3)
@@ -351,6 +358,7 @@ class RuntimeJob(models.Model):
     available_at = models.DateTimeField('可执行时间', auto_now_add=True, db_index=True)
     started_at = models.DateTimeField('开始时间', null=True, blank=True)
     finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+    cancel_requested_at = models.DateTimeField('取消请求时间', null=True, blank=True)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

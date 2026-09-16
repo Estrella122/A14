@@ -56,7 +56,34 @@ npm run runtime:prune -- --keep 100 --days 30 --apply
 
 脱丁烷塔数据的上游公开副本没有明确再分发许可证，因此仓库仅保留适配代码和来源说明，不重新发布数据文件。取得合法数据副本后，按 `datasets/public/debutanizer/README.md` 操作。
 
-更完整的说明见 [使用说明.md](使用说明.md)，知识库设计见 [docs/knowledge_base.md](docs/knowledge_base.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
+更完整的说明见 [使用说明.md](使用说明.md)，知识库设计见 [docs/knowledge_base.md](docs/knowledge_base.md)，三个正式场景的算法配置见 [docs/scenario_algorithm_profiles.md](docs/scenario_algorithm_profiles.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
+
+## MCP 工业建模服务
+
+项目提供一个 `processpilot-modeling` MCP Server，将现有真实算法统一暴露为三项业务工具：
+
+- `run_dynamic_selection`：高信噪比动态段筛选与质量评分；
+- `run_decoupling_identification`：时滞补偿、共线性处理和 AR/ARX 辨识验证；
+- `run_closed_loop_optimization`：离线预处理—建模—验证反馈寻优。
+
+另提供任务状态、取消和产物摘要工具。所有工具固定为 `advisory_only`，不会向 PLC/DCS 下发控制参数。
+
+初始化数据库后，通过 STDIO 启动：
+
+```bash
+npm run setup
+npm run mcp
+```
+
+日常开发只需执行 `npm run dev`，启动器会自动完成迁移与知识库初始化，并统一管理 Django、Runtime Worker、MCP Server 和 Web 前端。Agent 的动态优选、解耦辨识与闭环寻优执行请求会由 Django 通过 MCP 调用；只读解释仍直接读取已有证据。
+
+本机 Streamable HTTP 调试：
+
+```bash
+npm run mcp:http
+```
+
+默认地址为 `http://127.0.0.1:8010/mcp`。远程部署前必须补充认证、权限和限流，不应直接设置公网监听。客户端配置与调用流程见 [docs/mcp_usage.md](docs/mcp_usage.md)，完整架构、工具契约和验收门槛见 [docs/mcp_industrial_modeling_design.md](docs/mcp_industrial_modeling_design.md)。
 
 场景清单统一维护在 `frontend/src/data/scenes.json`；新增场景先登记 ID、别名和三维资产状态，再添加标准化模板。生产后台任务使用数据库队列，开发模式会自动唤醒内置 Worker，生产模式应运行独立的 `npm run worker`。
 

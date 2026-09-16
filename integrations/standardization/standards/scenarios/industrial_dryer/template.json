@@ -3,7 +3,7 @@
   "scenario_name": "工业干燥器",
   "industry": "流程工业",
   "process_unit": "连续式热风工业干燥装置",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "dictionary": "fields.csv",
   "keywords": [
     "工业干燥器",
@@ -81,5 +81,40 @@
     "name": "工业干燥器",
     "industry": "流程工业",
     "process_unit": "连续式热风工业干燥装置"
+  },
+  "algorithm_profile": {
+    "version": "1.0.0",
+    "validation_status": "validated_on_project_real_data",
+    "selection": {
+      "window_samples": 18,
+      "step_samples": 6,
+      "strict_score": 80,
+      "usable_score": 60,
+      "snr_db": 10,
+      "min_valid_samples": 15,
+      "score_weights": {"input_change": 0.35, "output_response": 0.25, "completeness": 0.20, "anomaly": 0.10, "smoothness": 0.10},
+      "score_scales": {"input_change": 1500, "output_response": 1800}
+    },
+    "decoupling": {
+      "max_lag_samples": 18,
+      "correlation_threshold": 0.90,
+      "vif_threshold": 10,
+      "model_families": ["ARX", "AR"],
+      "orders": [1, 2, 3],
+      "ridge_alphas": [0, 1, 10]
+    },
+    "optimization": {
+      "objective_weights": {"r2": 0.68, "error": 0.17, "coverage": 0.15},
+      "bounds": {"top_k": {"min": 2, "max": 12}, "max_lag": {"min": 4, "max": 18}},
+      "constraints": {"min_r2": 0, "min_coverage": 0.05},
+      "candidates": [
+        {"round": 1, "top_k": 5, "max_lag": 12, "label": "三分钟窗口基线"},
+        {"round": 2, "top_k": 3, "max_lag": 6, "label": "快速热风响应"},
+        {"round": 3, "top_k": 8, "max_lag": 18, "label": "扩大湿度动态覆盖"},
+        {"round": 4, "top_k": 10, "max_lag": 15, "label": "多输出覆盖优先"},
+        {"round": 5, "top_k": 6, "max_lag": 9, "label": "中等覆盖稳健辨识"},
+        {"round": 6, "top_k": 4, "max_lag": 18, "label": "高质量长响应"}
+      ]
+    }
   }
 }

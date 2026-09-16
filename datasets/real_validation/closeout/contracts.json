@@ -323,7 +323,7 @@
     },
     "hashes": {
       "fields.csv": "3287b616f5153119d786a365e3995d6294daad48f7dafd2c351de4a048c7da37",
-      "template.json": "fb2c8271eb5f3895d2f545429d80be0018a36dc646d51f26d655a3059a55d386"
+      "template.json": "ddf9df356e8116dc4b328790d074843ab445115e82ebd8fedab8aaa0b572abca"
     }
   },
   "industrial_dryer": {
@@ -500,7 +500,7 @@
     },
     "hashes": {
       "fields.csv": "f1b5b453ab4ee5cfa1ff61cd2dff0f78618eb4f0c85c72b5ca6522954c30e45f",
-      "template.json": "add1abb875d598921f8c438939638c4cca0c9a702a22a4a1af96b26adaed9c9f"
+      "template.json": "d416f32ae390817daff15e1568f9cc047e572aef8bfb5e5cc0a71f89f5013491"
     }
   }
 }

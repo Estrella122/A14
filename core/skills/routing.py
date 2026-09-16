@@ -6,6 +6,8 @@ from .router_model import normalize, predict
 
 NEGATIVE = re.compile(r'^(?:(?:请|我|麻烦|务必|千万|一定|现在|暂时|先|这次|本次)\s*)*(?:不要|别|不必|无需|禁止|不需要|不用|不能|不得|停止|取消|do not|don\x27t)\s*', re.I)
 ACTION = re.compile(r'^(?:(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想|现在|立即|先|再|然后|只|仅|把|将|对|进行|执行)\s*)*(?:重新执行|重新运行|重跑|运行一遍|提取|筛选|清洗|规整|生成|创建|合成|模拟|训练|建立|拟合|优化|寻优|导出|下载|打包|处理|补齐|修复|剔除|计算|估计|抽取|选择|选取|组装|拼接|冻结|标记|检测|绘制|画|撰写|编写|整理|起草|按\d+秒|resample|train|fit|generate|export|download|plot)')
+REQUEST_PREFIX_ACTION = re.compile(r'^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想).{0,40}?(?:执行|运行|训练|清洗|生成|提取|找出|筛选|估计|导出|下载|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取|尝试)')
+OPERATIONAL_ACTION = re.compile(r'(?:自动尝试|重新执行|重新运行|重跑|开始执行|立即执行|补偿.{0,16}(?:时滞|滞后|延迟)|剔除.{0,16}(?:冗余|共线|变量)|冻结.{0,16}(?:数据|模型|候选|策略))')
 QUESTION = re.compile(r'为什么|为何|怎么|如何|是否|能否|可以.*吗|什么|哪个|哪些|多少|多大|怎么样|如果|假如|假设|假定|假若|假想|倘若|假使|假如|what\b|why\b|how\b', re.I)
 FULL_RUN = re.compile(r'^(?:(?:请|帮我|现在|立即|开始|重新)\s*)*(?:重新执行|重新运行|重跑|运行一遍|执行全流程|运行全流程|跑一遍完整流程)(?:当前任务|全流程|流水线|一遍|全部)?[。！!\s]*$')
 SUPPORT = {'industrial_intent_parser','skill_capability_matcher','workflow_dag_planner','execution_supervisor_replanner','equipment_entity_resolver','constraint_parameter_extractor'}
@@ -37,7 +39,7 @@ def select(message: str, analysis: dict, expert_rules, topic_keys):
         )
     )
     # Questions and hypothetical/quoted instructions never authorize a pipeline.
-    explicit=any(ACTION.search(p) or re.search(r'^(?:(?:请|帮我|现在|立即|先|再)\s*)*(?:开始执行|立即执行|重新执行|重新运行|运行一遍|重跑)|^(?:请|帮我)?(?:把|将|对).{1,35}(?:重采样|补齐|清洗|提取|导出|训练|绘制)',p) for p in positive)
+    explicit=any(ACTION.search(p) or REQUEST_PREFIX_ACTION.search(p) or OPERATIONAL_ACTION.search(p) or re.search(r'^(?:(?:请|帮我|现在|立即|先|再)\s*)*(?:开始执行|立即执行|重新执行|重新运行|运行一遍|重跑)|^(?:请|帮我)?(?:把|将|对).{1,35}(?:重采样|补齐|清洗|提取|导出|训练|绘制)|(?:通过|调用|使用|用)\s*mcp.{0,24}(?:执行|重新执行|重跑|运行|提取|筛选|训练|辨识|优化|寻优)',p,re.I) for p in positive)
     question=bool(QUESTION.search(message) or re.search(r'会不会|能不能|可不可以|要不要|[?？吗呢]\s*$',message))
     expert_request=question or bool(re.search(r'^(?:请)?(?:分析|说明|解释)',normalize(message)))
     mode='execute' if (explicit and not question) or full_run else 'analyze'

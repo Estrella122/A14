@@ -11,6 +11,7 @@ export function applyRuntimeEvents(runtime = {}, events = []) {
     skill_loading: { ...(runtime.skill_loading ?? {}) },
     executor_results: [...(runtime.executor_results ?? [])],
     artifacts: [...(runtime.artifacts ?? [])],
+    mcp: runtime.mcp ?? null,
   }
   for (const event of events) {
     if (event.event_type.startsWith('capability_') && event.metadata?.candidate) {
@@ -28,13 +29,25 @@ export function applyRuntimeEvents(runtime = {}, events = []) {
       const key = artifact.artifact_id ?? artifact.key ?? `${event.executor}-${event.sequence}`
       next.artifacts = [...next.artifacts.filter((item) => (item.artifact_id ?? item.key) !== key), artifact]
     }
+    if (event.event_type.startsWith('mcp_tool_')) {
+      next.mcp = {
+        tool_name: event.metadata?.tool_name,
+        job_id: event.metadata?.job_id,
+        run_id: event.metadata?.run_id,
+        status: event.status,
+        current_stage: event.metadata?.current_stage ?? null,
+        execution_timeline: event.metadata?.execution_timeline ?? [],
+        quality_gates: event.metadata?.quality_gates ?? [],
+        artifact_count: event.metadata?.artifact_count ?? 0,
+      }
+    }
   }
   return next
 }
 
 export function visibleRuntimeEvents(events = []) {
   const keyTypes = new Set(['task_understanding_started', 'task_understanding_completed', 'skill_selected', 'skill_loaded', 'execution_plan_created', 'executor_waiting', 'executor_started', 'executor_completed', 'executor_partial', 'executor_blocked', 'executor_failed', 'artifact_produced', 'answer_generation_started', 'llm_generation_started', 'llm_generation_completed', 'llm_generation_failed', 'answer_generation_completed', 'run_failed'])
-  return events.filter((event) => keyTypes.has(event.event_type) || event.event_type.startsWith('capability_') && ['selected', 'blocked', 'deferred'].includes(event.status))
+  return events.filter((event) => keyTypes.has(event.event_type) || event.event_type.startsWith('mcp_tool_') || event.event_type.startsWith('capability_') && ['selected', 'blocked', 'deferred'].includes(event.status))
 }
 
 export function runtimeEventIsActive(event, runStatus) {

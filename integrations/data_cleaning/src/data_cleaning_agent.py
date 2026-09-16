@@ -75,13 +75,25 @@ class SegmentScore:
 class DataCleaningSelectionAgent:
     def __init__(self, variable_spec: dict[str, dict], resample_rule: str = "10s", primary_output: str | None = None,
                  selection_window: int = 30, selection_step: int = 15,
-                 causal_columns: set[str] | None = None):
+                 causal_columns: set[str] | None = None, selection_policy: dict | None = None):
         self.variable_spec = variable_spec
         self.resample_rule = resample_rule
         self.primary_output = primary_output
         self.selection_window = max(10, int(selection_window))
         self.selection_step = max(1, int(selection_step))
         self.causal_columns = set(causal_columns or ())
+        self.selection_policy = {
+            "strict_score": 80.0,
+            "usable_score": 60.0,
+            "snr_db": 10.0,
+            "min_valid_samples": 15,
+            "score_weights": {
+                "input_change": 0.35, "output_response": 0.25,
+                "completeness": 0.20, "anomaly": 0.10, "smoothness": 0.10,
+            },
+            "score_scales": {"input_change": 1500.0, "output_response": 1800.0},
+            **(selection_policy or {}),
+        }
         self.logs: list[str] = []
         self.anomaly_flags: pd.DataFrame | None = None
         self.raw_missing_rate: dict[str, float] = {}
@@ -186,8 +198,10 @@ class DataCleaningSelectionAgent:
         segments: list[SegmentScore] = []
         for start in range(0, max(len(data) - window + 1, 0), step):
             chunk = data.iloc[start:start + window]
-            input_change = self._relative_range_score(chunk[input_columns], scale=1500)
-            output_response = self._relative_range_score(chunk[output_columns], scale=1800)
+            scales = self.selection_policy["score_scales"]
+            weights = self.selection_policy["score_weights"]
+            input_change = self._relative_range_score(chunk[input_columns], scale=float(scales["input_change"]))
+            output_response = self._relative_range_score(chunk[output_columns], scale=float(scales["output_response"]))
             completeness = 100 * (1 - chunk.isna().mean().mean())
             anomaly_rate = 0.0
             if self.anomaly_flags is not None:
@@ -196,22 +210,28 @@ class DataCleaningSelectionAgent:
             smoothness = self._smoothness_score(chunk)
 
             score = (
-                0.35 * input_change
-                + 0.25 * output_response
-                + 0.20 * completeness
-                + 0.10 * anomaly_score
-                + 0.10 * smoothness
+                float(weights["input_change"]) * input_change
+                + float(weights["output_response"]) * output_response
+                + float(weights["completeness"]) * completeness
+                + float(weights["anomaly"]) * anomaly_score
+                + float(weights["smoothness"]) * smoothness
             )
             for col in dict.fromkeys(input_columns + output_columns):
-                detail = self.snr_details(chunk[col])
+                detail = self.snr_details(chunk[col], int(self.selection_policy["min_valid_samples"]))
                 self.snr_evidence.append({"start_time": str(chunk.index[0]), "end_time": str(chunk.index[-1]),
                                           "variable": col, **detail})
-            input_snr = [self.estimate_snr(chunk[c]) for c in input_columns]
-            output_snr = [self.estimate_snr(chunk[c]) for c in output_columns]
+            input_snr = [self.estimate_snr(chunk[c], int(self.selection_policy["min_valid_samples"])) for c in input_columns]
+            output_snr = [self.estimate_snr(chunk[c], int(self.selection_policy["min_valid_samples"])) for c in output_columns]
             finite_input = [v for v in input_snr if v is not None]
             finite_output = [v for v in output_snr if v is not None]
             snr = min(max(finite_input), min(finite_output)) if finite_input and len(finite_output) == len(output_columns) and finite_output else None
-            level = "优质动态段" if score >= 80 and snr is not None and snr >= 10 else "可用数据段" if score >= 60 else "不推荐"
+            level = (
+                "优质动态段"
+                if score >= float(self.selection_policy["strict_score"])
+                and snr is not None
+                and snr >= float(self.selection_policy["snr_db"])
+                else "可用数据段" if score >= float(self.selection_policy["usable_score"]) else "不推荐"
+            )
             segments.append(
                 SegmentScore(
                     start_time=str(chunk.index[0]),
@@ -277,17 +297,18 @@ class DataCleaningSelectionAgent:
         }
 
     @staticmethod
-    def estimate_snr(series: pd.Series) -> float | None:
-        return DataCleaningSelectionAgent.snr_details(series)["snr_db"]
+    def estimate_snr(series: pd.Series, min_valid_samples: int = 15) -> float | None:
+        return DataCleaningSelectionAgent.snr_details(series, min_valid_samples)["snr_db"]
 
     @staticmethod
-    def snr_details(series: pd.Series) -> dict:
+    def snr_details(series: pd.Series, min_valid_samples: int = 15) -> dict:
         values = pd.to_numeric(series, errors="coerce")
         delta2 = values.diff().diff().dropna()
         detail = {"snr_db": None, "signal_power": None, "noise_power": None,
                   "valid_samples": int(values.notna().sum()), "calibrated": False,
                   "method": "robust_second_difference_white_noise_proxy"}
-        if len(delta2) < 12 or values.notna().sum() < 15:
+        minimum = max(15, int(min_valid_samples))
+        if len(delta2) < max(12, minimum - 3) or values.notna().sum() < minimum:
             return detail
         sigma = float((delta2 - delta2.median()).abs().median()) / 0.67448975 / np.sqrt(6)
         total = float(values.var(ddof=0))

@@ -9,14 +9,29 @@ def plan_from_manifests(message, task, snapshot, run_id, registry):
     from .runtime import _entities
     chart_request = "charts" in task.get("requested_outputs", []) and task.get("execution_mode") == "execute"
     # The normalized output intent enriches recall; manifests still decide the Skill.
-    candidates = registry.search(message + (" 可视化 图表 曲线" if chart_request else ""))
+    recall_message = message + (" 可视化 图表 曲线" if chart_request else "")
+    # The three public MCP capabilities are intentionally coarser than the
+    # internal Skill names.  Expand their common business wording before MD
+    # retrieval so users do not need to know an implementation-level Skill ID.
+    execution_recall = task.get("execution_mode") == "execute"
+    if execution_recall and re.search(r"高信噪比.*(?:动态|数据段)|动态优选|有效建模数据段", message):
+        recall_message += " 提取适合建模的高信噪比动态段"
+    if execution_recall and re.search(r"时滞.*共线|共线.*时滞|解耦辨识", message):
+        recall_message += " 时滞估计与补偿 共线性诊断与消减 系统辨识训练"
+    if execution_recall and re.search(r"闭环寻优|预处理策略.*(?:优化|寻优)|拟合度最高", message):
+        recall_message += " 闭环预处理策略寻优"
+    candidates = registry.search(recall_message)
     denied = {row["skill_id"] for clause in task.get("negations", [])
               for row in registry.search(clause) if row["score"] >= .45}
     selected = [row["skill_id"] for row in candidates if row["score"] >= .45 and row["skill_id"] not in denied]
     boundary = bool(re.search(r"如果|假如|假设|按钮|原话|原文|引用|这句话|提示|(?:不要|禁止|无需).{0,8}(?:执行|运行|计算)|会不会|能不能|可不可以", message))
     if chart_request:
         boundary = False
-    boundary = boundary or bool(re.search(r"^\s*(?:请)?(?:介绍|解释)(?:一下)?|怎么证明|做过.+吗|请结合.+说明", message))
+    boundary = boundary or bool(re.search(
+        r"^\s*(?:请)?(?:介绍|解释|说明|解读)(?:一下)?|"
+        r"^\s*(?:请)?(?:告诉我)?如何|怎么证明|做过.+吗|请结合.+说明",
+        message,
+    ))
     # Reading existing stage results is not authorization to rerun a stage.
     evidence_query = task.get("execution_mode") != "execute" and bool(re.search(
         r"(?:查看|解释|解读|为什么|为何).*(?:结果|指标|筛选|清洗)|(?:当前|已有|现有).*(?:结果|指标)|哪些参数.*(?:重新)?辨识", message))

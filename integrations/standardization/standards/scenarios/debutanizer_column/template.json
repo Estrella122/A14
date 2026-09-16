@@ -3,7 +3,7 @@
   "scenario_name": "炼油脱丁烷塔",
   "industry": "石油炼制",
   "process_unit": "脱丁烷精馏塔软测量",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "dictionary": "fields.csv",
   "keywords": [
     "炼油",
@@ -193,6 +193,41 @@
         "different_measurement_location",
         "different_equipment_role",
         "different_flow_direction"
+      ]
+    }
+  },
+  "algorithm_profile": {
+    "version": "1.0.0",
+    "validation_status": "engineering_baseline_pending_real_data_acceptance",
+    "selection": {
+      "window_samples": 120,
+      "step_samples": 30,
+      "strict_score": 75,
+      "usable_score": 55,
+      "snr_db": 8,
+      "min_valid_samples": 30,
+      "score_weights": {"input_change": 0.30, "output_response": 0.25, "completeness": 0.20, "anomaly": 0.10, "smoothness": 0.15},
+      "score_scales": {"input_change": 1200, "output_response": 1500}
+    },
+    "decoupling": {
+      "max_lag_samples": 90,
+      "correlation_threshold": 0.95,
+      "vif_threshold": 15,
+      "model_families": ["ARX", "AR"],
+      "orders": [1, 2, 3],
+      "ridge_alphas": [0, 1, 10]
+    },
+    "optimization": {
+      "objective_weights": {"r2": 0.70, "error": 0.20, "coverage": 0.10},
+      "bounds": {"top_k": {"min": 2, "max": 14}, "max_lag": {"min": 30, "max": 90}},
+      "constraints": {"min_r2": 0, "min_coverage": 0.08},
+      "candidates": [
+        {"round": 1, "top_k": 5, "max_lag": 60, "label": "60分钟基线"},
+        {"round": 2, "top_k": 3, "max_lag": 30, "label": "测量滞后下界"},
+        {"round": 3, "top_k": 8, "max_lag": 75, "label": "典型化验滞后上界"},
+        {"round": 4, "top_k": 10, "max_lag": 90, "label": "扩展慢动态"},
+        {"round": 5, "top_k": 6, "max_lag": 45, "label": "中等时滞稳健辨识"},
+        {"round": 6, "top_k": 4, "max_lag": 75, "label": "高质量长时滞"}
       ]
     }
   }

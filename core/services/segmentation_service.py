@@ -74,7 +74,10 @@ def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict
     sys.path.insert(0, str(module_dir))
     try:
         from data_cleaning_agent import DataCleaningSelectionAgent
-        agent = DataCleaningSelectionAgent(spec, primary_output=primary_output, selection_window=window_length, selection_step=step)
+        agent = DataCleaningSelectionAgent(
+            spec, primary_output=primary_output, selection_window=window_length,
+            selection_step=step, selection_policy=policy,
+        )
         segments = agent.select_dynamic_segments(train_data)
         snr_rows = pd.DataFrame(agent.snr_evidence)
     finally:

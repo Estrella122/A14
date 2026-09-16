@@ -1,11 +1,12 @@
 from django.urls import path
 
-from . import agent_api, api, integration_api, knowledge_api, optimization_api, pipeline_api, runtime_api
+from . import agent_api, api, integration_api, knowledge_api, mcp_api, optimization_api, pipeline_api, runtime_api
 
 
 urlpatterns = [
     path('', api.api_index, name='api-index'),
     path('health/', runtime_api.health, name='health'),
+    path('mcp/', mcp_api.mcp_center, name='mcp-center'),
     path('runtime/jobs/<slug:job_id>/', runtime_api.job_detail, name='runtime-job-detail'),
     path('security/session/', api.security_session, name='security-session'),
     path('scenes/', api.scene_registry, name='scene-registry'),

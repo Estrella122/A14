@@ -95,7 +95,17 @@ def _request_analysis(message: str) -> dict[str, Any]:
     action_starts = ("提取", "筛选", "清洗", "规整", "生成", "训练", "建立", "优化", "寻优", "导出", "处理")
     explicit_actions = ("重新执行", "重新运行", "重跑", "开始执行", "立即执行", "运行一遍", "请执行", "帮我执行", "给我生成")
     question_like = normalized.startswith(("为什么", "如何", "怎么", "是否", "能否", "可以", "哪个", "什么")) or normalized.endswith(("吗", "呢", "?", "？"))
-    imperative = normalized.strip().startswith(action_starts) or any(word in normalized for word in explicit_actions)
+    mcp_imperative = bool(re.search(r"(?:通过|调用|使用|用)\s*mcp.{0,24}(?:执行|重新执行|重跑|运行|提取|筛选|训练|辨识|优化|寻优)", normalized, re.I))
+    natural_request = bool(re.search(
+        r"^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想)"
+        r".{0,40}?(?:执行|运行|训练|清洗|生成|提取|找出|筛选|估计|导出|下载|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取|尝试)",
+        normalized,
+    ))
+    operational_action = bool(re.search(
+        r"(?:自动尝试|补偿.{0,16}(?:时滞|滞后|延迟)|剔除.{0,16}(?:冗余|共线|变量)|冻结.{0,16}(?:数据|模型|候选|策略))",
+        normalized,
+    ))
+    imperative = normalized.strip().startswith(action_starts) or any(word in normalized for word in explicit_actions) or mcp_imperative or natural_request or operational_action
     mode = "execute" if imperative and (not question_like or any(word in normalized for word in explicit_actions)) else "analyze"
     topics = []
     topic_hits = {}

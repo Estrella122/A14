@@ -326,6 +326,11 @@ def api_index(request):
     return api_response({
         'ok': True,
         'message': 'APC Agent 工作台数据 API',
+        'mcp': {
+            'enabled': bool(getattr(settings, 'PROCESSPILOT_MCP_URL', '')),
+            'mode': 'backend_proxy',
+            'control_mode': 'advisory_only',
+        },
         'workflows': {
             'closed_loop_optimization': {
                 'create_or_list': '/api/optimization/studies/',

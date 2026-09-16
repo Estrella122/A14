@@ -27,6 +27,26 @@ test('timeline keeps operational reasons and omits noisy recall events', () => {
   assert.equal(events[1].message, 'missing objective')
 })
 
+test('MCP progress is visible and updates the runtime receipt', () => {
+  const event = {
+    sequence: 4,
+    event_type: 'mcp_tool_progress',
+    stage: 'mcp:cleaning',
+    status: 'executing',
+    message: 'MCP run_dynamic_selection：时间对齐、清洗与训练集冻结',
+    metadata: {
+      tool_name: 'run_dynamic_selection',
+      job_id: 'job_1',
+      current_stage: { key: 'cleaning', label: '时间对齐、清洗与训练集冻结' },
+      execution_timeline: [{ stage: 'cleaning', status: 'running' }],
+    },
+  }
+  assert.equal(visibleRuntimeEvents([event])[0].event_type, 'mcp_tool_progress')
+  const runtime = applyRuntimeEvents({}, [event])
+  assert.equal(runtime.mcp.tool_name, 'run_dynamic_selection')
+  assert.equal(runtime.mcp.current_stage.key, 'cleaning')
+})
+
 test('completed timelines never animate historical running events', () => {
   const started = { sequence: 1, event_type: 'executor_started', status: 'executing' }
   assert.equal(runtimeEventIsActive(started, 'running'), true)

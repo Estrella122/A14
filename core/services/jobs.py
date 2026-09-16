@@ -19,10 +19,14 @@ from core.models import RuntimeJob
 WORKER_ID = f"{socket.gethostname()}:{threading.get_native_id()}"
 
 
-def enqueue(job_type: str, payload: dict[str, Any], *, result_ref: str = "", max_attempts: int = 3) -> RuntimeJob:
+def enqueue(job_type: str, payload: dict[str, Any], *, result_ref: str = "", max_attempts: int = 3,
+            request_id: str = "", caller_id: str = "", tool_name: str = "",
+            idempotency_fingerprint: str | None = None) -> RuntimeJob:
     return RuntimeJob.objects.create(
         job_id=f"job_{uuid4().hex[:16]}", job_type=job_type, payload=payload,
-        result_ref=result_ref, max_attempts=max_attempts,
+        result_ref=result_ref, max_attempts=max_attempts, request_id=request_id,
+        caller_id=caller_id, tool_name=tool_name,
+        idempotency_fingerprint=idempotency_fingerprint,
     )
 
 
@@ -64,16 +68,21 @@ def execute(job: RuntimeJob) -> None:
             _execute_pipeline(job)
         elif job.job_type == "agent_chat":
             _execute_agent_chat(job)
+        elif job.job_type == "mcp_pipeline":
+            _execute_mcp_pipeline(job)
         else:
             raise ValueError(f"未知后台任务类型：{job.job_type}")
+        refreshed_status = RuntimeJob.objects.filter(pk=job.pk).values_list("status", flat=True).first()
+        if refreshed_status not in {"blocked", "cancelled"}:
+            RuntimeJob.objects.filter(pk=job.pk).update(status="completed", error="", error_code="")
         RuntimeJob.objects.filter(pk=job.pk).update(
-            status="completed", error="", finished_at=timezone.now(), locked_by="", locked_at=None,
+            finished_at=timezone.now(), locked_by="", locked_at=None,
         )
     except Exception as exc:
         refreshed = RuntimeJob.objects.get(pk=job.pk)
         terminal = refreshed.attempts >= refreshed.max_attempts
         RuntimeJob.objects.filter(pk=job.pk).update(
-            status="failed" if terminal else "queued", error=str(exc),
+            status="failed" if terminal else "queued", error=str(exc), error_code="EXECUTION_FAILED",
             finished_at=timezone.now() if terminal else None, locked_by="", locked_at=None,
             available_at=timezone.now() + timedelta(seconds=min(30, 2 ** refreshed.attempts)),
         )
@@ -117,6 +126,47 @@ def _execute_agent_chat(job: RuntimeJob) -> None:
         store.emit("run_failed", stage="runtime", status="failed", message=str(exc), metadata={"error_type": type(exc).__name__})
         store.finish("failed", error=str(exc))
         raise
+
+
+def _execute_mcp_pipeline(job: RuntimeJob) -> None:
+    """Run a bounded pipeline stage requested through MCP.
+
+    The source run is immutable. ``rerun_pipeline`` copies its registered source
+    into a fresh run, so an MCP request cannot overwrite prior evidence.
+    """
+    from core.services.pipeline import rerun_pipeline
+
+    if job.cancel_requested_at:
+        RuntimeJob.objects.filter(pk=job.pk).update(status="cancelled", finished_at=timezone.now())
+        return
+    payload = dict(job.payload)
+    RuntimeJob.objects.filter(pk=job.pk).update(
+        current_stage=payload["stop_after"],
+        progress={"completed": 0, "total": 1, "percent": 0},
+    )
+    snapshot = rerun_pipeline(
+        payload["source_run_id"],
+        resample_rule=payload.get("resample_rule", "10s"),
+        max_lag=int(payload.get("max_lag", 60)),
+        stop_after=payload["stop_after"],
+        scenario_id=payload.get("scene_id") or None,
+        overrides=payload.get("overrides"),
+        new_run_id=payload.get("target_run_id"),
+        cancel_check=lambda: RuntimeJob.objects.filter(pk=job.pk, cancel_requested_at__isnull=False).exists(),
+    )
+    terminal_status = (
+        "blocked" if snapshot.get("status") == "needs_review"
+        else "cancelled" if snapshot.get("status") == "cancelled"
+        else "completed"
+    )
+    RuntimeJob.objects.filter(pk=job.pk).update(
+        status=terminal_status,
+        result_ref=snapshot["run_id"],
+        current_stage=snapshot.get("current_stage", payload["stop_after"]),
+        progress={"completed": 1, "total": 1, "percent": 100},
+        error_code="QUALITY_GATE_BLOCKED" if terminal_status == "blocked" else "CANCELLED" if terminal_status == "cancelled" else "",
+        error=(snapshot.get("review_required") or {}).get("message", "") if terminal_status == "blocked" else "任务已在安全阶段边界取消。" if terminal_status == "cancelled" else "",
+    )
 
 
 def run_one() -> bool:

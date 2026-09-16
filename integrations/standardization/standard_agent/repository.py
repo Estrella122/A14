@@ -97,6 +97,7 @@ class ScenarioTemplate:
             "expected_rows": self.config.get("expected_rows"),
             "source": self.config.get("source"),
             "data_provenance_required": self.config.get("data_provenance_required", []),
+            "algorithm_profile": self.config.get("algorithm_profile", {}),
             "notes": self.config.get("notes", ""),
         }
 
@@ -194,6 +195,29 @@ class ScenarioRepository:
         invalid_outputs = [name for name in model_outputs if name not in template.by_name or template.by_name[name].role != "controlled"]
         if invalid_outputs:
             raise ValueError(f"{template.scenario_id} 的模型输出必须全部是 controlled 字段：{invalid_outputs}")
+        profile = template.config.get("algorithm_profile", {})
+        if profile:
+            selection = profile.get("selection", {})
+            weights = selection.get("score_weights", {})
+            if weights and abs(sum(float(value) for value in weights.values()) - 1.0) > 1e-9:
+                raise ValueError(f"{template.scenario_id} 的动态评分权重之和必须为1。")
+            if int(selection.get("window_samples", 15)) < 15:
+                raise ValueError(f"{template.scenario_id} 的动态窗口不能小于15个样本。")
+            if int(selection.get("step_samples", 1)) > int(selection.get("window_samples", 15)):
+                raise ValueError(f"{template.scenario_id} 的动态窗口步长不能大于窗口。")
+            decoupling = profile.get("decoupling", {})
+            if not 1 <= int(decoupling.get("max_lag_samples", 60)) <= 600:
+                raise ValueError(f"{template.scenario_id} 的最大时滞必须在1到600之间。")
+            optimization = profile.get("optimization", {})
+            objective_weights = optimization.get("objective_weights", {})
+            if objective_weights and abs(sum(float(value) for value in objective_weights.values()) - 1.0) > 1e-9:
+                raise ValueError(f"{template.scenario_id} 的寻优目标权重之和必须为1。")
+            bounds = optimization.get("bounds", {})
+            for candidate in optimization.get("candidates", []):
+                for parameter in ("top_k", "max_lag"):
+                    rule = bounds.get(parameter)
+                    if rule and not float(rule["min"]) <= float(candidate[parameter]) <= float(rule["max"]):
+                        raise ValueError(f"{template.scenario_id} 的候选{candidate.get('round')}超出{parameter}边界。")
         alias_index: dict[str, str] = {}
         for field in template.fields:
             for alias in (field.standard_name, field.display_name, *field.aliases):

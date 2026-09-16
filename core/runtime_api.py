@@ -14,6 +14,9 @@ def _job_payload(job):
     return {
         "job_id": job.job_id, "job_type": job.job_type, "status": job.status,
         "result_ref": job.result_ref, "error": job.error or None,
+        "error_code": job.error_code or None, "request_id": job.request_id or None,
+        "tool_name": job.tool_name or None, "current_stage": job.current_stage or None,
+        "progress": job.progress or {}, "cancel_requested": bool(job.cancel_requested_at),
         "attempts": job.attempts, "max_attempts": job.max_attempts,
         "locked_by": job.locked_by or None,
         "created_at": job.created_at.isoformat(), "updated_at": job.updated_at.isoformat(),
@@ -27,6 +30,8 @@ def health(request):
     runtime_root.mkdir(parents=True, exist_ok=True)
     probe = runtime_root / ".healthcheck"
     probe.touch(exist_ok=True)
+    from core.mcp.client import check_server
+    mcp_status = check_server(getattr(settings, "PROCESSPILOT_MCP_URL", ""))
     return JsonResponse({
         "ok": True, "status": "ready", "database": "ready", "runtime_storage": "ready",
         "queue": {
@@ -35,6 +40,7 @@ def health(request):
             "failed": RuntimeJob.objects.filter(status="failed").count(),
         },
         "control_mode": "advisory_only", "actuation_allowed": False,
+        "mcp": mcp_status,
     })
 
 

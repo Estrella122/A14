@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },
@@ -45,6 +45,7 @@ export default defineConfig({
         pipelineBuilder: 'pipeline-builder/index.html',
         experiments: 'experiments/index.html',
         knowledgeBase: 'knowledge-base/index.html',
+        mcpCenter: 'mcp-center/index.html',
       },
     },
   },

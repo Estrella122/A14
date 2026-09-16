@@ -6,6 +6,7 @@ import { navGroups, navItems, projects } from './data/projectData'
 import CommandPalette from './components/CommandPalette.vue'
 import { useLatestPipelineRun } from './composables/useLatestPipelineRun'
 import { buildSceneState } from './composables/useSceneBinding'
+import { apiRequest } from './api/client'
 
 const viewMap = {
   '/portal/': defineAsyncComponent(() => import('./views/PortalView.vue')),
@@ -22,6 +23,7 @@ const viewMap = {
   '/pipeline-builder/': defineAsyncComponent(() => import('./views/PipelineBuilderView.vue')),
   '/experiments/': defineAsyncComponent(() => import('./views/ExperimentTrackerView.vue')),
   '/knowledge-base/': defineAsyncComponent(() => import('./views/KnowledgeBaseView.vue')),
+  '/mcp-center/': defineAsyncComponent(() => import('./views/McpCenterView.vue')),
 }
 
 function normalizePath(path) {
@@ -60,6 +62,17 @@ const activeView = computed(() => viewMap[activePath.value] ?? viewMap['/portal/
 const toast = ref(null)
 const commandPaletteOpen = ref(false)
 let toastTimer
+let healthTimer
+const mcpHealth = ref({ configured: false, online: false })
+
+async function refreshHealth() {
+  try {
+    const payload = await apiRequest('/health/')
+    mcpHealth.value = payload.mcp ?? { configured: false, online: false }
+  } catch {
+    mcpHealth.value = { configured: true, online: false }
+  }
+}
 
 function navigate(path) {
   const normalized = normalizePath(path)
@@ -142,11 +155,17 @@ watch([activePath, effectiveProject], () => {
   document.title = `${activeItem.value.label} · ${effectiveProject.value.shortName} · ProcessPilot`
 }, { immediate: true })
 
-onMounted(() => { window.addEventListener('popstate', handlePopState); window.addEventListener('keydown', handleGlobalKeydown) })
+onMounted(() => {
+  window.addEventListener('popstate', handlePopState)
+  window.addEventListener('keydown', handleGlobalKeydown)
+  refreshHealth()
+  healthTimer = window.setInterval(refreshHealth, 15000)
+})
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', handlePopState)
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.clearTimeout(toastTimer)
+  window.clearInterval(healthTimer)
 })
 </script>
 
@@ -206,15 +225,13 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="topbar-actions">
-          <button v-if="isUserBoard" class="btn btn-secondary" type="button" @click="navigate('/portal/')"><AppIcon name="dashboard" />入口</button>
-          <button v-if="isUserBoard" class="btn btn-primary" type="button" @click="navigate('/overview/')"><AppIcon name="shield" />工作人员板块</button>
-          <template v-else>
-            <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
-            <button class="btn btn-secondary" type="button" @click="navigate('/user/')"><AppIcon name="spark" />用户板块</button>
-            <div class="topbar-health"><span><i></i>后端模板服务</span><strong>ONLINE</strong></div>
-            <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: activeLatestRun ? 'success' : 'info', title: '任务通知', message: activeLatestRun ? `当前场景任务 ${activeLatestRun.run_id} 状态：${activeLatestRun.status}` : '当前场景尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
-            <button class="help-button" type="button" aria-label="打开 Agent 帮助" @click="navigate('/agent-review/'); showToast({ tone: 'info', title: 'Agent 帮助', message: '已打开 Agent 中枢，可上传 CSV 或直接输入问题。' })">?</button>
-          </template>
+          <button class="command-trigger" type="button" aria-label="打开全局命令面板" @click="commandPaletteOpen = true"><AppIcon name="spark" :size="15" /><span>搜索命令</span><kbd>⌘ K</kbd></button>
+          <button class="btn btn-secondary" type="button" @click="navigate('/user/')"><AppIcon name="spark" />用户板块</button>
+          <button class="topbar-health" :class="{ 'is-offline': !mcpHealth.online }" type="button" :title="mcpHealth.online ? `MCP 已加载 ${mcpHealth.tool_count ?? 0} 个工具` : 'MCP 服务未连接'" @click="navigate('/mcp-center/')">
+            <span><i></i>后端 · MCP</span><strong>{{ mcpHealth.online ? 'ONLINE' : 'OFFLINE' }}</strong>
+          </button>
+          <button class="icon-button topbar-icon" type="button" aria-label="查看任务通知" @click="showToast({ tone: activeLatestRun ? 'success' : 'info', title: '任务通知', message: activeLatestRun ? `当前场景任务 ${activeLatestRun.run_id} 状态：${activeLatestRun.status}` : '当前场景尚无 CSV 流水线任务。' })"><AppIcon name="bell" /><i class="notification-dot"></i></button>
+          <button class="help-button" type="button" aria-label="打开 Agent 帮助" @click="navigate('/agent-review/'); showToast({ tone: 'info', title: 'Agent 帮助', message: '已打开 Agent 中枢，可上传 CSV 或直接输入问题。' })">?</button>
         </div>
       </header>
 

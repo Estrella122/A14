@@ -9,6 +9,7 @@ from core.skills import execute_skill_plan, plan_skills
 from .expert_qa import answer_expert_question
 from .pipeline import PipelineError, get_run, rerun_pipeline
 from .llm_gateway import LLMGatewayError, generate_grounded_answer
+from core.mcp.client import MCPInvocationError, invoke_and_wait as invoke_mcp_and_wait
 from core.skills.catalog import resolve_scene_family
 from django.conf import settings
 from core.skills.response_renderer import DeterministicResponseRenderer
@@ -434,6 +435,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     needs_clarification = skill_plan.get("analysis", {}).get("needs_clarification", False) and intent not in {"conversation", "capability", "clarification"}
     action_note = ""
     execution_scope = "evidence_only"
+    mcp_execution = None
     core_executor_steps = skill_plan.get("analysis", {}).get("execution_plan", {}).get("core", {}).get("steps", [])
     stop_after = None
     if skill_plan.get("analysis", {}).get("full_pipeline_requested") or "closed_loop_preprocessing_optimizer" in direct:
@@ -450,7 +452,92 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         blocked_reason = "未能确定完整执行目标，请明确需要的技能；没有启动算法。"
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
     use_pipeline_fallback = runtime_mode == "legacy" or (runtime_mode == "hybrid" and not core_executor_steps)
-    if use_pipeline_fallback and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
+    mcp_tool = None
+    if skill_plan.get("analysis", {}).get("full_pipeline_requested") or "closed_loop_preprocessing_optimizer" in direct:
+        mcp_tool = "run_closed_loop_optimization"
+    elif direct.intersection({"system_identification_trainer", "time_delay_estimator_compensator", "collinearity_detector_reducer"}):
+        mcp_tool = "run_decoupling_identification"
+    elif "high_snr_dynamic_segment_extractor" in direct:
+        mcp_tool = "run_dynamic_selection"
+    mcp_url = getattr(settings, "PROCESSPILOT_MCP_URL", "")
+    if mcp_url and mcp_tool and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification:
+        resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
+        max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
+        def publish_mcp_progress(payload):
+            if not event_sink:
+                return
+            mcp_status = payload.get("status", "running")
+            current = payload.get("current_stage") or {}
+            progress = payload.get("progress") or {}
+            percent = progress.get("percent")
+            terminal = mcp_status in {"completed", "partial", "blocked", "failed", "cancelled"}
+            event_type = (
+                "mcp_tool_completed" if terminal and mcp_status in {"completed", "partial"}
+                else "mcp_tool_blocked" if mcp_status == "blocked"
+                else "mcp_tool_cancelled" if mcp_status == "cancelled"
+                else "mcp_tool_failed" if mcp_status == "failed"
+                else "mcp_tool_progress"
+            )
+            event_sink(
+                event_type,
+                stage=f"mcp:{current.get('key') or payload.get('stage') or 'queued'}",
+                status=mcp_status if terminal else "executing",
+                message=(
+                    f"MCP {mcp_tool}：{current.get('label') or '任务已提交'}"
+                    + (f" · {current.get('message')}" if current.get("message") else "")
+                ),
+                progress=float(percent) if isinstance(percent, (int, float)) else None,
+                metadata={
+                    "protocol": "MCP",
+                    "tool_name": mcp_tool,
+                    "job_id": payload.get("job_id"),
+                    "run_id": payload.get("run_id"),
+                    "current_stage": current,
+                    "execution_timeline": payload.get("execution_timeline", []),
+                    "quality_gates": payload.get("quality_gates", []),
+                    "artifact_count": len(payload.get("output_artifacts", [])),
+                },
+            )
+        try:
+            mcp_execution = invoke_mcp_and_wait(
+                mcp_url,
+                mcp_tool,
+                snapshot["run_id"],
+                resample_rule=f"{max(1, min(resample_seconds, 300))}s",
+                max_lag=max(1, min(max_lag, 600)),
+                request_key=skill_run_id,
+                timeout_seconds=float(getattr(settings, "PROCESSPILOT_MCP_TIMEOUT_SECONDS", 180)),
+                on_progress=publish_mcp_progress,
+            )
+        except MCPInvocationError as exc:
+            raise PipelineError(str(exc)) from exc
+        result_run_id = mcp_execution.get("run_id")
+        result_snapshot = get_run(result_run_id) if result_run_id else None
+        if result_snapshot:
+            snapshot = result_snapshot
+        if mcp_execution.get("status") in {"completed", "partial"} and result_snapshot:
+            executed = True
+            execution_scope = {
+                "run_dynamic_selection": "selection",
+                "run_decoupling_identification": "modeling",
+                "run_closed_loop_optimization": "optimization",
+            }[mcp_tool]
+            skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
+            # The algorithms already ran through MCP. The local Skill runtime now
+            # reads and renders their evidence instead of executing a second copy.
+            skill_plan["mode"] = "analyze"
+            skill_plan["analysis"]["mode"] = "analyze"
+            skill_plan["analysis"]["mcp_execution"] = mcp_execution
+        elif mcp_execution.get("status") == "blocked":
+            error = mcp_execution.get("error") or {}
+            blocked_reason = error.get("message") or "MCP 质量门禁阻断了本次执行。"
+            skill_plan["mode"] = "analyze"
+            skill_plan["analysis"]["mode"] = "analyze"
+            skill_plan["analysis"]["mcp_execution"] = mcp_execution
+        else:
+            error = mcp_execution.get("error") or {}
+            raise PipelineError(error.get("message") or f"MCP 任务状态异常：{mcp_execution.get('status')}")
+    if use_pipeline_fallback and not mcp_execution and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
@@ -496,7 +583,11 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     elif executed and is_compound:
         degraded = int(snapshot.get("results", {}).get("cleaning", {}).get("selected_segment_count") or 0) == 0
         answer, cards, suggestions = _compound_result(snapshot, degraded)
-    if needs_clarification and not mismatch:
+    if blocked_reason and mcp_execution and not mismatch:
+        answer = f"MCP 已安全阻断本次执行：{blocked_reason}没有绕过数据、场景或模型质量门禁。"
+        cards = [{"label": "MCP 状态", "value": "已阻断"}, {"label": "工具", "value": mcp_execution.get("tool_name")}, {"label": "任务", "value": mcp_execution.get("job_id")}]
+        suggestions = ["查看阻断原因", "检查字段与场景映射", "上传符合场景契约的数据"]
+    elif needs_clarification and not mismatch:
         candidates = [item["name"] for item in skill_plan.get("steps", []) if item.get("selection_kind") == "direct"]
         answer = blocked_reason + ("可选方向：" + "、".join(candidates) if candidates else "请说明要处理的数据和目标。")
         cards = [{"label": "路由状态", "value": "需要澄清"}]
@@ -507,13 +598,14 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             action_note = "已识别请求并读取现有证据；这些技能尚无独立算法执行接口，本次没有生成新结果。"
             answer = action_note + answer
     if executed:
-        scope_label = "全流程" if execution_scope == "report" else {"standardization": "字段标准化", "cleaning": "清洗", "selection": "动态段提取", "modeling": "系统辨识"}[execution_scope]
+        scope_label = "全流程" if execution_scope == "report" else {"standardization": "字段标准化", "cleaning": "清洗", "selection": "动态段提取", "modeling": "系统辨识", "optimization": "闭环寻优"}[execution_scope]
         answer = f"已执行至{scope_label}，新任务编号为 {snapshot['run_id']}。" + answer
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     logs = [
         {"time": now, "level": "INFO", "text": f"识别意图 {intent}，置信度 {confidence:.0%}"},
         *([{"time": now, "level": "EXPERT", "text": f"命中专家问题域：{expert_answer['topic_name']}"}] if expert_answer else []),
         {"time": now, "level": "TOOL", "text": f"读取任务 {snapshot['run_id']} 的标准化、清洗、辨识和评审证据"},
+        *([{"time": now, "level": "MCP", "text": f"通过 {mcp_execution.get('tool_name')} 完成任务 {mcp_execution.get('job_id')}"}] if mcp_execution else []),
         {"time": now, "level": "WARN" if blocked_reason else "BEST" if executed else "INFO", "text": blocked_reason if blocked_reason else f"已执行至 {execution_scope} 并刷新证据" if executed else "本次为只读分析，未修改运行产物"},
     ]
     skill_run = execute_skill_plan(skill_plan, snapshot, blocked_reason=blocked_reason, skill_run_id=skill_run_id, event_sink=event_sink)
@@ -567,6 +659,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             "skill_loading": skill_plan.get("analysis", {}).get("skill_runtime", {}),
             "executor_results": core_results,
             "artifacts": skill_run.get("artifact_registry", []),
+            "mcp": mcp_execution,
         },
         "deliverables": _deliverables(snapshot) if (executed or "final_artifact_exporter" in direct) and not blocked_reason else [],
         "expert_topic": expert_answer["topic"] if expert_answer else None,

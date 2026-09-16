@@ -531,11 +531,19 @@ code {
   gap: 7px;
   padding-right: 12px;
   color: var(--muted);
+  border: 0;
   font-size: 10px;
+  font-family: inherit;
   border-right: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
 }
 
+.topbar-health:hover { color: var(--brand); }
+
 .topbar-health strong { color: var(--success); font-size: 9px; letter-spacing: .05em; }
+.topbar-health.is-offline strong { color: var(--danger); }
+.topbar-health.is-offline i { background: var(--danger); box-shadow: 0 0 0 3px rgba(239, 68, 68, .12); }
 
 .icon-button,
 .help-button {

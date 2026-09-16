@@ -90,6 +90,17 @@ RESPONSE_INTENT_PATTERNS = (
 )
 
 
+REQUEST_PREFIX_ACTION = re.compile(
+    r"^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想)"
+    r".{0,40}?(?:执行|运行|训练|清洗|生成|提取|找出|筛选|估计|导出|下载|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取|尝试)",
+)
+OPERATIONAL_ACTION = re.compile(
+    r"(?:自动尝试|重新执行|重新运行|重跑|开始执行|立即执行|"
+    r"补偿.{0,16}(?:时滞|滞后|延迟)|剔除.{0,16}(?:冗余|共线|变量)|"
+    r"冻结.{0,16}(?:数据|模型|候选|策略))"
+)
+
+
 class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
     """Explicit fallback. It makes no claim of LLM or embedding semantics."""
 
@@ -106,9 +117,22 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         question = bool(re.search(r"为什么|为何|怎么|如何|是否|能否|什么|哪些|[？?吗呢]$", normalized))
         positive_text = re.sub(r"(?:不要|不必|无需|禁止|别)\s*[^，。；]+", "", normalized)
         action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|找|找出|筛选|估计|导出|下载|优化|建立|建模|建一个)", positive_text.strip(" ，,。")))
+        action = action or bool(re.search(r"(?:通过|调用|使用|用)\s*mcp.{0,24}(?:执行|重新执行|重跑|运行|提取|筛选|训练|辨识|优化|寻优)", positive_text, re.I))
         action = action or bool(re.search(r"^用.{0,30}(?:优化|训练|建模)", positive_text.strip(" ，,。")))
         action = action or bool(re.search(r"^(?:请|帮我|给我|用这份数据|把|将).{0,30}(?:清洗|训练|建立|建一个|生成|优化|导出|下载)", positive_text.strip(" ，,。")))
+        # Natural user requests commonly place the data object between the
+        # polite request and the operation: “帮我从当前数据中筛选……”.  Treat
+        # that as execution without requiring users to know or mention MCP.
+        action = action or bool(REQUEST_PREFIX_ACTION.search(positive_text.strip(" ，,。")))
+        action = action or bool(OPERATIONAL_ACTION.search(positive_text))
         request_then_evaluate = bool(action and re.search(r"并.{0,12}(?:告诉|评估|比较|判断|验证)", normalized))
+        # “请说明当前……闭环寻优结果” asks to read evidence; a later
+        # capability noun must not turn the leading explanation verb into an
+        # execution command.
+        if re.search(r"^(?:请)?(?:说明|解释|解读|分析|介绍|告诉我)", normalized) and not OPERATIONAL_ACTION.search(normalized) and not re.search(
+            r"(?:并|然后|再)(?:请)?(?:执行|运行|重跑|训练|提取|筛选|优化|寻优)", normalized
+        ):
+            action = False
         if (question and not request_then_evaluate) or re.search(r"按钮|字符串|这句话|原话|原文|引用|提示|如果|假如|假设|会不会|能不能|可不可以", normalized):
             action = False
         execution_mode = "explain" if knowledge else "execute" if action else "analyze"

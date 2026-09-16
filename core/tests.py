@@ -223,6 +223,83 @@ class AgentChatTests(SimpleTestCase):
         self.assertEqual(optimization['status'], 'blocked')
         self.assertIn('synthetic', ''.join(optimization['warnings']))
 
+    @override_settings(PROCESSPILOT_MCP_URL='http://127.0.0.1:8010/mcp')
+    def test_execution_command_uses_mcp_and_does_not_run_local_executor_twice(self):
+        source = self.snapshot()
+        completed = copy.deepcopy(source)
+        completed['run_id'] = 'run_from_mcp'
+        mcp_result = {
+            'schema_version': 'processpilot-mcp-result-v1',
+            'job_id': 'job_mcp_1',
+            'run_id': 'run_from_mcp',
+            'tool_name': 'run_dynamic_selection',
+            'status': 'completed',
+            'control_mode': 'advisory_only',
+            'actuation_allowed': False,
+        }
+        with (
+            patch('core.services.agent_chat.get_run', side_effect=lambda run_id=None: completed if run_id == 'run_from_mcp' else source),
+            patch('core.services.agent_chat.invoke_mcp_and_wait', return_value=mcp_result) as invoke,
+        ):
+            result = chat('请通过 MCP 对当前数据执行高信噪比动态优选', 'run_test')
+        invoke.assert_called_once()
+        self.assertTrue(result['executed'])
+        self.assertEqual(result['run_id'], 'run_from_mcp')
+        self.assertEqual(result['runtime_observability']['mcp']['job_id'], 'job_mcp_1')
+        self.assertEqual(result['runtime_observability']['executor_results'], [])
+        self.assertIn('MCP', {row['level'] for row in result['logs']})
+
+    def test_explicit_mcp_wording_is_an_execution_request(self):
+        plan = plan_skills('请通过 MCP 对当前数据执行高信噪比动态优选', 'run_test', snapshot=self.snapshot())
+        self.assertEqual(plan['mode'], 'execute')
+        self.assertIn('high_snr_dynamic_segment_extractor', {step['skill_id'] for step in plan['steps']})
+
+    def test_natural_dynamic_selection_request_automatically_uses_mcp(self):
+        source = self.snapshot()
+        completed = copy.deepcopy(source)
+        completed['run_id'] = 'run_natural_mcp'
+        mcp_result = {
+            'schema_version': 'processpilot-mcp-result-v1',
+            'job_id': 'job_natural_mcp',
+            'run_id': 'run_natural_mcp',
+            'tool_name': 'run_dynamic_selection',
+            'status': 'completed',
+            'control_mode': 'advisory_only',
+            'actuation_allowed': False,
+        }
+        with (
+            override_settings(PROCESSPILOT_MCP_URL='http://127.0.0.1:8010/mcp'),
+            patch('core.services.agent_chat.get_run', side_effect=lambda run_id=None: completed if run_id == 'run_natural_mcp' else source),
+            patch('core.services.agent_chat.invoke_mcp_and_wait', return_value=mcp_result) as invoke,
+        ):
+            result = chat('帮我从当前数据中筛选适合建模的高信噪比动态数据段，并给出质量评分。', 'run_test')
+        invoke.assert_called_once()
+        self.assertEqual(invoke.call_args.args[1], 'run_dynamic_selection')
+        self.assertTrue(result['executed'])
+        self.assertEqual(result['runtime_observability']['mcp']['job_id'], 'job_natural_mcp')
+
+    def test_natural_business_requests_resolve_to_the_three_mcp_tools(self):
+        cases = (
+            ('帮我从当前数据中筛选适合建模的高信噪比动态数据段，并给出质量评分。', 'run_dynamic_selection'),
+            ('分析当前数据的变量时滞和共线性，补偿时滞并剔除冗余变量。', 'run_decoupling_identification'),
+            ('自动尝试不同预处理策略，寻找辨识拟合度最高的方案。', 'run_closed_loop_optimization'),
+        )
+        for message, expected_tool in cases:
+            with self.subTest(message=message):
+                plan = plan_skills(message, 'run_test', snapshot=self.snapshot())
+                self.assertEqual(plan['mode'], 'execute')
+                direct = set(plan['direct_skill_ids'])
+                if expected_tool == 'run_dynamic_selection':
+                    self.assertIn('high_snr_dynamic_segment_extractor', direct)
+                elif expected_tool == 'run_decoupling_identification':
+                    self.assertTrue(direct.intersection({'system_identification_trainer', 'time_delay_estimator_compensator', 'collinearity_detector_reducer'}))
+                else:
+                    self.assertIn('closed_loop_preprocessing_optimizer', direct)
+
+    def test_question_about_selection_does_not_execute(self):
+        plan = plan_skills('请告诉我如何筛选高信噪比动态数据段？', 'run_test', snapshot=self.snapshot())
+        self.assertEqual(plan['mode'], 'analyze')
+
     def test_compound_expert_question_uses_minimal_precise_skill_set(self):
         question = '当前模型测试集R²不错，如何证明没有时序数据泄漏和过拟合？请结合残差自相关、模型阶次和独立工况验证说明，不要直接给出可上线结论。'
         plan = plan_skills(question, 'run_test', snapshot=self.snapshot())

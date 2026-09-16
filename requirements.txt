@@ -11,3 +11,4 @@ pandera[pandas]>=0.24,<0.32
 matplotlib>=3.8,<4
 gunicorn>=23,<24
 certifi>=2025.8.3,<2027
+mcp>=2,<3

@@ -278,13 +278,18 @@ def _cleaning_spec(dictionary: list[dict[str, Any]], columns: list[str]) -> dict
 
 
 def _effective_max_lag(requested: int, scenario: dict[str, Any]) -> int:
+    profile = scenario.get("algorithm_profile", {}).get("decoupling", {})
+    configured = profile.get("max_lag_samples") or scenario.get("recommended_max_lag")
     delay = scenario.get("measurement_delay_minutes")
+    delay_samples = 0
     if isinstance(delay, dict):
         try:
-            return max(int(requested), int(delay.get("max") or 0))
+            sampling_seconds = float(scenario.get("sampling_seconds") or 60)
+            delay_samples = math.ceil(float(delay.get("max") or 0) * 60 / sampling_seconds)
         except (TypeError, ValueError):
-            return int(requested)
-    return int(requested)
+            delay_samples = 0
+    effective = int(configured) if configured is not None else int(requested)
+    return max(1, min(600, max(effective, delay_samples)))
 
 
 def _effective_resample_rule(requested: str, scenario: dict[str, Any], scenario_request: str, project_scene: str) -> str:
@@ -314,6 +319,7 @@ def _clean(
     primary_output: str | None = None,
     selection_window: int = 30,
     selection_step: int = 15,
+    selection_policy: dict[str, Any] | None = None,
     include_segmentation: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     module_dir = INTEGRATIONS_DIR / "data_cleaning" / "src"
@@ -331,6 +337,7 @@ def _clean(
             primary_output=primary_output,
             selection_window=selection_window,
             selection_step=selection_step,
+            selection_policy=selection_policy,
         )
         # Freeze the chronological partitions before cleaning or scoring.
         ordered = standardized.sort_values("timestamp").reset_index(drop=True)
@@ -353,6 +360,7 @@ def _clean(
                 primary_output=primary_output,
                 selection_window=selection_window,
                 selection_step=selection_step,
+                selection_policy=selection_policy,
             )
             aligned = part_agent.align_timestamp(part)
             processed = part_agent.process_missing_values(aligned)
@@ -383,7 +391,8 @@ def _clean(
         split = {"protocol": "chronological_60_20_20_v2", "guard_samples": guard, "seconds": seconds,
                  "partitions": {k: {"rows": len(v), "start": str(v.index[0]), "end": str(v.index[-1])} for k,v in parts.items()}}
         _write_json(split_dir / "split_manifest.json", split)
-        report["snr"] = {"method": "robust_second_difference_white_noise_proxy", "threshold_db": 10,
+        active_selection_policy = selection_policy or {}
+        report["snr"] = {"method": "robust_second_difference_white_noise_proxy", "threshold_db": active_selection_policy.get("snr_db", 10),
             "status": "not_requested", "scope": "training_windows_only", "calibrated": False,
             "assumptions": "局部平滑信号与加性白噪声；有色噪声、曲率及量化会影响估计",
             "passed_windows": 0,
@@ -406,7 +415,7 @@ def _clean(
         segmentation = run_segmentation_stage(
             parts["train"], dictionary, clean_dir, split_version=split["protocol"],
             window_length=selection_window, step=selection_step, primary_output=primary_output,
-            policy={"strict_score": 80, "snr_db": 10},
+            policy=active_selection_policy or {"strict_score": 80, "usable_score": 60, "snr_db": 10},
         )
         if segmentation["status"] != "success":
             raise PipelineError("动态分段失败：" + "；".join(segmentation.get("limitations", [])))
@@ -491,6 +500,7 @@ def _model(
     modeling_path: Path | None = None,
     output_dir: Path | None = None,
     primary_output: str | None = None,
+    modeling_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     numeric = set(modeling.select_dtypes(include="number").columns)
     fields = {item["standard_name"]: item for item in dictionary}
@@ -524,6 +534,7 @@ def _model(
             input_csv=modeling_path, output_col=output_col, input_cols=input_cols,
             output_dir=output_dir, validation_csv=run_dir / "03_cleaning" / "validation.csv",
             guard=split["guard_samples"], seconds=split["seconds"], max_lag=max_lag,
+            policy=modeling_policy,
         )
 
     metrics_path = output_dir / "03_system_identification" / "model_metrics.json"
@@ -579,12 +590,17 @@ def _model(
     return report
 
 
-def _candidate_score(metrics: dict[str, Any], coverage: float) -> float:
+def _candidate_score(metrics: dict[str, Any], coverage: float, weights: dict[str, Any] | None = None) -> float:
     r2 = float(metrics.get("r2") or 0)
     rmse = max(float(metrics.get("rmse") or 0), 0)
     r2_score = max(0.0, min(1.0, (r2 + 0.2) / 1.2))
     error_score = 1.0 / (1.0 + rmse)
-    return round(100 * (0.68 * r2_score + 0.17 * error_score + 0.15 * max(0.0, min(coverage, 1.0))), 3)
+    weights = weights or {"r2": 0.68, "error": 0.17, "coverage": 0.15}
+    return round(100 * (
+        float(weights["r2"]) * r2_score
+        + float(weights["error"]) * error_score
+        + float(weights["coverage"]) * max(0.0, min(coverage, 1.0))
+    ), 3)
 
 
 def _optimize_real_data(
@@ -601,6 +617,7 @@ def _optimize_real_data(
     constraints: dict[str, Any] | None = None,
     search_space: dict[str, Any] | None = None,
     optimization_policy: dict[str, Any] | None = None,
+    modeling_policy: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     exploration_candidates = list((optimization_policy or {}).get("candidates") or [
         {"round": 1, "top_k": 5, "max_lag": max_lag, "label": "基线策略"},
@@ -629,7 +646,7 @@ def _optimize_real_data(
             data.reset_index().to_csv(candidate_path, index=False, encoding="utf-8-sig")
             model = _model(data, dictionary, run_dir, candidate["max_lag"],
                            modeling_path=candidate_path, output_dir=candidate_dir / "modeling",
-                           primary_output=primary_output)
+                           primary_output=primary_output, modeling_policy=modeling_policy)
             row_count = len(data)
             test = model.get("metrics", {}).get("validation", {})
             coverage = row_count / max(len(cleaned), 1)
@@ -646,7 +663,7 @@ def _optimize_real_data(
                 "r2": float(test.get("r2") or 0),
                 "rmse": float(test.get("rmse") or 0),
                 "mae": float(test.get("mae") or 0),
-                "score": _candidate_score(test, coverage),
+                "score": _candidate_score(test, coverage, (optimization_policy or {}).get("objective_weights")),
                 "feasible": float(test.get("r2") or 0) >= float((constraints or {}).get("min_r2", 0)) and coverage >= float((constraints or {}).get("min_coverage", .05)),
                 "model": model,
             }
@@ -739,7 +756,7 @@ def _optimize_real_data(
             secondary = _model(
                 _read_csv(run_dir / best_model["modeling_path"]), dictionary, run_dir,
                 best["max_lag"], modeling_path=run_dir / best_model["modeling_path"],
-                output_dir=secondary_dir, primary_output=output_name,
+                output_dir=secondary_dir, primary_output=output_name, modeling_policy=modeling_policy,
             )
             secondary_metrics, secondary_diagnostics = finalize_test(secondary_dir, run_dir / "03_cleaning" / "test.csv")
             secondary.update({"metrics": secondary_metrics, "diagnostics": secondary_diagnostics, "status": "completed"})
@@ -796,7 +813,11 @@ def _optimize_real_data(
             "early_stopped": early_stopped,
             "stop_reason": stop_reason,
         },
-        "objective": objective or "0.68×R²得分 + 0.17×误差得分 + 0.15×数据覆盖率",
+        "objective": objective or " + ".join(
+            f"{float(value):.2f}×{label}"
+            for key, label in (("r2", "R²得分"), ("error", "误差得分"), ("coverage", "数据覆盖率"))
+            for value in [((optimization_policy or {}).get("objective_weights") or {"r2": .68, "error": .17, "coverage": .15})[key]]
+        ),
         "bounds": bounds or {},
         "constraints": constraints or {},
         "search_space": search_space or {},
@@ -1009,7 +1030,7 @@ run_review_stage = _review
 run_report_stage = _analysis_report
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None, run_id: str | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None, run_id: str | None = None, cancel_check: Callable[[], bool] | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -1056,6 +1077,20 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             _write_json(run_dir / "snapshot.json", snapshot)
             return True
 
+        def finish_if_cancelled(stage: str) -> bool:
+            if not cancel_check or not cancel_check():
+                return False
+            for node in snapshot["stages"]:
+                if node["status"] == "pending":
+                    node.update(status="skipped", message="任务已取消")
+            snapshot.update(
+                status="cancelled",
+                current_stage=stage,
+                updated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+            )
+            _write_json(run_dir / "snapshot.json", snapshot)
+            return True
+
         current_stage = "standardization"
         try:
             _set_stage(snapshot, run_dir, current_stage, "running", "正在识别场景、字段和单位")
@@ -1078,6 +1113,8 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["performance_spans"].update(standardization.get("runtime_trace", {}).get("performance_spans", {}))
             snapshot["artifacts"].update(standardization["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", "字段标准化完成")
+            if finish_if_cancelled(current_stage):
+                return snapshot
             if finish_requested_stage("standardization"):
                 return snapshot
             decision = standardization.get("data_decision", {})
@@ -1111,15 +1148,27 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             standardized = _read_csv(run_dir / standardization["artifacts"]["standardized_csv"])
             primary_output = standardization.get("scenario", {}).get("primary_output")
             model_outputs = standardization.get("scenario", {}).get("model_outputs") or [primary_output]
+            algorithm_profile = standardization.get("scenario", {}).get("algorithm_profile") or {}
+            selection_policy = algorithm_profile.get("selection") or {}
+            modeling_policy = algorithm_profile.get("decoupling") or {}
+            optimization_policy = algorithm_profile.get("optimization") or {}
             modeling_data, segments, cleaning = _clean(
                 standardized, standardization["dictionary"], run_dir, effective_resample_rule, effective_max_lag,
                 primary_output=primary_output,
-                selection_window=standardization.get("scenario", {}).get("selection_window_samples", 30),
-                selection_step=standardization.get("scenario", {}).get("selection_step_samples", 15),
+                selection_window=selection_policy.get("window_samples", standardization.get("scenario", {}).get("selection_window_samples", 30)),
+                selection_step=selection_policy.get("step_samples", standardization.get("scenario", {}).get("selection_step_samples", 15)),
+                selection_policy=selection_policy,
             )
+            cleaning["algorithm_profile"] = {
+                "version": algorithm_profile.get("version"),
+                "validation_status": algorithm_profile.get("validation_status"),
+                "selection": selection_policy,
+            }
             snapshot["results"]["cleaning"] = cleaning
             snapshot["artifacts"].update(cleaning["artifacts"])
             _set_stage(snapshot, run_dir, current_stage, "completed", f"质量评分 {cleaning['overall_score']}")
+            if finish_if_cancelled(current_stage):
+                return snapshot
             if finish_requested_stage("cleaning"):
                 return snapshot
 
@@ -1131,6 +1180,8 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 "segments": cleaning["segments_preview"],
             }
             _set_stage(snapshot, run_dir, current_stage, "completed", f"建模数据 {len(modeling_data)} 行")
+            if finish_if_cancelled(current_stage):
+                return snapshot
             if finish_requested_stage("selection"):
                 return snapshot
 
@@ -1143,10 +1194,12 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             _set_stage(snapshot, run_dir, current_stage, "completed", "已冻结分区，辨识随候选搜索执行")
             if stop_after == "modeling":
                 modeling = _model(modeling_data, standardization["dictionary"], run_dir, effective_max_lag,
-                                  primary_output=primary_output)
+                                  primary_output=primary_output, modeling_policy=modeling_policy)
                 snapshot["results"]["modeling"] = modeling
                 snapshot["artifacts"].update(modeling["artifacts"])
                 _set_stage(snapshot, run_dir, current_stage, "completed", "系统辨识完成；未执行候选寻优")
+                if finish_if_cancelled(current_stage):
+                    return snapshot
                 if finish_requested_stage("modeling"):
                     return snapshot
 
@@ -1164,6 +1217,11 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 effective_max_lag,
                 primary_output=primary_output,
                 model_outputs=model_outputs,
+                bounds=optimization_policy.get("bounds"),
+                constraints=optimization_policy.get("constraints"),
+                search_space=optimization_policy.get("search_space"),
+                optimization_policy=optimization_policy,
+                modeling_policy=modeling_policy,
             )
             cleaning["modeling_row_count"] = optimization["best_training_rows"]
             cleaning["artifacts"]["modeling_csv"] = modeling["modeling_path"]
@@ -1180,6 +1238,8 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 "completed",
                 f"第 {optimization['best_round']} 轮最优，综合得分 {optimization['best_score']}",
             )
+            if finish_if_cancelled(current_stage):
+                return snapshot
             if finish_requested_stage("optimization"):
                 return snapshot
 
@@ -1189,6 +1249,8 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["results"]["review"] = review
             snapshot["artifacts"]["review_json"] = "06_review/agent_review.json"
             _set_stage(snapshot, run_dir, current_stage, "completed", review["conclusion"])
+            if finish_if_cancelled(current_stage):
+                return snapshot
             if finish_requested_stage("review"):
                 return snapshot
 
@@ -1287,7 +1349,7 @@ def resolve_artifact(run_id: str, artifact_key: str) -> tuple[Path, str]:
     return path, path.name
 
 
-def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None) -> dict[str, Any]:
+def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None, new_run_id: str | None = None, cancel_check: Callable[[], bool] | None = None) -> dict[str, Any]:
     previous = get_run(run_id)
     if not previous:
         raise PipelineError("运行任务不存在。")
@@ -1306,4 +1368,6 @@ def rerun_pipeline(run_id: str, resample_rule: str = "10s", max_lag: int = 60, s
         max_lag=max_lag,
         stop_after=stop_after,
         overrides=overrides if overrides is not None else previous.get("mapping_overrides", {}),
+        run_id=new_run_id,
+        cancel_check=cancel_check,
     )
