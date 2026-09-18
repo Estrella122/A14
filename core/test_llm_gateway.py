@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
-from core.services.llm_gateway import LLMGatewayError, generate_grounded_answer, provider_catalog, resolve_llm_config
+from core.services.llm_gateway import LLMGatewayError, generate_grounded_answer, provider_catalog, resolve_llm_config, test_llm_connection
 from core.agent_api import _safe_llm_config
 from core.services.agent_chat import chat
 
@@ -25,6 +25,22 @@ class _StreamResponse:
 
     def __iter__(self):
         return iter(self._lines)
+
+
+class _JsonResponse:
+    headers = {"content-type": "application/json"}
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")
 
 
 class LLMGatewayTests(SimpleTestCase):
@@ -60,6 +76,32 @@ class LLMGatewayTests(SimpleTestCase):
     def test_browser_payload_can_never_persist_an_api_key(self):
         safe = _safe_llm_config({"provider": "local", "model": "model", "base_url": "http://localhost:1234/v1", "api_key": "browser-secret"})
         self.assertNotIn("api_key", safe)
+
+    @override_settings(DEEPSEEK_API_KEY="")
+    def test_user_key_is_tested_then_only_an_encrypted_credential_is_queued(self):
+        with patch("core.services.llm_gateway.urlopen", return_value=_JsonResponse({"choices": [{"message": {"content": "OK"}}]})):
+            result = test_llm_connection({
+                "provider": "deepseek", "model": "deepseek-flash",
+                "base_url": "https://api.deepseek.com", "api_key": "browser-secret",
+            })
+        self.assertTrue(result["connected"])
+        self.assertNotIn("browser-secret", json.dumps(result))
+        safe = _safe_llm_config({
+            "provider": "deepseek", "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com", "credential": result["credential"],
+        })
+        self.assertNotIn("browser-secret", json.dumps(safe))
+        self.assertEqual(resolve_llm_config(safe).api_key, "browser-secret")
+
+    @override_settings(DEEPSEEK_API_KEY="")
+    def test_llm_test_api_never_echoes_plaintext_key(self):
+        with patch("core.services.llm_gateway.urlopen", return_value=_JsonResponse({"choices": [{"message": {"content": "OK"}}]})):
+            response = self.client.post('/api/agent/llm/test/', data=json.dumps({
+                "provider": "deepseek", "model": "deepseek-flash",
+                "base_url": "https://api.deepseek.com", "api_key": "api-test-secret",
+            }), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("api-test-secret", response.content.decode("utf-8"))
 
     def test_agent_keeps_evidence_answer_as_fallback_when_llm_is_used(self):
         snapshot = {

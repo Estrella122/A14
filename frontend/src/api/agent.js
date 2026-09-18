@@ -21,6 +21,11 @@ export async function getAgentLLMProviders({ signal } = {}) {
   return payload.data
 }
 
+export async function testAgentLLMConnection(config, { signal } = {}) {
+  const payload = await apiRequest('/agent/llm/test/', { method: 'POST', body: config, signal })
+  return payload.data
+}
+
 export async function getAgentSkillEvents(skillRunId, after = 0, { signal } = {}) {
   const payload = await apiRequest(`/agent/skill-runs/${encodeURIComponent(skillRunId)}/events/?after=${encodeURIComponent(after)}`, { signal })
   return payload.data

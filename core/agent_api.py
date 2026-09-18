@@ -10,7 +10,7 @@ from .services.agent_chat import chat
 from .services.expert_qa import coverage_summary
 from .services.pipeline import PipelineError, get_run
 from .services.jobs import enqueue, start_local_worker
-from .services.llm_gateway import LLMGatewayError, provider_catalog, resolve_llm_config
+from .services.llm_gateway import LLMGatewayError, provider_catalog, resolve_llm_config, test_llm_connection
 from .skills import execute_skill_plan, get_skill_run, list_skills, plan_skills
 from .skills.runtime_events import RuntimeEventStore, get_runtime_event_store
 
@@ -37,7 +37,7 @@ def agent_chat(request):
 
 def _safe_llm_config(value):
     source = value if isinstance(value, dict) else {}
-    safe = {key: source.get(key) for key in ("provider", "model", "base_url") if source.get(key) is not None}
+    safe = {key: source.get(key) for key in ("provider", "model", "base_url", "credential") if source.get(key) is not None}
     resolve_llm_config(safe)
     return safe
 
@@ -45,6 +45,21 @@ def _safe_llm_config(value):
 @require_GET
 def agent_llm_providers(request):
     return JsonResponse({"ok": True, "data": provider_catalog()}, json_dumps_params={"ensure_ascii": False})
+
+
+@require_POST
+def agent_llm_test(request):
+    """Verify a user-supplied endpoint and return an encrypted short-lived credential.
+
+    The plaintext API key exists only for this request. It is neither returned to
+    the browser nor written to the runtime job table.
+    """
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+        result = test_llm_connection(payload)
+        return JsonResponse({"ok": True, "data": result}, json_dumps_params={"ensure_ascii": False})
+    except (ValueError, LLMGatewayError, json.JSONDecodeError) as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
 
 
 @require_POST

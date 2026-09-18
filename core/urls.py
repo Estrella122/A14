@@ -18,6 +18,7 @@ urlpatterns = [
     path('agent/chat/', agent_api.agent_chat, name='agent-chat'),
     path('agent/chat/live/', agent_api.agent_live_chat, name='agent-live-chat'),
     path('agent/llm/providers/', agent_api.agent_llm_providers, name='agent-llm-providers'),
+    path('agent/llm/test/', agent_api.agent_llm_test, name='agent-llm-test'),
     path('agent/skills/', agent_api.agent_skills, name='agent-skills'),
     path('agent/skills/<str:skill_id>/', agent_api.agent_skill_detail, name='agent-skill-detail'),
     path('agent/plans/', agent_api.agent_plan, name='agent-plan'),

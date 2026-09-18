@@ -12,7 +12,7 @@ import AgentExecutionTimeline from '../components/AgentExecutionTimeline.vue'
 import ChatOptimizationSummary from '../components/ChatOptimizationSummary.vue'
 import ChatCharts from '../components/ChatCharts.vue'
 import PipelineChatProgress from '../components/PipelineChatProgress.vue'
-import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents } from '../api/agent'
+import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents, testAgentLLMConnection } from '../api/agent'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
@@ -144,6 +144,12 @@ const llmCatalog = ref(null)
 const llmProvider = ref('evidence')
 const llmModel = ref('')
 const localLLMBaseUrl = ref('http://127.0.0.1:11434/v1')
+const llmSettingsOpen = ref(false)
+const llmApiKey = ref('')
+const llmCredential = ref('')
+const llmTestState = ref('idle')
+const llmTestMessage = ref('')
+const llmTestLatency = ref(null)
 const messages = ref(savedChat?.messages?.length ? savedChat.messages : [welcomeMessage])
 const liveLogs = ref(savedChat?.liveLogs ?? [])
 const logsNewestFirst = ref(true)
@@ -230,16 +236,50 @@ function llmRequestConfig() {
   return {
     provider: llmProvider.value,
     model: llmModel.value || activeLLMProvider.value?.model,
-    ...(llmProvider.value === 'local' ? { base_url: localLLMBaseUrl.value } : {}),
+    ...(llmProvider.value !== 'evidence' ? { base_url: localLLMBaseUrl.value } : {}),
+    ...(llmCredential.value ? { credential: llmCredential.value } : {}),
   }
 }
 
 watch([llmProvider, llmModel, localLLMBaseUrl], () => {
-  try { window.localStorage.setItem('processpilot-llm-preference', JSON.stringify(llmRequestConfig())) } catch { /* preference persistence is optional */ }
+  try { window.localStorage.setItem('processpilot-llm-preference', JSON.stringify({ provider: llmProvider.value, model: llmModel.value, base_url: localLLMBaseUrl.value })) } catch { /* preference persistence is optional */ }
 })
 
 function handleLLMProviderChange() {
   llmModel.value = activeLLMProvider.value?.model || ''
+  localLLMBaseUrl.value = activeLLMProvider.value?.base_url || (llmProvider.value === 'deepseek' ? 'https://api.deepseek.com' : 'http://127.0.0.1:11434/v1')
+  invalidateLLMConnection()
+}
+
+function invalidateLLMConnection() {
+  llmCredential.value = ''
+  llmTestState.value = 'idle'
+  llmTestMessage.value = ''
+  llmTestLatency.value = null
+}
+
+async function testLLMSettings() {
+  if (llmProvider.value === 'evidence') return
+  llmTestState.value = 'testing'
+  llmTestMessage.value = '正在向模型发送最小连接测试…'
+  try {
+    const result = await testAgentLLMConnection({
+      provider: llmProvider.value,
+      model: llmModel.value,
+      base_url: localLLMBaseUrl.value,
+      api_key: llmApiKey.value,
+    })
+    llmCredential.value = result.credential
+    llmApiKey.value = ''
+    llmTestState.value = 'success'
+    llmTestLatency.value = result.latency_ms
+    llmTestMessage.value = `连接成功 · ${result.model} · ${result.latency_ms} ms`
+    emit('notify', { tone: 'success', title: '模型连接成功', message: `${result.label} · ${result.model}` })
+  } catch (error) {
+    llmCredential.value = ''
+    llmTestState.value = 'error'
+    llmTestMessage.value = error.message
+  }
 }
 
 watch([messages, responseState, runtimeHistory, liveLogs, prompt, conversationId, noDataContext], () => {
@@ -477,6 +517,11 @@ async function runWorkflow() {
     emit('notify', { tone: 'warning', title: '请先关联数据', message: '当前聊天服务需要数据上下文。请上传 CSV 后提问，以免引用其他任务的数据。' })
     return
   }
+  if (llmProvider.value !== 'evidence' && !activeLLMProvider.value?.configured && !llmCredential.value) {
+    llmSettingsOpen.value = true
+    emit('notify', { tone: 'warning', title: '请先连接模型', message: '填写 API Key 后点击“测试并应用”，连接成功后即可发送。' })
+    return
+  }
   const userText = prompt.value.trim()
   messages.value.push({ id: Date.now(), role: 'user', text: userText, skillPreference: skillCatalog.value?.skills?.find((item) => item.id === preferredSkill.value)?.name, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
   prompt.value = ''
@@ -586,12 +631,12 @@ onMounted(async () => {
     }),
     getAgentLLMProviders().then((result) => {
       llmCatalog.value = result
-      const candidate = result.providers?.find((item) => item.id === savedLLM?.provider && item.configured)
+      const candidate = result.providers?.find((item) => item.id === savedLLM?.provider && (item.configured || item.accepts_user_key))
         ?? result.providers?.find((item) => item.id === result.default_provider && item.configured)
         ?? result.providers?.[0]
       llmProvider.value = candidate?.id || 'evidence'
       llmModel.value = savedLLM?.model || candidate?.model || ''
-      localLLMBaseUrl.value = savedLLM?.base_url || result.providers?.find((item) => item.id === 'local')?.base_url || localLLMBaseUrl.value
+      localLLMBaseUrl.value = savedLLM?.base_url || candidate?.base_url || localLLMBaseUrl.value
     }).catch(() => { llmProvider.value = 'evidence' }),
   ])
   if (activeLiveRun.value?.skill_run_id && activeLiveRun.value.status === 'running') {
@@ -737,11 +782,11 @@ async function switchRun(event) {
             <div class="composer-model-controls" aria-label="回答模型设置">
               <label class="composer-model-pill">
                 <select v-model="llmProvider" aria-label="回答模型" @change="handleLLMProviderChange">
-                  <option v-for="provider in llmCatalog?.providers ?? []" :key="provider.id" :value="provider.id" :disabled="!provider.configured">{{ provider.label }}{{ provider.configured ? '' : '（未配置）' }}</option>
+                  <option v-for="provider in llmCatalog?.providers ?? []" :key="provider.id" :value="provider.id">{{ provider.label }}{{ provider.id === 'deepseek' && !provider.configured ? '（需填写 Key）' : '' }}</option>
                 </select>
               </label>
-              <input v-if="llmProvider !== 'evidence'" v-model.trim="llmModel" class="composer-model-input" maxlength="120" aria-label="模型名称" autocomplete="off" :placeholder="activeLLMProvider?.model || '模型名称'" />
-              <input v-if="llmProvider === 'local'" v-model.trim="localLLMBaseUrl" class="composer-model-input endpoint" inputmode="url" aria-label="本地模型接口" autocomplete="off" placeholder="http://127.0.0.1:11434/v1" />
+              <span v-if="llmProvider !== 'evidence'" class="composer-model-summary" :title="localLLMBaseUrl"><i :class="`is-${llmTestState}`"></i>{{ llmModel || activeLLMProvider?.model }}</span>
+              <button v-if="llmProvider !== 'evidence'" class="model-settings-button" type="button" :aria-label="`设置 ${activeLLMProvider?.label || '模型'}`" @click="llmSettingsOpen = true"><AppIcon name="model" :size="14" />设置</button>
             </div>
             <button class="send-button" type="button" :disabled="isRunning || !prompt.trim()" @click="runWorkflow">
               <AppIcon :name="isRunning ? 'loop' : 'arrow'" :class="{ spinning: isRunning }" />
@@ -866,6 +911,32 @@ async function switchRun(event) {
         </aside>
       </div>
     </section>
+
+    <Teleport to="body">
+      <Transition name="model-settings-fade">
+        <div v-if="llmSettingsOpen" class="model-settings-overlay" role="presentation" @mousedown.self="llmSettingsOpen = false">
+          <section class="model-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="model-settings-title">
+            <header>
+              <div><span>LLM CONNECTION</span><h2 id="model-settings-title">Agent 模型设置</h2><p>用户版与工作人员版共用此设置；API Key 仅保留在当前页面内存中。</p></div>
+              <button type="button" aria-label="关闭模型设置" @click="llmSettingsOpen = false">×</button>
+            </header>
+            <div class="model-settings-grid">
+              <label><span>服务商</span><select v-model="llmProvider" @change="handleLLMProviderChange"><option value="deepseek">DeepSeek API</option><option value="local">本地 OpenAI 兼容模型</option><option value="evidence">Evidence Agent（不调用大模型）</option></select></label>
+              <label v-if="llmProvider !== 'evidence'"><span>具体模型</span><input v-model.trim="llmModel" maxlength="120" autocomplete="off" list="deepseek-model-options" placeholder="例如 deepseek-flash" @input="invalidateLLMConnection" /><datalist id="deepseek-model-options"><option v-for="model in activeLLMProvider?.models ?? []" :key="model" :value="model" /></datalist></label>
+              <label v-if="llmProvider !== 'evidence'" class="wide"><span>API 地址</span><input v-model.trim="localLLMBaseUrl" inputmode="url" autocomplete="off" :placeholder="llmProvider === 'deepseek' ? 'https://api.deepseek.com' : 'http://127.0.0.1:11434/v1'" @input="invalidateLLMConnection" /></label>
+              <label v-if="llmProvider !== 'evidence'" class="wide"><span>API Key <small>{{ activeLLMProvider?.configured ? '可留空使用服务端配置' : '仅本次页面会话使用' }}</small></span><input v-model="llmApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-••••••••••••" @input="invalidateLLMConnection" /></label>
+            </div>
+            <div class="credential-note"><AppIcon name="shield" :size="16" /><p><strong>安全处理</strong><span>Key 不写入 Git、localStorage 或聊天记录；测试成功后只传递加密且 8 小时失效的短时凭据。</span></p></div>
+            <div v-if="llmTestMessage" class="model-test-result" :class="`is-${llmTestState}`" role="status"><AppIcon :name="llmTestState === 'success' ? 'check' : llmTestState === 'error' ? 'alert' : 'loop'" :class="{ spinning: llmTestState === 'testing' }" :size="16" /><span>{{ llmTestMessage }}</span></div>
+            <footer>
+              <button class="btn btn-secondary" type="button" @click="llmSettingsOpen = false">取消</button>
+              <button v-if="llmProvider !== 'evidence'" class="btn btn-primary" type="button" :disabled="llmTestState === 'testing' || !llmModel || !localLLMBaseUrl" @click="testLLMSettings"><AppIcon :name="llmTestState === 'testing' ? 'loop' : 'play'" :class="{ spinning: llmTestState === 'testing' }" />{{ llmTestState === 'testing' ? '正在测试' : '测试并应用' }}</button>
+              <button v-else class="btn btn-primary" type="button" @click="llmSettingsOpen = false">应用 Evidence Agent</button>
+            </footer>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -938,6 +1009,34 @@ async function switchRun(event) {
 .agent-view .message-bubble strong,
 .agent-view .message-bubble code,
 .agent-view .message-bubble span { overflow-wrap: anywhere; }
+.composer-model-summary { display:inline-flex; align-items:center; gap:6px; min-width:0; max-width:180px; padding:6px 9px; color:#53657c; font-size:9px; font-family:"SFMono-Regular",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.composer-model-summary i { flex:0 0 6px; width:6px; height:6px; border-radius:50%; background:#94a3b8; }
+.composer-model-summary i.is-success { background:#10b981; box-shadow:0 0 0 3px #10b98118; }
+.composer-model-summary i.is-error { background:#ef4444; }
+.model-settings-button { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:5px 9px; border:1px solid #d7e0ec; border-radius:8px; color:#425873; background:#fff; font-size:9px; font-weight:700; cursor:pointer; }
+.model-settings-button:hover { border-color:#93b4e0; color:#2454b8; background:#f7faff; }
+.model-settings-overlay { position:fixed; inset:0; z-index:120; display:grid; place-items:center; padding:20px; background:#0f1f35a6; backdrop-filter:blur(8px); }
+.model-settings-dialog { width:min(620px,100%); overflow:hidden; border:1px solid #d7e1ef; border-radius:18px; background:#fff; box-shadow:0 28px 80px #0712214d; }
+.model-settings-dialog header { display:flex; justify-content:space-between; gap:20px; padding:24px 26px 19px; border-bottom:1px solid #edf1f6; background:linear-gradient(145deg,#f8fbff,#fff); }
+.model-settings-dialog header span { color:#2563eb; font-size:9px; font-weight:800; letter-spacing:.15em; }
+.model-settings-dialog h2 { margin:5px 0 4px; color:#14233a; font-size:21px; }
+.model-settings-dialog header p { margin:0; color:#65758a; font-size:11px; line-height:1.6; }
+.model-settings-dialog header>button { width:32px; height:32px; border:1px solid #dce4ef; border-radius:9px; color:#64748b; background:#fff; font-size:19px; cursor:pointer; }
+.model-settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; padding:22px 26px 10px; }
+.model-settings-grid label { display:grid; gap:7px; color:#334155; font-size:11px; font-weight:700; }
+.model-settings-grid label.wide { grid-column:1/-1; }
+.model-settings-grid label span { display:flex; justify-content:space-between; gap:8px; }
+.model-settings-grid label small { color:#8090a4; font-size:9px; font-weight:500; }
+.model-settings-grid input,.model-settings-grid select { width:100%; min-height:40px; padding:9px 11px; border:1px solid #cfdae8; border-radius:9px; outline:0; color:#1e293b; background:#fff; font-size:11px; }
+.model-settings-grid input:focus,.model-settings-grid select:focus { border-color:#6795e8; box-shadow:0 0 0 3px #2563eb15; }
+.credential-note { display:flex; gap:10px; margin:10px 26px 0; padding:12px 14px; border:1px solid #dbe9e2; border-radius:10px; color:#267052; background:#f4fbf7; }
+.credential-note p { display:grid; gap:2px; margin:0; }
+.credential-note strong { font-size:10px; }.credential-note span { color:#587064; font-size:9px; line-height:1.55; }
+.model-test-result { display:flex; align-items:flex-start; gap:8px; margin:11px 26px 0; padding:10px 12px; border-radius:9px; color:#42546b; background:#f3f6fa; font-size:10px; line-height:1.5; }
+.model-test-result.is-success { color:#176246; background:#ecf9f2; }.model-test-result.is-error { color:#a12d35; background:#fff1f2; }
+.model-settings-dialog footer { display:flex; justify-content:flex-end; gap:9px; padding:18px 26px 23px; }
+.model-settings-fade-enter-active,.model-settings-fade-leave-active { transition:opacity .18s ease; }.model-settings-fade-enter-from,.model-settings-fade-leave-to { opacity:0; }
+@media(max-width:620px) { .model-settings-grid { grid-template-columns:1fr; }.model-settings-grid label.wide { grid-column:auto; }.model-settings-dialog { max-height:calc(100dvh - 24px); overflow:auto; }.composer-model-summary { display:none; } }
 .agent-live-stack { display: grid; grid-template-rows: auto minmax(0, 1fr); height: calc(100vh - 150px); min-height: 0; overflow: hidden; padding-right: 2px; }
 .agent-live-modules { --live-module-height: 255px; display: grid; grid-auto-rows: var(--live-module-height); align-content: start; gap: 14px; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-right: 2px; scrollbar-width: thin; }
 .current-run-panel { display: grid; gap: 8px; }

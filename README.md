@@ -32,7 +32,9 @@ DEEPSEEK_API_KEY=your-server-side-key
 DEEPSEEK_MODEL=deepseek-flash
 ```
 
-Agent 中枢允许用户选择 Evidence Agent、DeepSeek 或本地 OpenAI 兼容模型。本地模式默认连接 `http://127.0.0.1:11434/v1`，可在页面中修改模型名与回环地址，适用于 Ollama、LM Studio 等服务。浏览器不会读取或保存服务端密钥。运行时先完成场景识别、Capability/Skill 解析和 Executor 执行，再把有限的结构化证据交给模型生成回答；界面展示的是可审计判断摘要，不是模型隐藏思维链。
+Agent 中枢允许用户选择 Evidence Agent、DeepSeek 或本地 OpenAI 兼容模型。用户版 `/user/` 与工作人员版 `/agent-review/` 共用模型设置：选择 DeepSeek 后可填写自己的 API Key、官方 API 地址和具体模型，并通过“测试并应用”发起一次最小真实请求。Key 不写入 Git、`localStorage` 或聊天记录；测试成功后只在当前页面内存中保留 8 小时有效的加密短时凭据。服务端已配置 `DEEPSEEK_API_KEY` 时，页面 Key 可留空。
+
+本地模式默认连接 `http://127.0.0.1:11434/v1`，可在页面中修改模型名与回环地址，适用于 Ollama、LM Studio 等服务。浏览器不会读取或保存服务端密钥。运行时先完成场景识别、Capability/Skill 解析和 Executor 执行，再把有限的结构化证据交给模型生成回答；界面展示的是可审计判断摘要，不是模型隐藏思维链。
 
 上传数据成功且无需人工映射复核时，前端会按后端识别出的 `scenario_id` 切换项目上下文并打开对应三维场景。后续仓库组织者提供完整算法时，应继续通过现有 Skill catalog、Executor 和 artifact registry 注册；未安装模块保持 `waiting`/`unavailable`，不得用模拟结果冒充执行成功。
 

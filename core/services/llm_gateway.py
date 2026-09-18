@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import ipaddress
+import base64
+import hashlib
 import json
+import os
 import re
 import ssl
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -11,6 +15,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 import certifi
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from django.conf import settings
 
 
@@ -25,6 +31,48 @@ class ResolvedLLMConfig:
     model: str
     base_url: str
     api_key: str
+
+
+_CREDENTIAL_AAD = b"processpilot-llm-credential-v1"
+
+
+def _credential_cipher() -> AESGCM:
+    key = hashlib.sha256(f"{settings.SECRET_KEY}:processpilot:llm".encode("utf-8")).digest()
+    return AESGCM(key)
+
+
+def issue_llm_credential(config: ResolvedLLMConfig, *, ttl_seconds: int = 8 * 60 * 60) -> str:
+    """Return an authenticated, expiring token suitable for a queued worker.
+
+    The browser keeps this token in memory only. The runtime queue therefore
+    never stores a user's API key in plaintext and no schema migration is needed.
+    """
+    payload = json.dumps({
+        "provider": config.provider,
+        "model": config.model,
+        "base_url": config.base_url,
+        "api_key": config.api_key,
+        "expires_at": int(time.time()) + ttl_seconds,
+    }, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    nonce = os.urandom(12)
+    encrypted = _credential_cipher().encrypt(nonce, payload, _CREDENTIAL_AAD)
+    return base64.urlsafe_b64encode(nonce + encrypted).decode("ascii").rstrip("=")
+
+
+def _read_llm_credential(token: Any) -> ResolvedLLMConfig:
+    try:
+        raw_token = str(token or "").strip()
+        if not raw_token or len(raw_token) > 8192:
+            raise ValueError
+        raw = base64.urlsafe_b64decode(raw_token + "=" * (-len(raw_token) % 4))
+        payload = json.loads(_credential_cipher().decrypt(raw[:12], raw[12:], _CREDENTIAL_AAD).decode("utf-8"))
+        if int(payload.get("expires_at", 0)) < int(time.time()):
+            raise LLMGatewayError("模型连接凭据已过期，请重新测试连接。")
+        return _resolve_inline_config(payload)
+    except LLMGatewayError:
+        raise
+    except (ValueError, TypeError, KeyError, json.JSONDecodeError, InvalidTag) as exc:
+        raise LLMGatewayError("模型连接凭据无效，请重新测试连接。") from exc
 
 
 def _clean_model(value: Any, fallback: str) -> str:
@@ -50,8 +98,44 @@ def _local_base_url(value: Any) -> str:
     return base_url
 
 
+def _deepseek_base_url(value: Any) -> str:
+    base_url = str(value or getattr(settings, "DEEPSEEK_API_BASE_URL", "https://api.deepseek.com")).strip().rstrip("/")
+    parsed = urlparse(base_url)
+    if parsed.scheme != "https" or (parsed.hostname or "").lower() != "api.deepseek.com" or parsed.username or parsed.password:
+        raise LLMGatewayError("DeepSeek API 地址仅允许 https://api.deepseek.com 官方接口。")
+    return base_url
+
+
+def _resolve_inline_config(config: dict[str, Any]) -> ResolvedLLMConfig:
+    provider = str(config.get("provider") or "").strip().lower()
+    if provider == "deepseek":
+        api_key = str(config.get("api_key") or "").strip()
+        if not api_key:
+            raise LLMGatewayError("请填写 DeepSeek API Key。")
+        return ResolvedLLMConfig(
+            provider="deepseek", label="DeepSeek API",
+            model=_clean_model(config.get("model"), getattr(settings, "DEEPSEEK_MODEL", "deepseek-flash")),
+            base_url=_deepseek_base_url(config.get("base_url")), api_key=api_key,
+        )
+    if provider == "local":
+        return ResolvedLLMConfig(
+            provider="local", label="本地 OpenAI 兼容模型",
+            model=_clean_model(config.get("model"), getattr(settings, "PROCESSPILOT_LOCAL_LLM_MODEL", "qwen2.5:7b")),
+            base_url=_local_base_url(config.get("base_url")), api_key=str(config.get("api_key") or "").strip(),
+        )
+    raise LLMGatewayError("连接测试仅支持 DeepSeek 或本地 OpenAI 兼容模型。")
+
+
 def resolve_llm_config(config: dict[str, Any] | None) -> ResolvedLLMConfig | None:
     config = config or {}
+    if config.get("credential"):
+        resolved = _read_llm_credential(config["credential"])
+        requested_provider = str(config.get("provider") or resolved.provider).strip().lower()
+        requested_model = _clean_model(config.get("model"), resolved.model)
+        requested_base = str(config.get("base_url") or resolved.base_url).rstrip("/")
+        if (requested_provider, requested_model, requested_base) != (resolved.provider, resolved.model, resolved.base_url):
+            raise LLMGatewayError("模型设置已变更，请重新测试连接。")
+        return resolved
     provider = str(config.get("provider") or "evidence").strip().lower()
     if provider == "evidence":
         return None
@@ -63,7 +147,7 @@ def resolve_llm_config(config: dict[str, Any] | None) -> ResolvedLLMConfig | Non
             provider="deepseek",
             label="DeepSeek API",
             model=_clean_model(config.get("model"), getattr(settings, "DEEPSEEK_MODEL", "deepseek-flash")),
-            base_url=str(getattr(settings, "DEEPSEEK_API_BASE_URL", "https://api.deepseek.com")).rstrip("/"),
+            base_url=_deepseek_base_url(None),
             api_key=api_key,
         )
     if provider == "local":
@@ -82,14 +166,54 @@ def provider_catalog() -> dict[str, Any]:
         "default_provider": "deepseek" if getattr(settings, "DEEPSEEK_API_KEY", "") else "evidence",
         "providers": [
             {"id": "evidence", "label": "Evidence Agent", "configured": True, "model": "deterministic-evidence-v1", "description": "不调用外部模型，完全按任务证据生成。"},
-            {"id": "deepseek", "label": "DeepSeek API", "configured": bool(getattr(settings, "DEEPSEEK_API_KEY", "")), "model": getattr(settings, "DEEPSEEK_MODEL", "deepseek-flash"), "description": "服务端密钥，OpenAI 兼容流式接口。"},
-            {"id": "local", "label": "本地 LLM", "configured": True, "model": getattr(settings, "PROCESSPILOT_LOCAL_LLM_MODEL", "qwen2.5:7b"), "base_url": getattr(settings, "PROCESSPILOT_LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"), "description": "连接 Ollama、LM Studio 等本机 OpenAI 兼容接口。"},
+            {"id": "deepseek", "label": "DeepSeek API", "configured": bool(getattr(settings, "DEEPSEEK_API_KEY", "")), "accepts_user_key": True, "model": getattr(settings, "DEEPSEEK_MODEL", "deepseek-flash"), "base_url": getattr(settings, "DEEPSEEK_API_BASE_URL", "https://api.deepseek.com"), "models": ["deepseek-flash", "deepseek-v4-pro"], "description": "可使用服务端密钥，或仅在当前页面会话中输入自己的 Key。"},
+            {"id": "local", "label": "本地 LLM", "configured": True, "accepts_user_key": True, "model": getattr(settings, "PROCESSPILOT_LOCAL_LLM_MODEL", "qwen2.5:7b"), "base_url": getattr(settings, "PROCESSPILOT_LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"), "description": "连接 Ollama、LM Studio 等本机 OpenAI 兼容接口。"},
         ],
     }
 
 
 def _chat_endpoint(base_url: str) -> str:
     return base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+
+
+def test_llm_connection(config: dict[str, Any]) -> dict[str, Any]:
+    provider = str(config.get("provider") or "").strip().lower()
+    if provider == "deepseek" and not str(config.get("api_key") or "").strip():
+        resolved = resolve_llm_config({"provider": "deepseek", "model": config.get("model"), "base_url": config.get("base_url")})
+        if resolved is None:  # pragma: no cover - guarded by provider above
+            raise LLMGatewayError("DeepSeek 尚未配置。")
+    else:
+        resolved = _resolve_inline_config(config)
+    request_body = {
+        "model": resolved.model,
+        "messages": [{"role": "user", "content": "连接测试：只回复 OK"}],
+        "temperature": 0,
+        "max_tokens": 8,
+        "stream": False,
+    }
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if resolved.api_key:
+        headers["Authorization"] = f"Bearer {resolved.api_key}"
+    request = Request(_chat_endpoint(resolved.base_url), data=json.dumps(request_body).encode("utf-8"), headers=headers, method="POST")
+    started = time.monotonic()
+    try:
+        tls_context = ssl.create_default_context(cafile=certifi.where())
+        with urlopen(request, timeout=min(30, int(getattr(settings, "PROCESSPILOT_LLM_TIMEOUT_SECONDS", 90))), context=tls_context) as remote:
+            payload = json.loads(remote.read().decode("utf-8"))
+        if not payload.get("choices"):
+            raise LLMGatewayError(f"{resolved.label} 已响应，但未返回有效的模型结果。")
+    except HTTPError as exc:
+        detail = exc.read(500).decode("utf-8", errors="replace")
+        raise LLMGatewayError(f"{resolved.label} 连接测试失败（HTTP {exc.code}）：{detail[:180]}") from exc
+    except (URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        raise LLMGatewayError(f"无法连接 {resolved.label}：{exc}") from exc
+    return {
+        "connected": True, "provider": resolved.provider, "label": resolved.label,
+        "model": resolved.model, "base_url": resolved.base_url,
+        "latency_ms": max(1, round((time.monotonic() - started) * 1000)),
+        "credential": issue_llm_credential(resolved),
+        "expires_in_seconds": 8 * 60 * 60,
+    }
 
 
 def _plain_text_answer(value: str) -> str:
