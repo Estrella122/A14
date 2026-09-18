@@ -205,6 +205,8 @@
       "strict_score": 75,
       "usable_score": 55,
       "snr_db": 8,
+      "allow_usable_fallback": true,
+      "acceptance_mode": "small_sample_adaptive",
       "min_valid_samples": 30,
       "score_weights": {"input_change": 0.30, "output_response": 0.25, "completeness": 0.20, "anomaly": 0.10, "smoothness": 0.15},
       "score_scales": {"input_change": 1200, "output_response": 1500}

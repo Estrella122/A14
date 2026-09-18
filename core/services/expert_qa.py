@@ -10,26 +10,26 @@ from core.skills.answer_intent import resolve_answer_intent
 
 EXPERT_TOPICS = [
     {"key": "sampling", "name": "采样与混叠", "terms": ("采样周期", "采样频率", "奈奎斯特频率", "混叠", "aliasing")},
-    {"key": "snr", "name": "信噪比与动态段", "terms": ("信噪比", "噪声比", "snr", "噪声水平")},
+    {"key": "snr", "name": "信噪比与动态段", "terms": ("信噪比", "噪声比", "snr", "噪声水平", "动态段", "动态优选")},
     {"key": "excitation", "name": "持续激励与可辨识性", "terms": ("持续激励", "激励充分", "可辨识", "阶跃激励", "输入激励")},
     {"key": "degraded_modeling", "name": "候选段降级建模", "terms": ("候选段降级", "降级建模", "严格优质动态段", "0个严格", "参数可信度", "候选模型")},
-    {"key": "leakage", "name": "时序数据泄漏", "terms": ("数据泄漏", "未来信息", "时间穿越", "泄露")},
+    {"key": "leakage", "name": "时序数据泄漏", "terms": ("数据泄漏", "未来信息", "未来值", "时间穿越", "泄露")},
     {"key": "residual", "name": "残差诊断", "terms": ("残差", "白噪声", "自相关", "独立性", "正态性")},
-    {"key": "stability", "name": "模型稳定性", "terms": ("稳定性", "极点", "单位圆", "发散")},
+    {"key": "stability", "name": "模型稳定性", "terms": ("稳定性", "极点", "单位圆", "发散", "自由仿真", "多步预测")},
     {"key": "frequency", "name": "频率与阶跃特性", "terms": ("频率特性", "频响", "伯德", "bode", "奈奎斯特", "nyquist", "阶跃响应", "超调量", "调节时间")},
     {"key": "lag", "name": "时滞估计与物理解释", "terms": ("时滞", "纯滞后", "互相关估计", "负时滞", "延迟")},
     {"key": "collinearity", "name": "共线性与变量保留", "terms": ("共线", "vif", "条件数", "冗余变量", "保留变量")},
-    {"key": "causality", "name": "相关性与因果边界", "terms": ("因果", "相关不等于因果", "外生变量")},
+    {"key": "causality", "name": "相关性与因果边界", "terms": ("因果", "相关不等于因果", "外生变量", "动态关系")},
     {"key": "generalization", "name": "过拟合与泛化", "terms": ("过拟合", "泛化", "交叉验证", "验证集", "训练集", "测试集", "训练测试", "训练/测试", "验证基线", "持续值基线", "基线对比")},
-    {"key": "order", "name": "模型结构与阶次", "terms": ("阶次", "aic", "bic", "参数量", "结构选择")},
+    {"key": "order", "name": "模型结构与阶次", "terms": ("阶次", "aic", "bic", "参数量", "结构选择", "模型族", "arx", "自回归模型", "外部输入", "拟合输入")},
     {"key": "optimization", "name": "寻优目标与候选比较", "terms": ("目标函数", "约束", "收敛", "停止条件", "局部最优", "寻优策略", "闭环寻优", "最佳候选", "最优候选", "最优模型", "各轮候选", "候选结果", "数据覆盖率", "综合得分", "目标权重", "权重敏感性", "敏感性分析")},
     {"key": "reproducibility", "name": "实验复现与审计", "terms": ("复现", "随机种子", "审计", "追溯", "版本", "Skill执行证据", "skill执行证据", "Skill证据", "skill证据")},
-    {"key": "deployment", "name": "上线安全边界", "terms": ("上线", "投运", "生产使用", "安全边界", "联锁", "验收", "可验收", "评审结论", "是否可靠", "可靠")},
+    {"key": "deployment", "name": "上线安全边界", "terms": ("上线", "投运", "生产使用", "安全边界", "联锁", "验收", "可验收", "评审", "评审结论", "离线候选", "是否可靠", "可靠")},
     {"key": "transfer", "name": "跨设备与跨场景迁移", "terms": ("迁移", "泛化到", "其他设备", "其他塔", "其他炉", "跨场景")},
     {"key": "drift", "name": "在线更新与模型漂移", "terms": ("在线学习", "实时更新", "概念漂移", "模型漂移", "漂移监测")},
-    {"key": "cleaning", "name": "缺失异常与插值风险", "terms": ("缺失机制", "插值", "线性插值", "异常值", "异常点", "离群点", "鲁棒", "平滑动态")},
-    {"key": "standardization", "name": "字段语义与单位校验", "terms": ("单位", "量纲", "字段映射", "语义映射", "字段语义", "变量角色")},
-    {"key": "delivery", "name": "产物完整性与交付审计", "terms": ("报告", "产物", "导出", "下载", "证据链")},
+    {"key": "cleaning", "name": "缺失异常与插值风险", "terms": ("缺失", "缺失率", "填补", "修复", "缺失机制", "插值", "线性插值", "异常值", "异常点", "离群点", "鲁棒", "平滑动态")},
+    {"key": "standardization", "name": "字段语义与单位校验", "terms": ("标准化", "数据决策", "必需字段", "字段覆盖率", "人工复核", "场景契约", "单位", "量纲", "字段映射", "语义映射", "字段语义", "变量角色")},
+    {"key": "delivery", "name": "产物完整性与交付审计", "terms": ("报告", "产物", "导出", "下载", "证据链", "是否完成", "各阶段", "每个阶段", "跑通")},
 ]
 
 
@@ -37,11 +37,29 @@ def coverage_summary() -> list[dict[str, Any]]:
     return [{"key": item["key"], "name": item["name"], "examples": list(item["terms"][:3])} for item in EXPERT_TOPICS]
 
 
+def _term_is_negated(message: str, position: int) -> bool:
+    prefix = message[max(0, position - 12):position]
+    return bool(re.search(
+        r"(?:(?:不要|无需|不必|别(?:再)?)(?:讨论|回答|分析|涉及|提及)|禁止讨论|排除).{0,5}$",
+        prefix,
+    ))
+
+
 def _matches(message: str) -> list[str]:
     normalized = message.lower()
     matches = []
     for order, topic in enumerate(EXPERT_TOPICS):
-        positions = [normalized.find(term.lower()) for term in topic["terms"] if term.lower() in normalized]
+        positions = []
+        for term in topic["terms"]:
+            start = 0
+            lowered = term.lower()
+            while True:
+                position = normalized.find(lowered, start)
+                if position < 0:
+                    break
+                if not _term_is_negated(normalized, position):
+                    positions.append(position)
+                start = position + len(lowered)
         if positions:
             matches.append((min(positions), order, topic["key"]))
     return [item[2] for item in sorted(matches)]
@@ -67,7 +85,7 @@ def _snr_rows(snapshot: dict[str, Any]) -> tuple[list[dict[str, Any]], str | Non
         return [], None
 
 
-def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any]) -> dict[str, Any]:
+def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message: str = "") -> dict[str, Any]:
     results = snapshot.get("results", {})
     cleaning = results.get("cleaning", {})
     snr_meta = cleaning.get("snr", {})
@@ -121,6 +139,14 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any]) -> dict
                   f"本任务用 {threshold:g} dB 作为窗口筛选阈值。"
                   "它不直接说明设备健康、模型可靠或工况正常，这些还要结合语义、时滞、残差和工艺证据。")
 
+    if "动态段" in message or "动态优选" in message:
+        strict = int(cleaning.get("strict_selected_segment_count", cleaning.get("selected_segment_count")) or 0)
+        accepted = int(cleaning.get("selected_segment_count") or 0)
+        rows_used = int(cleaning.get("modeling_row_count") or 0)
+        answer += f" 当前严格达标动态段 {strict} 个、工程接纳段 {accepted} 个，最终建模数据 {rows_used} 行。"
+    if re.search(r"仪表健康|设备健康|健康", message):
+        answer += " 该代理值不能直接证明仪表或设备健康；健康判断还需仪表标定、漂移、故障码和工艺状态证据。"
+
     return {
         "topic": "snr", "topics": ["snr"], "topic_name": "信噪比与动态段",
         "answer_intent": answer_intent, "answer": answer,
@@ -148,7 +174,7 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         return None
     answer_intent = answer_intent or resolve_answer_intent(message)
     if topics == ["snr"]:
-        return _snr_answer(snapshot, answer_intent)
+        return _snr_answer(snapshot, answer_intent, message)
     results = snapshot.get("results", {})
     cleaning = results.get("cleaning", {})
     modeling = results.get("modeling", {})
@@ -163,7 +189,8 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
     r2_gap = train_r2 - r2
     rmse_ratio = test_rmse / train_rmse if train_rmse > 0 else None
     selected_rows = int(cleaning.get("modeling_row_count") or 0)
-    selected_segments = int(cleaning.get("selected_segment_count") or 0)
+    selected_segments = int(cleaning.get("strict_selected_segment_count", cleaning.get("selected_segment_count")) or 0)
+    accepted_segments = int(cleaning.get("selected_segment_count") or 0)
     cleaning_logs = "\n".join(str(item) for item in cleaning.get("logs") or [])
     sampling_match = re.search(r"按\s*(\d+(?:\.\d+)?)\s*s\s*统一重采样", cleaning_logs, re.IGNORECASE)
     sampling_seconds = float(sampling_match.group(1)) if sampling_match else None
@@ -240,7 +267,7 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         if train and test else "当前任务没有同时保存训练集与测试集指标，无法量化泛化落差或判断过拟合；需要补齐按时间切分的两组指标、滚动验证和独立炉次。"
     )
     order_answer = (
-        f"当前 ARX 结构为输出阶次 na={output_order}、输入阶次 nb={input_order}、输入延迟 nk={input_delay}，共 {int(float(test.get('num_params') or 0))} 个参数；测试集 AIC={float(test.get('aic')):.3f}、BIC={float(test.get('bic')):.3f}。"
+        f"当前 {model_config.get('family', '未知')} 结构为输出阶次 na={output_order}、输入阶次 nb={input_order}、输入延迟 nk={input_delay}，实际拟合输入为 {'、'.join(modeling.get('fitted_inputs') or []) or '无'}，共 {int(float(test.get('num_params') or 0))} 个参数；测试集 AIC={float(test.get('aic')):.3f}、BIC={float(test.get('bic')):.3f}。"
         "这些值只能描述当前结构，仍要与相邻阶次的验证误差、AIC/BIC及残差白度共同比较，不能直接选择训练拟合度最高的高阶模型。"
         if model_config and test.get("aic") is not None and test.get("bic") is not None else "当前任务未保存完整的 ARX 阶次配置或 AIC/BIC，无法证明当前结构优于相邻阶次；需要补充候选阶次表、验证误差和残差白度。"
     )
@@ -252,10 +279,11 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         if completed_rounds else "当前任务未保存闭环寻优候选轮次，无法解释最佳候选的选择依据。需要补充目标函数、逐轮参数、R²、误差、覆盖率和综合得分。"
     )
     degraded_modeling_answer = (
-        f"当前严格优质动态段为 {selected_segments} 个、动态性得分 {float(dynamic_score):.2f}、降级建模使用 {selected_rows} 行、最佳候选覆盖率 {best_coverage:.2%}。"
-        + ("结论是：用候选窗口维持流水线贯通、比较算法方案是合理的，但用它确认模型参数或通过验收不合理。" if selected_segments == 0 else "严格动态段已通过门禁，仍需结合独立验证决定能否验收。")
+        f"当前严格优质动态段为 {selected_segments} 个、工程接纳段为 {accepted_segments} 个、动态性得分 {float(dynamic_score):.2f}、降级建模使用 {selected_rows} 行、最佳候选覆盖率 {best_coverage:.2%}。"
+        + ("当前采用小样本自适应分层筛选，工程可用段支持算法链执行，模型结论按独立验证指标分级解释。" if selected_segments == 0 and selected_rows > 0 else "严格动态段已通过门禁，仍需结合独立验证决定适用范围。")
         + f"当前训练/测试 R² 为 {train_r2:.3f}/{r2:.3f}、RMSE 为 {train_rmse:.3f}/{test_rmse:.3f}。"
-        "降级数据可能导致激励不足、选择偏差、参数方差增大、共线变量系数不稳定，以及测试结果对少量窗口过度敏感。要升级为可验收模型，应在安全约束内增加阶跃或PRBS激励，取得多个独立炉次的严格动态段，执行滚动时间验证，并用Bootstrap或重复辨识给出参数置信区间。"
+        + ("用这些数据比较算法方案是合理的，但用它确认模型参数或通过验收不合理。" if selected_segments == 0 and selected_rows > 0 else "")
+        + "降级数据可能导致激励不足、选择偏差、参数方差增大、共线变量系数不稳定，以及测试结果对少量窗口过度敏感。要升级为可验收模型，应在安全约束内增加阶跃或PRBS激励，取得多个独立炉次的严格动态段，执行滚动时间验证，并用Bootstrap或重复辨识给出参数置信区间。"
         if dynamic_score is not None and train and test else
         "当前严格动态段、动态性或训练/测试证据不完整，降级结果只能用于流程验证，不能用于参数确认或模型验收。需要补充独立激励、严格动态段、滚动验证和参数置信区间。"
     )
@@ -264,20 +292,53 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         if sampling_seconds is not None and isinstance(lag_samples, (int, float)) else
         f"当前任务规整后 {cleaning.get('cleaned_row_count', '—')} 行，但没有可核验的采样周期与过程主时间常数，无法判断采样是否充分或是否存在混叠。"
     )
-    cleaning_answer = (
-        f"当前质量评分 {cleaning.get('overall_score', '—')}，清洗日志共标记 {anomaly_count} 个变量级异常点，并采用插值修复。线性插值可能压低局部方差、削弱尖峰并制造过于平滑的响应，从而改变动态评分、互相关和模型误差；因此不能仅凭清洗后 R² 判断处理有效。应保留异常掩码，对比不插值、因果前向插值和鲁棒模型三组结果，并单独报告插值点上的残差。"
-        if cleaning else "当前任务未保存清洗统计与异常掩码，无法判断插值是否制造了平滑动态或影响模型指标。"
+    missing_rates = cleaning.get("missing_rate") or {}
+    missing_items = sorted(
+        ((str(name), float(rate or 0)) for name, rate in missing_rates.items() if float(rate or 0) > 0),
+        key=lambda item: item[1], reverse=True,
     )
+    missing_text = "、".join(f"{name}={rate:.2%}" for name, rate in missing_items) or "所有建模字段均为0%"
+    cleaning_answer = (
+        f"当前质量评分 {cleaning.get('overall_score', '—')}；原始缺失率中非零项为：{missing_text}。"
+        f"清洗日志共标记 {anomaly_count} 个变量级异常点。当前实现对输入仅向前填充最多6个采样点，不读取未来值；"
+        "输出或质量变量的缺失/异常保留为空，不伪造训练与评估真值。"
+        "因此缺失修复仍可能改变输入侧的局部互相关和VIF，但不会用未来观测或插值目标值直接抬高测试拟合度；"
+        "建议结合异常掩码比较清洗前后时滞与变量保留清单。"
+        if cleaning else "当前任务未保存清洗统计与异常掩码，无法判断缺失修复是否影响模型指标。"
+    )
+    decision = standardization.get("data_decision") or {}
+    missing_required = mapping.get("missing_required") or []
+    schema_validation = standardization.get("schema_validation") or {}
+    derived_fields = standardization.get("derived_fields") or []
+    relative_time = next((item for item in derived_fields if item.get("physical_time_claim") == "relative_only"), None)
+    target_name = standardization.get("scenario", {}).get("primary_output")
+    target_mapping = next((item for item in mapping.get("mappings", []) if item.get("standard") == target_name), {})
+    target_missing = target_mapping.get("value_profile", {}).get("missing_ratio")
     standardization_answer = (
-        f"当前识别场景为{scenario_name}，必需字段覆盖率 " + (f"{float(required_coverage):.1%}" if required_coverage is not None else "未记录") + f"、待人工复核字段 {review_fields if review_fields is not None else '未记录'} 个，数据决策为 {decision_status}。字段名匹配并不自动证明量纲正确；如果 gas_flow、air_flow 的单位换算或变量角色映射错误，后续时滞、相关系数、VIF和ARX系数都会失去物理解释。进入建模前应核对原始单位、标准单位、换算公式、量程和角色，并把人工确认记录写入审计链。"
+        f"当前识别场景为{scenario_name}，场景置信度 {float(decision.get('scenario_confidence') or 0):.1%}，必需字段覆盖率 "
+        + (f"{float(required_coverage):.1%}" if required_coverage is not None else "未记录")
+        + f"，待人工复核字段 {review_fields if review_fields is not None else '未记录'} 个，数据决策为 {decision_status}。"
+        + (f"缺失的必需字段：{'、'.join(missing_required)}。" if missing_required else "必需字段均已接受。")
+        + (f"主输出 {target_name} 的缺失率约为 {float(target_missing):.1%}。" if target_missing is not None else "")
+        + (f"时间字段由 {relative_time.get('source_field')} 按 {relative_time.get('unit')} 单位派生为相对时间轴，只用于排序、分段和时滞计算，不宣称为真实日历时间。" if relative_time else "")
+        + f"场景契约失败 {int(schema_validation.get('failure_count') or 0)} 项。"
+        + (f"决策原因：{'；'.join(decision.get('reasons') or [])}。" if decision.get("reasons") else "")
+        + "字段名匹配并不自动证明量纲正确；进入建模前仍应核对原始单位、标准单位、换算公式、量程和变量角色。"
         if standardization else "当前任务没有字段映射和单位校验证据，后续时滞、共线性和建模结果不能进行物理解释。"
     )
+    stage_states = {stage.get("key"): stage.get("status") for stage in snapshot.get("stages") or []}
+    completed_stages = [key for key, status in stage_states.items() if status == "completed"]
+    unfinished_stages = [f"{key}={status}" for key, status in stage_states.items() if status != "completed"]
     delivery_answer = (
-        f"当前任务保存 {len(snapshot.get('artifacts') or {})} 类流水线产物，分析报告状态为“{results.get('report', {}).get('summary') or results.get('review', {}).get('conclusion') or '未记录'}”。可下载不等于可复现；正式交付还应为输入CSV、模型、参数和报告生成校验和，并绑定代码版本、依赖版本与审批记录。"
+        f"当前任务状态为 {snapshot.get('status', '未记录')}；已完成 {len(completed_stages)}/{len(stage_states)} 个阶段："
+        f"{'、'.join(completed_stages) or '无'}。"
+        + (f"未完成项：{'、'.join(unfinished_stages)}。" if unfinished_stages else "所有记录阶段均已跑通。")
+        + f"当前保存 {len(snapshot.get('artifacts') or {})} 类流水线产物，分析报告状态为“{results.get('report', {}).get('summary') or results.get('review', {}).get('conclusion') or '未记录'}”。"
+        + "阶段执行完成不等于模型通过工程评审；正式交付还应绑定输入与产物校验和、代码/依赖版本及审批记录。"
     )
     answers = {
         "sampling": sampling_answer,
-        "snr": f"系统不是用单点幅值判断信噪比，而是在滑动窗口内比较有效动态变化与局部噪声尺度，并与完整性、异常率和输出响应联合评分。当前选出 {selected_segments} 个严格优质段、建模使用 {selected_rows} 行。若严格段为 0，说明当前阈值下证据不足，系统只会标记候选兜底，不会宣称它们是高质量动态段。",
+        "snr": f"系统不是用单点幅值判断信噪比，而是在滑动窗口内比较有效动态变化与局部噪声尺度，并与完整性、异常率和输出响应联合评分。当前严格优质段 {selected_segments} 个、工程接纳段 {accepted_segments} 个、建模使用 {selected_rows} 行。小样本条件下采用分层筛选，严格段与工程可用段分别记录并结合独立验证指标解释。",
         "excitation": f"可辨识性要求输入在目标频段提供足够独立激励，仅有长时间稳态数据并不能保证模型可靠。当前严格动态段 {selected_segments} 个、建模数据 {selected_rows} 行。要形成更强证据，还应检查输入矩阵秩、频谱覆盖和不同 MV 的独立变化；现有快照未保存完整谱矩阵时，Agent 会把它列为待验证项。",
         "degraded_modeling": degraded_modeling_answer,
         "leakage": "当前模型数据按时间顺序切分，避免了随机打乱造成的直接泄漏；但现有流水线在模型切分前完成清洗与插值，仅凭任务快照还不能证明所有插值都没有利用缺口后的未来邻点。要闭合证据，需要记录每个预处理器的拟合时间范围，并在训练段拟合后冻结应用到验证段。",
@@ -291,7 +352,11 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         "order": order_answer,
         "optimization": optimization_answer,
         "reproducibility": f"每次对话会生成 skill_run_id，记录目标、实体、参数、Skill 拓扑、逐步输入输出和证据引用；流水线任务 {snapshot.get('run_id')} 同时保存中间 CSV、指标、寻优记录和报告。要完全复现还应固定代码版本、依赖版本和随机种子，不能只保存最终模型文件。",
-        "deployment": f"当前评审结论是“{results.get('review', {}).get('conclusion', '待评审')}”，它仅代表通过本地演示门禁，不等于可以直接投运。生产上线至少还需独立工况验证、控制器闭环仿真、约束与联锁检查、人工审批、回退策略和在线漂移监测；Agent 不会绕过这些安全环节自动下发控制参数。",
+        "deployment": (
+            f"当前评审结论是“{results.get('review', {}).get('conclusion', '待评审')}”；"
+            f"阻断项为：{'；'.join(results.get('review', {}).get('blockers') or []) or '无'}。"
+            "离线评审结论不等于可以直接投运。生产上线至少还需独立工况验证、控制器闭环仿真、约束与联锁检查、人工审批、回退策略和在线漂移监测；Agent 不会绕过这些安全环节自动下发控制参数。"
+        ),
         "transfer": "30 个 Skill 的编排框架可复用于其他塔、炉和反应器，但模型参数不能直接迁移。新设备必须重新完成场景识别、字段/单位映射、变量角色确认、动态数据筛选和独立验证；若数据字典或工艺约束不足，系统应停在待确认状态。",
         "drift": "当前系统以离线任务和版本对比为主，不会在无人审批时自动改写生产模型。可通过输入分布、残差、拟合度和工况占比监测漂移；触发阈值后创建新实验，与基线模型对比并经过评审，再决定是否替换。",
         "cleaning": cleaning_answer,
@@ -317,20 +382,28 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
             "本任务采用先分区后清洗的60%/20%/20%时间协议；每区仅有限前向填充输入，异常或缺失输出不填成真值。"
             "时滞、共线性和系数只学习训练数据，所有候选使用相同验证目标哈希；最终选中后仅评估一次测试集。"
             "滞后项按连续段分组，负时滞不进入预测特征。分区和评估目标证据见split_manifest.json与diagnostics.json。")
-        answers["cleaning"] = (
-            "本任务没有双向插值或居中滤波。输入缺失/异常仅前向填充最多6点，输出缺失/异常保留为空并排除出评估真值。"
-            "各分区清洗独立执行，仍需检查异常检测是否误伤真实动态；评估仅适用于保留的有效样本。")
-        answers["stability"] = (
-            f"当前模型为{model_config.get('family')}，AR极点稳定检查={diagnostic.get('stable_ar_poles')}，"
-            f"最大极点模={diagnostic.get('max_pole_magnitude')}。"
-            f"独立测试自由仿真：{td.get('free_simulation')}。一步预测好不等于自由运行或闭环可用。")
+        answers["cleaning"] = cleaning_answer + (
+            " 本任务没有双向插值或居中滤波；各分区清洗独立执行，仍需检查异常检测是否误伤真实动态。")
+        if model_config.get("family") == "FIRX":
+            answers["stability"] = (
+                "当前模型为FIRX稀疏目标软测量模型，不含输出自回归反馈，因此AR极点和递归自由仿真不适用。"
+                f"独立测试直接预测证据：{test}；诊断记录：{td.get('free_simulation')}。"
+                "该结果只能说明真实化验观测点上的离线估计能力，不能直接等同于闭环控制稳定性。")
+        else:
+            answers["stability"] = (
+                f"当前模型为{model_config.get('family')}，AR极点稳定检查={diagnostic.get('stable_ar_poles')}，"
+                f"最大极点模={diagnostic.get('max_pole_magnitude')}。"
+                f"独立测试自由仿真：{td.get('free_simulation')}。一步预测好不等于自由运行或闭环可用。")
         answers["residual"] = f"独立测试残差诊断：{td.get('residual')}。已计算ACF，但未完成Ljung–Box显著性检验、残差—输入独立性检验；不能宣称残差为白噪声。"
+        multi_step = (td.get("multi_step") or {}).get("metrics") or {}
+        prediction_label = "真实化验观测点直接预测" if model_config.get("family") == "FIRX" else "10步条件预测"
         answers["generalization"] = generalization_answer + (
-            f" 当前最终测试仅执行一次；单步RMSE相较持续值基线改善 {td.get('rmse_improvement_over_persistence_pct')}%。"
-            f"10步预测证据：{td.get('multi_step')}。这些指标不能替代跨炉次外部验证。")
+            f" 当前最终测试仅执行一次；一步预测 R²={r2:.3f}、RMSE={test_rmse:.3f}；"
+            + (f"{prediction_label} R²={float(multi_step.get('r2')):.3f}、RMSE={float(multi_step.get('rmse')):.3f}；" if multi_step.get("r2") is not None and multi_step.get("rmse") is not None else "")
+            + f"相较持续值基线的RMSE改善为 {td.get('rmse_improvement_over_persistence_pct')}%。这些指标不能替代跨炉次外部验证。")
         answers["order"] = (
-            f"实际比较AR与ARX的1/2/3阶，共{len(modeling.get('order_search', []))}个结构候选，采用共同验证集RMSE选择。"
-            f"胜出模型为{model_config.get('family')}，阶次{output_order}；候选训练AIC/BIC与验证误差保存在order_search.json。"
+            f"实际比较模型族{model_config.get('candidate_families', [])}和阶次{model_config.get('candidate_orders', [])}，共{len(modeling.get('order_search', []))}个结构候选，采用共同验证集BIC选择。"
+            f"胜出模型为{model_config.get('family')}，输出阶次{output_order}、输入阶次{input_order}，实际拟合输入为{'、'.join(modeling.get('fitted_inputs') or []) or '无'}；候选训练AIC/BIC与验证误差保存在order_search.json。"
             "AIC/BIC只比较相同训练样本口径；当前仍缺少参数置信区间。")
         answers["optimization"] = (
             f"本任务完成{len(completed_rounds)}轮候选，第{best_round}轮在本次范围内验证综合得分最高。"
@@ -338,11 +411,14 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
             f"选中候选参数：{optimization.get('best_parameters')}；验证指标：{optimization.get('best_metrics')}；"
             f"最终测试指标：{test}。这是离线预处理反馈搜索，不是控制器闭环投运。")
         answers["reproducibility"] = "已保存输入与产物SHA-256、代码文件SHA-256、依赖版本和固定时间分区清单；拟合系数与结构搜索表可下载。Skill记录区分规划、流水线取证和缺失证据；取证不代表独立重跑。"
-        answers["delivery"] = f"当前交付的是可审计候选结果，评审：{results.get('review', {}).get('conclusion')}；阻断原因：{results.get('review', {}).get('blockers')}。产物可下载不等于模型通过验证。"
+        answers["delivery"] = delivery_answer + (
+            f" 当前评审：{results.get('review', {}).get('conclusion')}；"
+            f"阻断原因：{results.get('review', {}).get('blockers')}。"
+        )
     names = {item["key"]: item["name"] for item in EXPERT_TOPICS}
     selected_topics = topics
     if "degraded_modeling" in selected_topics:
-        selected_topics = [topic for topic in selected_topics if topic not in {"snr", "excitation", "generalization"}]
+        selected_topics = [topic for topic in selected_topics if topic not in {"snr", "excitation", "generalization", "order"}]
     sections = [f"{index}.【{names[topic]}】{answers[topic]}" for index, topic in enumerate(selected_topics, 1)]
     gaps_by_topic = {
         "sampling": "原始采集端抗混叠滤波参数和过程主时间常数基准",

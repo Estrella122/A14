@@ -70,6 +70,7 @@ class SegmentScore:
     level: str
     snr_db: float | None = None
     snr_method: str = "robust_second_difference_white_noise_proxy"
+    output_observations: int = 0
 
 
 class DataCleaningSelectionAgent:
@@ -202,7 +203,15 @@ class DataCleaningSelectionAgent:
             weights = self.selection_policy["score_weights"]
             input_change = self._relative_range_score(chunk[input_columns], scale=float(scales["input_change"]))
             output_response = self._relative_range_score(chunk[output_columns], scale=float(scales["output_response"]))
-            completeness = 100 * (1 - chunk.isna().mean().mean())
+            sparse_output = bool(self.selection_policy.get("sparse_output"))
+            # Sparse laboratory targets are intentionally absent between assay
+            # timestamps.  Score input completeness separately and require a
+            # real target observation instead of rewarding an all-missing
+            # output window or fabricating an interpolated target.
+            completeness_frame = chunk[input_columns] if sparse_output and input_columns else chunk
+            completeness = 100 * (1 - completeness_frame.isna().mean().mean())
+            output_observations = int(chunk[output_columns].notna().any(axis=1).sum()) if output_columns else 0
+            minimum_output_observations = int(self.selection_policy.get("minimum_output_observations", 1))
             anomaly_rate = 0.0
             if self.anomaly_flags is not None:
                 anomaly_rate = float(self.anomaly_flags.iloc[start:start + window].mean().mean())
@@ -225,12 +234,14 @@ class DataCleaningSelectionAgent:
             finite_input = [v for v in input_snr if v is not None]
             finite_output = [v for v in output_snr if v is not None]
             snr = min(max(finite_input), min(finite_output)) if finite_input and len(finite_output) == len(output_columns) and finite_output else None
+            eligible_output = not sparse_output or output_observations >= minimum_output_observations
             level = (
                 "优质动态段"
-                if score >= float(self.selection_policy["strict_score"])
+                if eligible_output
+                and score >= float(self.selection_policy["strict_score"])
                 and snr is not None
                 and snr >= float(self.selection_policy["snr_db"])
-                else "可用数据段" if score >= float(self.selection_policy["usable_score"]) else "不推荐"
+                else "可用数据段" if eligible_output and score >= float(self.selection_policy["usable_score"]) else "不推荐"
             )
             segments.append(
                 SegmentScore(
@@ -244,6 +255,7 @@ class DataCleaningSelectionAgent:
                     smoothness_score=round(float(smoothness), 2),
                     level=level,
                     snr_db=round(snr, 3) if snr is not None else None,
+                    output_observations=output_observations,
                 )
             )
 

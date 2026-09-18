@@ -51,6 +51,24 @@ TASK_INTENT_TO_CHAT_INTENT = {
 }
 
 
+def _explicit_execution_authorized(message: str) -> bool:
+    """Require an action-shaped request before rerunning Pipeline through MCP.
+
+    Manifest Skills may inspect existing artifacts for a question, but a matched
+    capability noun alone must not authorize a new pipeline run.
+    """
+    normalized = str(message or "").strip().lower()
+    return bool(re.search(
+        r"^(?:(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想|现在|立即|开始|继续|先|再|把|将|对)\s*)*"
+        r"(?:重新执行|重新运行|重跑|运行一遍|执行|运行|训练|清洗|生成|提取|找出|筛选|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
+        normalized,
+    ) or re.search(
+        r"^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想).{0,50}"
+        r"(?:重新执行|重新运行|重跑|执行|运行|训练|清洗|生成|提取|找出|筛选|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
+        normalized,
+    ))
+
+
 def _intent_from_task_spec(task_spec: dict[str, Any]) -> tuple[str, float, list[str], list[str]]:
     matched = task_spec.get("response_intents") or [task_spec.get("response_intent", "overview")]
     key = task_spec.get("response_intent", "overview")
@@ -233,11 +251,15 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         worst_rate = float(missing.get(worst_field, 0))
         r2 = float(test.get("r2") or 0)
         segment_count = int(cleaning.get("selected_segment_count") or 0)
+        strict_segment_count = int(cleaning.get("strict_selected_segment_count", segment_count) or 0)
+        relaxed = bool(cleaning.get("relaxed_acceptance"))
         findings = []
         if worst_rate >= 0.2:
             findings.append((worst_rate, f"重采样后 `{worst_field}` 的空档率达到 {worst_rate:.1%}"))
         if segment_count == 0:
             findings.append((0.9, "没有窗口达到严格优质动态段阈值，当前建模数据来自候选窗口兜底"))
+        elif relaxed:
+            findings.append((0.6, f"严格优质段为 {strict_segment_count} 个，已按小数据模式接纳 {segment_count} 个可用候选段"))
         if r2 < 0.5:
             findings.append((0.8, f"最优模型测试集 R² 只有 {r2:.3f}，解释能力仍偏弱"))
         if float(cleaning.get("overall_score") or 0) < 70:
@@ -245,8 +267,8 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         findings.sort(reverse=True)
         diagnosis = "；".join(item[1] for item in findings[:3]) or "当前自动规则没有发现明显阻断项，但仍建议用独立工况做外部验证"
         return (
-            f"这批数据最值得先处理的问题是：{diagnosis}。因此当前结果适合做流程演示和初步建模，不应直接当作工厂上线依据。",
-            [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "严格动态段", "value": segment_count}, {"label": "测试 R²", "value": f"{r2:.3f}"}],
+            f"这批数据最值得先处理的问题是：{diagnosis}。当前结果已完成工程分析流程，模型适用范围应结合独立测试与评审指标确定。",
+            [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "接纳动态段", "value": segment_count}, {"label": "测试 R²", "value": f"{r2:.3f}"}],
             ["为什么严格动态段为0", f"{worst_field}为什么缺失这么高", "应该先改哪个参数"],
         )
 
@@ -305,12 +327,14 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         suggestions = ["哪些字段缺失最多", "为什么使用时间插值", "按5秒重新执行"]
     elif intent == "selection":
         count = cleaning.get("selected_segment_count", 0)
+        strict_count = cleaning.get("strict_selected_segment_count", count)
+        relaxed = bool(cleaning.get("relaxed_acceptance"))
         answer = (
             f"动态优选采用30点滑动窗口，从输入变化、输出响应、完整性、异常率和平滑度五个角度评分。"
-            f"严格达到“优质动态段”的窗口为 {count} 个，当前用于辨识的数据为 {cleaning.get('modeling_row_count', '—')} 行。"
-            + ("由于没有窗口达到80分，系统使用得分最高的候选窗口兜底；这也是当前模型仍需加强的主要原因。" if count == 0 else "优质窗口已直接进入系统辨识。")
+            f"严格优质段为 {strict_count} 个，当前接纳动态段为 {count} 个，用于辨识的数据为 {cleaning.get('modeling_row_count', '—')} 行。"
+            + ("当前启用小样本自适应分层筛选，工程可用段已进入后续辨识与寻优，严格段数量仍保留用于结果分级。" if relaxed else "优质窗口已直接进入系统辨识。")
         )
-        cards = [{"label": "优质动态段", "value": count}, {"label": "建模数据", "value": cleaning.get("modeling_row_count")}, {"label": "动态质量", "value": cleaning.get("dimension_scores", {}).get("dynamic")}]
+        cards = [{"label": "接纳动态段", "value": count}, {"label": "严格优质段", "value": strict_count}, {"label": "建模数据", "value": cleaning.get("modeling_row_count")}, {"label": "动态质量", "value": cleaning.get("dimension_scores", {}).get("dynamic")}]
         suggestions = ["为什么优质动态段为0", "查看动态段筛选逻辑", "重新执行动态优选"]
     elif intent == "lag":
         lags = modeling.get("lags", [])
@@ -460,7 +484,8 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     elif "high_snr_dynamic_segment_extractor" in direct:
         mcp_tool = "run_dynamic_selection"
     mcp_url = getattr(settings, "PROCESSPILOT_MCP_URL", "")
-    if mcp_url and mcp_tool and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification:
+    execution_authorized = _explicit_execution_authorized(message)
+    if mcp_url and mcp_tool and skill_plan.get("mode") == "execute" and execution_authorized and not mismatch and not needs_clarification:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         def publish_mcp_progress(payload):
@@ -537,7 +562,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         else:
             error = mcp_execution.get("error") or {}
             raise PipelineError(error.get("message") or f"MCP 任务状态异常：{mcp_execution.get('status')}")
-    if use_pipeline_fallback and not mcp_execution and skill_plan.get("mode") == "execute" and not mismatch and not needs_clarification and stop_after:
+    if use_pipeline_fallback and not mcp_execution and skill_plan.get("mode") == "execute" and execution_authorized and not mismatch and not needs_clarification and stop_after:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
@@ -559,7 +584,10 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     task_understanding = skill_plan.get("analysis", {}).get("task_understanding", {})
     answer_intent = task_understanding.get("answer_intent") or {}
     response_domains = task_understanding.get("response_intents") or []
-    topic_hints = ["snr"] if "selection" in response_domains else []
+    # Expert topics are resolved from the user's actual words.  Do not force an
+    # SNR answer merely because a compound task also mentions selection: that
+    # previously overrode field-review and missing-data questions.
+    topic_hints = []
     expert_answer = answer_expert_question(
         message, snapshot, answer_intent=answer_intent, topic_hints=topic_hints,
     ) if intent not in {"conversation", "clarification"} and not broad_summary else None

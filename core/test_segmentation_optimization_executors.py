@@ -56,6 +56,21 @@ class SegmentationServiceTests(SimpleTestCase):
         self.assertEqual(report["provenance"]["upstream_cleaning_run"], "clean-1")
         self.assertEqual(report["provenance"]["selection_scope"], "training_only")
 
+    def test_small_data_mode_accepts_usable_segments_when_strict_set_is_empty(self):
+        report = self.run_service(policy={
+            "strict_score": 101,
+            "usable_score": 0,
+            "snr_db": 100,
+            "min_valid_samples": 15,
+            "allow_usable_fallback": True,
+            "score_weights": {"input_change": .35, "output_response": .25, "completeness": .2, "anomaly": .1, "smoothness": .1},
+            "score_scales": {"input_change": 1500, "output_response": 1800},
+        })
+        self.assertEqual(report["metrics"]["strict_selected_count"], 0)
+        self.assertGreater(report["metrics"]["selected_count"], 0)
+        self.assertTrue(report["metrics"]["relaxed_acceptance"])
+        self.assertEqual(report["provenance"]["acceptance_mode"], "engineering_usable")
+
     def test_missing_frozen_split_blocks(self):
         self.assertEqual(self.run_service(split_version="")["status"], "blocked")
 

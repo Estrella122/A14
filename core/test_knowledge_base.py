@@ -14,15 +14,21 @@ class KnowledgeBaseTests(TestCase):
     def setUpTestData(cls):
         call_command('seed_knowledge_base', verbosity=0)
 
-    def test_seed_covers_three_official_scenes_and_every_skill(self):
-        self.assertEqual(KnowledgeEntity.objects.filter(entity_type='scene', status='approved').count(), 3)
+    def test_seed_covers_all_supported_scenes_and_every_skill(self):
+        self.assertEqual(KnowledgeEntity.objects.filter(entity_type='scene', status='approved').count(), 6)
         self.assertEqual(SkillKnowledgeRule.objects.filter(status='approved').count(), len(SKILLS))
-        self.assertEqual(KnowledgeDocument.objects.filter(status='approved').count(), 4)
+        self.assertEqual(KnowledgeDocument.objects.filter(status='approved').count(), 7)
 
     def test_seed_is_idempotent(self):
         call_command('seed_knowledge_base', verbosity=0)
         self.assertEqual(SkillKnowledgeRule.objects.count(), len(SKILLS))
-        self.assertEqual(KnowledgeDocument.objects.count(), 4)
+        self.assertEqual(KnowledgeDocument.objects.count(), 7)
+
+    def test_real_dataset_scene_knowledge_is_searchable(self):
+        vapor = search_knowledge('蒸气压力稀疏化验目标为什么不能插值', 'vapor_pressure_soft_sensor')
+        self.assertIn('builtin-scene-vapor_pressure_soft_sensor-v1', vapor['provenance'])
+        boiler = search_knowledge('锅炉出口蒸汽温度的时滞和VIF', 'thermal_power_boiler_long_tail')
+        self.assertIn('builtin-scene-thermal_power_boiler_long_tail-v1', boiler['provenance'])
 
     def test_search_returns_scene_entity_skill_and_provenance(self):
         result = search_knowledge('提取脱丁烷塔高信噪比动态段', 'debutanizer_column')

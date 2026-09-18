@@ -4,6 +4,7 @@ from django.test import SimpleTestCase
 
 from core.services.expert_qa import answer_expert_question
 from core.skills.task_understanding import understand_task
+from core.services.agent_chat import _explicit_execution_authorized
 
 
 class AnswerIntentTests(SimpleTestCase):
@@ -54,3 +55,45 @@ class AnswerIntentTests(SimpleTestCase):
         self.assertIn("2026-01-01 00:30", results[4]["answer"])
         self.assertIn("不直接说明设备健康", results[5]["answer"])
         self.assertTrue(all(item["answer_intent"]["kind"] for item in results))
+
+    def test_negated_snr_does_not_override_field_review_question(self):
+        snapshot = {
+            "run_id": "run_vapor_review",
+            "results": {
+                "standardization": {
+                    "scenario": {"scenario_name": "蒸气压力软测量实验", "primary_output": "vapour_pressure_kpa"},
+                    "mapping": {"required_coverage": 0.714, "missing_required": ["timestamp"], "mappings": []},
+                    "detection": {"selected": {"review_fields": 1}},
+                    "data_decision": {"status": "review", "scenario_confidence": 0.928, "reasons": ["缺少必需字段"]},
+                    "schema_validation": {"failure_count": 2},
+                }
+            },
+        }
+        result = answer_expert_question(
+            "为什么字段标准化需要人工复核？列出必需字段和字段覆盖率，不要讨论SNR。",
+            snapshot,
+        )
+        self.assertEqual(result["topics"], ["standardization"])
+        self.assertIn("71.4%", result["answer"])
+        self.assertNotIn("二阶差分", result["answer"])
+
+    def test_missing_rate_question_returns_actual_cleaning_evidence(self):
+        snapshot = {
+            "run_id": "run_missing",
+            "results": {
+                "cleaning": {
+                    "overall_score": 88,
+                    "missing_rate": {"primary_water_flow": 0.0006},
+                    "logs": ["primary_water_flow 缺失率 0.06%，处理策略：仅向前填充最多6个采样点；不读取未来值。"],
+                }
+            },
+        }
+        result = answer_expert_question("哪个字段缺失，缺失率是多少，是否读取未来值？", snapshot)
+        self.assertEqual(result["topics"], ["cleaning", "leakage"])
+        self.assertIn("primary_water_flow=0.06%", result["answer"])
+        self.assertIn("不读取未来值", result["answer"])
+
+    def test_professional_question_does_not_authorize_pipeline_rerun(self):
+        self.assertFalse(_explicit_execution_authorized("锅炉数据的时滞是怎么处理的？"))
+        self.assertFalse(_explicit_execution_authorized("最终用了哪些外部输入？"))
+        self.assertTrue(_explicit_execution_authorized("请从当前数据中重新筛选高信噪比动态段"))

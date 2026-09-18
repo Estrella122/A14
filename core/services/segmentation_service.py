@@ -83,13 +83,24 @@ def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict
     finally:
         if str(module_dir) in sys.path:
             sys.path.remove(str(module_dir))
-    modeling = select_modeling_rows(train_data, segments)
-    selected = segments[segments["level"] == "优质动态段"] if not segments.empty else segments
-    dynamic = segments[segments["segment_score"] >= 60] if not segments.empty else segments
-    steady = segments[segments["segment_score"] < 60] if not segments.empty else segments
+    active_policy = policy or {"strict_score": 80, "usable_score": 60, "snr_db": 10}
+    strict_selected = segments[segments["level"] == "优质动态段"] if not segments.empty else segments
+    usable_score = float(active_policy.get("usable_score", 60))
+    usable_selected = segments[segments["segment_score"] >= usable_score] if not segments.empty else segments
+    relaxed_acceptance = bool(active_policy.get("allow_usable_fallback")) and strict_selected.empty and not usable_selected.empty
+    selected = usable_selected if relaxed_acceptance else strict_selected
+    modeling_top_k = max(1, int(active_policy.get("modeling_top_k", 5)))
+    modeling = (
+        select_modeling_rows(train_data, selected, top_k=modeling_top_k, strict_first=False)
+        if relaxed_acceptance else select_modeling_rows(train_data, segments, top_k=modeling_top_k)
+    )
+    dynamic = usable_selected
+    steady = segments[segments["segment_score"] < usable_score] if not segments.empty else segments
     selected_ids = [str(value) for value in modeling.index]
     provenance = {"upstream_cleaning_run": upstream_run_id, "split_version": split_version,
-                  "segmentation_policy": policy or {"strict_score": 80, "snr_db": 10},
+                  "segmentation_policy": active_policy,
+                  "acceptance_mode": "engineering_usable" if relaxed_acceptance else "strict",
+                  "modeling_top_k": modeling_top_k,
                   "window_length": window_length, "step": step, "source_columns": list(train_data.columns),
                   "executed_at": datetime.now().astimezone().isoformat(timespec="seconds"), "executor_version": EXECUTOR_VERSION,
                   "selection_scope": "training_only", "validation_rows_read": 0, "test_rows_read": 0}
@@ -101,12 +112,18 @@ def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict
     selected.to_csv(paths["segments_csv"], index=False, encoding="utf-8-sig")
     segments.to_csv(paths["segment_scores_csv"], index=False, encoding="utf-8-sig")
     modeling.reset_index().to_csv(paths["modeling_csv"], index=False, encoding="utf-8-sig")
+    warnings = []
+    if relaxed_acceptance:
+        warnings.append("小样本自适应策略已启用：严格优质段不足，工程可用段已进入后续辨识链。")
     report = {"status": "success", "segments": segments.to_dict("records"), "steady_segments": steady.to_dict("records"),
               "dynamic_segments": dynamic.to_dict("records"), "snr_metrics": {"method": "robust_second_difference_white_noise_proxy", "rows": len(snr_rows)},
               "segment_scores": segments.to_dict("records"), "selected_segments": selected.to_dict("records"),
               "selected_row_ids": selected_ids, "metrics": {"candidate_count": len(segments), "dynamic_count": len(dynamic),
-              "steady_count": len(steady), "selected_count": len(selected), "selected_row_count": len(modeling)},
-              "warnings": [], "limitations": ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。"],
+              "steady_count": len(steady), "strict_selected_count": len(strict_selected), "usable_count": len(usable_selected),
+              "selected_count": len(selected), "selected_row_count": len(modeling), "relaxed_acceptance": relaxed_acceptance,
+              "acceptance_mode": "engineering_usable" if relaxed_acceptance else "strict"},
+              "warnings": warnings, "limitations": ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。",
+              "工程可用段按分层阈值接纳，结论需结合独立测试和模型评审指标解释。"] if relaxed_acceptance else ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。"],
               "evidence": [provenance], "provenance": provenance, "artifacts": {key: str(path) for key, path in paths.items()}}
     paths["segmentation_report_json"].write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     report["_segments_frame"] = segments

@@ -90,6 +90,22 @@ class CausalModelingTests(SimpleTestCase):
         expected_rmse = np.sqrt(np.mean((actual-expected)**2))
         self.assertAlmostEqual(d['multi_step']['metrics']['rmse'], expected_rmse, places=10)
 
+    def test_firx_evaluates_sparse_targets_without_interpolating_truth(self):
+        data = frame(360)[['timestamp', 'u']].copy()
+        data['y'] = np.nan
+        observed = np.arange(12, len(data), 12)
+        data.loc[observed, 'y'] = data.loc[observed - 1, 'u'].to_numpy()
+        state = {
+            'output': 'y', 'seconds': 10, 'inputs': ['u'], 'delays': {'u': 1},
+            'order': 1, 'coef': [0., 1.], 'family': 'FIRX',
+            'evaluation_inputs': ['u'],
+        }
+        metrics, diagnostics, prediction, _ = vm.evaluation(data, state, 5, 'test')
+        self.assertGreater(len(prediction), 20)
+        self.assertAlmostEqual(metrics['rmse'], 0., places=10)
+        self.assertFalse(diagnostics['multi_step']['applicable'])
+        self.assertFalse(diagnostics['free_simulation']['applicable'])
+
     def test_unknown_snr_and_missing_skill_evidence_never_succeed(self):
         self.assertIsNone(DataCleaningSelectionAgent.estimate_snr(pd.Series(np.ones(30))))
         plan = plan_skills('提取加热炉高信噪比动态数据，处理共线性后闭环寻优', 'old_run')

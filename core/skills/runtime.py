@@ -48,8 +48,8 @@ EXPERT_ROUTING_RULES = [
     (("上线", "投运", "生产使用", "安全边界", "联锁", "闭环控制", "验收", "可验收"), ("engineering_result_interpreter", "evidence_audit_reproducer")),
     (("迁移", "泛化到", "其他设备", "其他塔", "其他炉", "跨场景"), ("dataset_scenario_profiler", "semantic_field_unit_standardizer", "model_diagnostics_evaluator")),
     (("在线学习", "实时更新", "概念漂移", "模型漂移", "漂移监测"), ("experiment_tracker_comparator", "execution_supervisor_replanner")),
-    (("缺失机制", "插值", "线性插值", "异常值", "异常点", "离群点", "鲁棒", "平滑动态"), ("missing_anomaly_cleaner",)),
-    (("单位", "量纲", "字段映射", "语义映射", "变量角色"), ("semantic_field_unit_standardizer",)),
+    (("缺失", "缺失率", "缺失机制", "填补", "修复", "插值", "线性插值", "异常值", "异常点", "离群点", "鲁棒", "平滑动态"), ("missing_anomaly_cleaner",)),
+    (("标准化", "必需字段", "字段覆盖率", "人工复核", "场景契约", "单位", "量纲", "字段映射", "语义映射", "变量角色"), ("semantic_field_unit_standardizer",)),
     (("报告", "产物", "导出", "下载", "证据链"), ("expert_report_writer", "final_artifact_exporter", "evidence_audit_reproducer")),
 ]
 ROUTING_TOPIC_KEYS = (

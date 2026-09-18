@@ -209,6 +209,7 @@ class AgentChatTests(SimpleTestCase):
         self.assertIn('设备场景不一致', result['answer'])
         self.assertGreater(result['skill_summary']['blocked'], 0)
 
+    @override_settings(PROCESSPILOT_MCP_URL='')
     def test_matching_compound_command_returns_all_stage_results_and_artifacts(self):
         snapshot = self.snapshot()
         snapshot['run_id'] = 'run_rerun'

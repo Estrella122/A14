@@ -36,7 +36,7 @@ const segmentEntries = computed(() => (cleaning.value.segments_preview ?? []).sl
 
 const reviewItems = computed(() => [
   { label: '数据质量', result: Number(cleaning.value.overall_score ?? 0) >= 60 ? '通过' : '待复核', detail: `质量评分 ${cleaning.value.overall_score ?? '—'}，规整后 ${cleaning.value.cleaned_row_count ?? '—'} 行`, tone: Number(cleaning.value.overall_score ?? 0) >= 60 ? 'success' : 'warning' },
-  { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '候选兜底', detail: `${cleaning.value.selected_segment_count ?? 0} 个训练达标窗口，建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
+  { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '无可用片段', detail: `${cleaning.value.selected_segment_count ?? 0} 个接纳窗口（严格 ${cleaning.value.strict_selected_segment_count ?? cleaning.value.selected_segment_count ?? 0} 个），建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
   { label: '时滞与共线性', result: modeling.value.selected_inputs?.length ? '完成' : '待运行', detail: `${modeling.value.input_cols?.length ?? 0} 个输入筛选为 ${modeling.value.selected_inputs?.length ?? 0} 个模型特征`, tone: modeling.value.selected_inputs?.length ? 'success' : 'warning' },
   { label: '辨识效果', result: Number(testMetrics.value.r2 ?? -1) >= 0 ? '通过' : '未通过', detail: `测试 R² ${Number(testMetrics.value.r2 ?? 0).toFixed(3)}，RMSE ${Number(testMetrics.value.rmse ?? 0).toFixed(3)}`, tone: Number(testMetrics.value.r2 ?? -1) >= 0 ? 'success' : 'warning' },
   { label: 'Agent评审', result: reviewPassed.value ? '通过' : '待复核', detail: `${review.value.blockers?.length ?? 0} 项阻断，${review.value.warnings?.length ?? 0} 项警告`, tone: reviewPassed.value ? 'success' : 'warning' },
@@ -123,8 +123,8 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
             <template v-else-if="activeReportSection === 'selection'">
               <h3>动态段优选</h3>
-              <p>动态优选 Agent 按变化强度、信息量与完整性评价候选窗口。训练达标窗口共 {{ cleaning.selected_segment_count ?? 0 }} 个，最终保留 {{ cleaning.modeling_row_count ?? 0 }} 行用于辨识。</p>
-              <div class="report-kpis"><div><span>候选窗口</span><strong>{{ cleaning.candidate_segment_count ?? segmentEntries.length }}</strong><small>滑动窗口评价</small></div><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>动态分≥80且SNR代理≥10 dB</small></div><div><span>建模数据</span><strong>{{ cleaning.modeling_row_count ?? 0 }}</strong><small>优选后行数</small></div></div>
+              <p>动态优选 Agent 按变化强度、信息量与完整性评价候选窗口。当前接纳窗口共 {{ cleaning.selected_segment_count ?? 0 }} 个，其中严格优质段 {{ cleaning.strict_selected_segment_count ?? cleaning.selected_segment_count ?? 0 }} 个，最终保留 {{ cleaning.modeling_row_count ?? 0 }} 行用于辨识。</p>
+              <div class="report-kpis"><div><span>候选窗口</span><strong>{{ cleaning.candidate_segment_count ?? segmentEntries.length }}</strong><small>滑动窗口评价</small></div><div><span>有效窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.relaxed_acceptance ? '小样本自适应筛选' : '严格评分与SNR门槛' }}</small></div><div><span>建模数据</span><strong>{{ cleaning.modeling_row_count ?? 0 }}</strong><small>优选后行数</small></div></div>
               <div class="table-wrap report-table-wrap"><table class="data-table"><thead><tr><th>段编号</th><th>起始位置</th><th>结束位置</th><th>动态分</th><th>入选</th></tr></thead><tbody><tr v-for="(item, index) in segmentEntries" :key="item.segment_id ?? index"><td>{{ item.segment_id ?? index + 1 }}</td><td>{{ item.start_time ?? item.start ?? item.start_idx ?? '—' }}</td><td>{{ item.end_time ?? item.end ?? item.end_idx ?? '—' }}</td><td>{{ Number(item.segment_score ?? item.score ?? item.dynamic_score ?? 0).toFixed(3) }}</td><td>{{ item.selected ? '是' : '候选' }}</td></tr><tr v-if="!segmentEntries.length"><td colspan="5">当前任务未生成段预览。</td></tr></tbody></table></div>
             </template>
 

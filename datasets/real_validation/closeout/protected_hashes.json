@@ -114,7 +114,7 @@
   "integrations/standardization/standards/scenarios/vapor_pressure_soft_sensor/template.json": "579ec313b98d300fa5f0ecae547c89587244a1c16ddb6bd3a3448c69840fec15",
   "integrations/standardization/standards/scenarios/blast_furnace/template.json": "fdd718ea0d663816d4402b6e62f8a3aeb654623cb220952a0281a52e1837c569",
   "integrations/standardization/standards/scenarios/steel_industry_energy/template.json": "dda8e022a9ee81522d91d37bdf5d535f41fa2410b93d29f26e23c77d4bce1ced",
-  "integrations/standardization/standards/scenarios/industrial_dryer/template.json": "d416f32ae390817daff15e1568f9cc047e572aef8bfb5e5cc0a71f89f5013491",
+  "integrations/standardization/standards/scenarios/industrial_dryer/template.json": "c5ed80f40eae34b0e3d97e08238fcea4693b1c2f3f22b608d445ace8cbaf61ce",
   "integrations/standardization/standards/scenarios/thermal_power_boiler_long_tail/template.json": "d5677fcb9ec31b20916bf59ca20405d7defce632ae292eeac87d1cf7357c4aca",
-  "integrations/standardization/standards/scenarios/debutanizer_column/template.json": "ddf9df356e8116dc4b328790d074843ab445115e82ebd8fedab8aaa0b572abca"
+  "integrations/standardization/standards/scenarios/debutanizer_column/template.json": "49dabf3243966cbee1af40f2f89ee5a1823638d9fbfc9b86f853b9e5dea1df2c"
 }

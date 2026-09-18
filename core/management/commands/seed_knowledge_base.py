@@ -32,6 +32,21 @@ SCENE_KNOWLEDGE = {
         'keywords': ['工业干燥器', '干燥机', '热风入口温度', '风量', '湿料进料量', '产品含水率', '排风湿度'],
         'variables': [('产品含水率', 'output'), ('产品温度', 'output'), ('排风湿度', 'output'), ('热风入口温度', 'input'), ('热风流量', 'input'), ('湿料进料量', 'disturbance')],
     },
+    'steel_industry_energy': {
+        'summary': '钢铁工业能源数据以有功用电量为预测目标，滞后/超前无功电量和功率因数描述负载电气特性。该公开数据适合能耗预测与动态数据质量分析，但没有可直接下发的工艺操纵量，不能把相关性模型解释为生产闭环控制模型。',
+        'keywords': ['钢铁工业能源', '有功用电量', '滞后无功电量', '超前无功电量', '功率因数', '负载类型', '能耗预测'],
+        'variables': [('有功用电量', 'output'), ('滞后无功电量', 'input'), ('超前无功电量', 'input'), ('滞后功率因数', 'state'), ('超前功率因数', 'state'), ('负载类型', 'context')],
+    },
+    'thermal_power_boiler_long_tail': {
+        'summary': '燃煤工业锅炉长尾数据以锅炉出口蒸汽温度为主要输出，包含炉膛压力、氧量、风量、减温水与蒸汽流量等变量。专业分析应区分单步预测、自由仿真和闭环可用性，并在时滞补偿后复算VIF，避免把共同扰动当作因果操纵关系。',
+        'keywords': ['燃煤工业锅炉', '锅炉出口蒸汽温度', '炉膛压力', '减温水流量', '主蒸汽流量', '时滞', 'VIF'],
+        'variables': [('锅炉出口蒸汽温度', 'output'), ('一次减温水流量', 'input'), ('一次风机出口流量', 'input'), ('补偿主蒸汽流量', 'disturbance'), ('炉膛压力', 'state'), ('省煤器入口烟气氧量', 'state')],
+    },
+    'vapor_pressure_soft_sensor': {
+        'summary': '蒸气压力软测量数据以小时序列记录温度、流量、压力和阀位，实测蒸气压力是稀疏化验目标。应从累计小时派生相对时间轴，目标缺失不得插值成真值；时滞、共线性和软测量模型只能在真实观测目标上训练与评估。',
+        'keywords': ['蒸气压力软测量', '实测蒸气压力', '累计小时', '稀疏化验', 'Antoine压力估计', '再沸器平均温度'],
+        'variables': [('实测蒸气压力', 'output'), ('累计小时', 'time'), ('再沸器平均温度', 'input'), ('冷凝压力逆变换', 'input'), ('Antoine压力估计', 'input'), ('当前压力估计', 'input')],
+    },
 }
 
 BOUNDARIES = {
@@ -48,15 +63,16 @@ BOUNDARIES = {
 
 
 class Command(BaseCommand):
-    help = '幂等写入三类工业场景、变量实体及全部 Skill 路由知识。'
+    help = '幂等写入已支持工业场景、变量实体及全部 Skill 路由知识。'
 
     @transaction.atomic
     def handle(self, *args, **options):
         now = timezone.now()
         scene_count = 0
         variable_count = 0
-        for scene in (row for row in list_scene_configs() if row.get('official')):
-            curated = SCENE_KNOWLEDGE[scene['id']]
+        registered_scenes = {row['id']: row for row in list_scene_configs()}
+        for scene_id, curated in SCENE_KNOWLEDGE.items():
+            scene = registered_scenes[scene_id]
             body = curated['summary']
             document, _ = KnowledgeDocument.objects.update_or_create(
                 document_id=f"builtin-scene-{scene['id']}-v1",
@@ -73,7 +89,7 @@ class Command(BaseCommand):
             scene_entity, _ = KnowledgeEntity.objects.update_or_create(
                 entity_id=f"scene:{scene['id']}", defaults={
                     'entity_type': 'scene', 'canonical_name': scene['name'], 'scene_id': scene['id'],
-                    'attributes': {'family': scene['family'], 'official': True}, 'status': 'approved',
+                    'attributes': {'family': scene['family'], 'official': bool(scene.get('official')), 'supported': True}, 'status': 'approved',
                     'source_document': document,
                 })
             for alias in {scene['name'], scene['id'], *scene.get('aliases', [])}:
@@ -136,4 +152,4 @@ class Command(BaseCommand):
                     'source_document': routing_doc, 'version': skill.version,
                 })
         self.stdout.write(self.style.SUCCESS(
-            f'知识库已就绪：{scene_count} 个正式场景，{variable_count} 个变量，{len(SKILLS)} 条 Skill 规则。'))
+            f'知识库已就绪：{scene_count} 个支持场景，{variable_count} 个变量，{len(SKILLS)} 条 Skill 规则。'))

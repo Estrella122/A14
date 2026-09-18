@@ -201,11 +201,17 @@ class SegmentationExecutor:
                            missing_artifacts=missing_artifacts,
                            evidence=[{"dependency": "cleaning", "status": "missing"}])
         params = inputs.get("parameters", {})
+        scene_selection = standard.get("scenario", {}).get("algorithm_profile", {}).get("selection", {})
+        selection_policy = {**scene_selection, **{
+            key: value for key, value in params.items()
+            if key in {"strict_score", "usable_score", "snr_db", "min_valid_samples", "allow_usable_fallback"}
+        }}
         output = Path(runtime_context["output_dir"]) / "segmentation"
         result = run_segmentation_stage(
             train, dictionary, output, upstream_run_id=str(snapshot.get("run_id") or "skill-runtime"),
-            split_version=split.get("protocol", ""), window_length=int(params.get("window_length", 30)),
-            step=int(params.get("step", 15)), primary_output=standard.get("scenario", {}).get("primary_output"),
+            split_version=split.get("protocol", ""), window_length=int(params.get("window_length", scene_selection.get("window_samples", 30))),
+            step=int(params.get("step", scene_selection.get("step_samples", 15))), primary_output=standard.get("scenario", {}).get("primary_output"),
+            policy=selection_policy or None,
         )
         if result["status"] != "success":
             return _result(skill_id, started, status="blocked", limitations=result.get("limitations"), evidence=result.get("evidence"))
@@ -214,7 +220,7 @@ class SegmentationExecutor:
                 for key, path in result["artifacts"].items()]
         return _result(skill_id, started, capabilities=capability_ids,
             facts=[f"只使用训练分区评估 {result['metrics']['candidate_count']} 个窗口。"],
-            findings=[f"选中 {result['metrics']['selected_count']} 个优质动态段、{result['metrics']['selected_row_count']} 行建模数据。"],
+            findings=[f"接纳 {result['metrics']['selected_count']} 个动态段（严格 {result['metrics'].get('strict_selected_count', result['metrics']['selected_count'])} 个）、{result['metrics']['selected_row_count']} 行建模数据。"],
             limitations=result["limitations"], metrics={**result["metrics"], "snr": result["snr_metrics"]},
             artifacts=refs, inputs=[ArtifactType.CLEANED_TRAIN, ArtifactType.FROZEN_SPLIT, ArtifactType.FIELD_DICTIONARY], outputs=refs,
             provenance=result.get("provenance", {}), evidence=result["evidence"], warnings=result["warnings"],

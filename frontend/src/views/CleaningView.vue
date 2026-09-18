@@ -97,7 +97,7 @@ async function executeCleaning() {
     <section class="metric-grid four-col">
       <article class="metric-card"><span class="metric-label">原始平均缺失率</span><div class="metric-value">{{ liveMissing }}%</div><p>清洗后完成插值</p><span class="metric-trend positive">真实任务统计</span></article>
       <article class="metric-card"><span class="metric-label">数据质量</span><div class="metric-value">{{ liveCleaning?.overall_score ?? '—' }}</div><p>综合五维评分</p><span class="metric-trend positive">{{ liveCleaning ? '已生成质量报告' : '等待运行' }}</span></article>
-      <article class="metric-card"><span class="metric-label">优质动态段</span><div class="metric-value">{{ liveCleaning?.selected_segment_count ?? '—' }}</div><p>滑动窗口真实评分</p><span class="metric-trend positive">自动筛选</span></article>
+      <article class="metric-card"><span class="metric-label">有效动态段</span><div class="metric-value">{{ liveCleaning?.selected_segment_count ?? '—' }}</div><p>严格优质 {{ liveCleaning?.strict_selected_segment_count ?? liveCleaning?.selected_segment_count ?? '—' }} 段</p><span class="metric-trend positive">{{ liveCleaning?.relaxed_acceptance ? '小样本自适应' : '严格筛选' }}</span></article>
       <article class="metric-card"><span class="metric-label">规整后数据量</span><div class="metric-value">{{ liveCleaning?.cleaned_row_count?.toLocaleString('zh-CN') ?? '—' }}</div><p>建模数据 {{ liveCleaning?.modeling_row_count?.toLocaleString('zh-CN') ?? '—' }} 行</p><span class="metric-trend positive">任务产物可下载</span></article>
     </section>
 

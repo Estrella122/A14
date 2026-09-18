@@ -34,10 +34,11 @@ def shifted(df, col, lag, seconds):
     return df[col].groupby(groups(df, seconds)).shift(lag)
 
 
-def features(df, output, inputs, delays, order, seconds):
+def features(df, output, inputs, delays, order, seconds, include_output_lags=True):
     x = pd.DataFrame(index=df.index)
-    for lag in range(1, order + 1):
-        x[f'{output}_lag{lag}'] = shifted(df, output, lag, seconds)
+    if include_output_lags:
+        for lag in range(1, order + 1):
+            x[f'{output}_lag{lag}'] = shifted(df, output, lag, seconds)
     for col in inputs:
         for lag in range(order):
             # At least one historical sample; delay 0 never means future input.
@@ -74,18 +75,19 @@ def arx_response_analysis(state, horizon=120, frequency_points=96):
     order = int(state['order'])
     seconds = float(state['seconds'])
     coefficients = np.asarray(state['coef'], dtype=float)
-    ar = coefficients[1:order + 1]
+    has_ar = state.get('family') != 'FIRX'
+    ar = coefficients[1:order + 1] if has_ar else np.array([], dtype=float)
     denominator = np.r_[1., -ar]
     channels = []
     for input_index, input_name in enumerate(state['inputs']):
-        start = 1 + order + input_index * order
+        start = 1 + (order if has_ar else 0) + input_index * order
         input_coef = coefficients[start:start + order]
         delay = max(1, int(state['delays'][input_name]))
         impulse_y = np.zeros(horizon, dtype=float)
         step_y = np.zeros(horizon, dtype=float)
         for position in range(horizon):
-            ar_impulse = sum(ar[lag - 1] * impulse_y[position - lag] for lag in range(1, order + 1) if position >= lag)
-            ar_step = sum(ar[lag - 1] * step_y[position - lag] for lag in range(1, order + 1) if position >= lag)
+            ar_impulse = sum(ar[lag - 1] * impulse_y[position - lag] for lag in range(1, len(ar) + 1) if position >= lag)
+            ar_step = sum(ar[lag - 1] * step_y[position - lag] for lag in range(1, len(ar) + 1) if position >= lag)
             impulse_input = sum(input_coef[lag] for lag in range(order) if position == delay + lag)
             step_input = sum(input_coef[lag] for lag in range(order) if position >= delay + lag)
             impulse_y[position] = ar_impulse + impulse_input
@@ -94,7 +96,7 @@ def arx_response_analysis(state, horizon=120, frequency_points=96):
         for omega in np.linspace(0, np.pi, frequency_points):
             z = np.exp(-1j * omega)
             numerator = sum(input_coef[lag] * z ** (delay + lag) for lag in range(order))
-            denominator_value = 1 - sum(ar[lag - 1] * z ** lag for lag in range(1, order + 1))
+            denominator_value = 1 - sum(ar[lag - 1] * z ** lag for lag in range(1, len(ar) + 1))
             response = numerator / denominator_value if abs(denominator_value) > 1e-12 else complex(np.nan, np.nan)
             finite = np.isfinite(response.real) and np.isfinite(response.imag)
             frequencies.append({
@@ -166,14 +168,25 @@ def residual_acf(df, indices, residual, seconds, max_lag=20):
 def evaluation(df, state, guard, split, detailed=True):
     df = df.reset_index(drop=True)
     output, seconds = state['output'], state['seconds']
-    x = features(df, output, state['inputs'], state['delays'], state['order'], seconds)
+    sparse_target = state.get('family') == 'FIRX'
+    x = features(
+        df, output, state['inputs'], state['delays'], state['order'], seconds,
+        include_output_lags=not sparse_target,
+    )
     y = df[output]
     # Identical targets for every candidate, independent of fitted delays/order.
     age = df.groupby(groups(df, seconds)).cumcount()
     common = (age >= guard) & y.notna()
     baseline = shifted(df, output, 1, seconds)
+    if sparse_target:
+        # Compare sparse laboratory observations against the last previously
+        # observed assay in the same continuous time segment.  No future target
+        # and no interpolated target is used.
+        group_ids = groups(df, seconds)
+        baseline = df[output].groupby(group_ids).ffill().groupby(group_ids).shift(1)
     common &= baseline.notna()
-    for lag in (1, 2, 3): common &= shifted(df, output, lag, seconds).notna()
+    if not sparse_target:
+        for lag in (1, 2, 3): common &= shifted(df, output, lag, seconds).notna()
     all_inputs = state.get('evaluation_inputs', state['inputs'])
     valid_inputs = df[all_inputs].notna().all(axis=1)
     common &= valid_inputs.rolling(guard + 1, min_periods=guard + 1).sum().eq(guard + 1)
@@ -200,6 +213,26 @@ def evaluation(df, state, guard, split, detailed=True):
     prediction = pd.DataFrame({'timestamp': timestamps, 'index': indices, 'y_true': actual,
                                'y_pred': pred, 'residual': residual, 'split': split})
     if not detailed:
+        return metrics, diagnostics, prediction, acf
+    if sparse_target:
+        diagnostics['multi_step'] = {
+            'applicable': False,
+            'reason': 'sparse laboratory target; FIRX has no autoregressive target feedback',
+            'metrics': metrics,
+            'persistence': persistence,
+        }
+        diagnostics['free_simulation'] = {
+            'applicable': False,
+            'reason': 'FIRX directly estimates each observed laboratory target without recursive output feedback',
+            'conditional_on_observed_inputs': True,
+            'diverged': False,
+            'metrics': metrics,
+        }
+        diagnostics['residual'] = {
+            'acf_max_abs': None,
+            'heuristic_95pct_bound': 1.96 / np.sqrt(len(residual)),
+            'whiteness_test': 'not_applicable_to_irregular_sparse_target; inspect observed-target residuals',
+        }
         return metrics, diagnostics, prediction, acf
     # Rolling 10-step prediction: measured y only before each forecast origin.
     horizon = 10
@@ -269,6 +302,8 @@ def search_structure_orders(train, validation, output_col, input_cols, selected,
     family_specs = []
     if 'ARX' in families:
         family_specs.append(('ARX', selected, ridge_alphas))
+    if 'FIRX' in families:
+        family_specs.append(('FIRX', selected, ridge_alphas))
     if 'AR' in families:
         family_specs.append(('AR', [], (0.,)))
     # Real order and model-family search, all on the same validation targets.
@@ -276,21 +311,25 @@ def search_structure_orders(train, validation, output_col, input_cols, selected,
         for order in orders:
             for alpha in alphas:
                 try:
-                    x = features(train, output_col, variables, delay_map, order, seconds)
+                    x = features(
+                        train, output_col, variables, delay_map, order, seconds,
+                        include_output_lags=family != 'FIRX',
+                    )
                     coef, valid, rank = fit(x, train[output_col], alpha=alpha)
                     state = dict(output=output_col, seconds=seconds, inputs=variables, delays=delay_map,
                                  order=order, coef=coef.tolist(), family=family, regularization_alpha=alpha,
                                  evaluation_inputs=input_cols)
                     m, d, p, acf = evaluation(validation, state, guard, 'validation', detailed=True)
                     tm = regression_metrics(train.loc[valid, output_col], predict(x.loc[valid], coef), len(coef))
-                    roots = np.roots(np.r_[1, -np.array(coef[1:order + 1])])
+                    roots = np.roots(np.r_[1, -np.array(coef[1:order + 1])]) if family != 'FIRX' else np.array([])
                     stable = bool(np.all(np.abs(roots) < 1))
                     simulation_valid = bool(d.get('free_simulation', {}).get('metrics')) and not d.get('free_simulation', {}).get('diverged')
                     eligible = stable and simulation_valid
                     candidates.append(dict(family=family, order=order, regularization_alpha=alpha,
                                            status='completed', eligible=eligible, stable_ar_poles=stable,
                                            validation_free_simulation_valid=simulation_valid,
-                                           max_pole_magnitude=float(max(np.abs(roots))), validation=m, train=tm, rank=rank))
+                                           max_pole_magnitude=float(max(np.abs(roots))) if len(roots) else 0.0,
+                                           validation=m, train=tm, rank=rank))
                     if eligible:
                         fitted.append((m['rmse'], state, tm, m, d, p, acf, list(x.columns)))
                 except ValueError as exc:
@@ -322,6 +361,22 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
         diagnostic_data, aligned_cols, output_col,
         corr_threshold=corr_threshold, vif_threshold=vif_threshold,
     )
+    max_features = int(policy.get('max_features') or 0)
+    if max_features > 0 and len(recommendation['keep']) > max_features:
+        target_correlation = diagnostic_data[
+            [*recommendation['keep'], output_col]
+        ].corr()[output_col].drop(labels=[output_col], errors='ignore').abs()
+        ranked_keep = sorted(
+            recommendation['keep'],
+            key=lambda name: (-float(target_correlation.get(name, 0)), name),
+        )
+        retained, removed = ranked_keep[:max_features], ranked_keep[max_features:]
+        recommendation['keep'] = sorted(retained)
+        recommendation['drop'].extend(removed)
+        recommendation['reasons'].extend(
+            {'drop': name, 'reason': 'sparse_target_max_features', 'max_features': max_features}
+            for name in removed
+        )
     final_vif = compute_vif(diagnostic_data, recommendation["keep"])
     recommendation["final_vif"] = final_vif.to_dict("records")
     selected = [c.removesuffix('_aligned') for c in recommendation['keep']]
@@ -346,9 +401,12 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     # very high-dimensional ARX model over a simpler, better-supported baseline.
     _, state, tm, vm, diagnostics, prediction, acf, names = min(fitted, key=lambda v: v[3]['bic'])
     vm, diagnostics, prediction, acf = evaluation(validation, state, guard, 'validation')
-    roots = np.roots(np.r_[1, -np.array(state['coef'][1:state['order']+1])])
+    roots = (
+        np.roots(np.r_[1, -np.array(state['coef'][1:state['order']+1])])
+        if state['family'] != 'FIRX' else np.array([])
+    )
     diagnostics['stable_ar_poles'] = bool(np.all(np.abs(roots) < 1))
-    diagnostics['max_pole_magnitude'] = float(max(np.abs(roots)))
+    diagnostics['max_pole_magnitude'] = float(max(np.abs(roots))) if len(roots) else 0.0
     diagnostics['validation_only'] = True
     save_json(modeldir/'fitted_state.json', state)
     response_analysis = arx_response_analysis(state)
@@ -361,7 +419,7 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
     acf.to_csv(modeldir/'residual_autocorrelation.csv', index=False)
     pd.DataFrame({'term':['intercept']+names, 'coefficient':state['coef']}).to_csv(modeldir/'arx_coefficients.csv', index=False)
     config = dict(protocol='chronological_60_20_20_v2', max_lag=max_lag, requested_max_lag=int(requested_max_lag),
-                  output_order=state['order'], input_order=state['order'], input_delay=1,
+                  output_order=0 if state['family'] == 'FIRX' else state['order'], input_order=state['order'], input_delay=1,
                   train_ratio=0.6, validation_ratio=0.2, test_ratio=0.2, guard_samples=guard,
                   family=state['family'], regularization='ridge' if state.get('regularization_alpha', 0) else 'none',
                   regularization_alpha=state.get('regularization_alpha', 0), preprocessing_fit='training_only',
@@ -369,7 +427,7 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
                   correlation_threshold=corr_threshold, vif_threshold=vif_threshold,
                   candidate_families=families, candidate_orders=orders, ridge_alphas=ridge_alphas)
     family_comparison = {}
-    for family in ('ARX', 'AR'):
+    for family in ('ARX', 'FIRX', 'AR'):
         completed = [row for row in candidates if row.get('family') == family and row.get('status') == 'completed' and row.get('eligible')]
         if completed:
             best_family = min(completed, key=lambda row: row['validation']['rmse'])

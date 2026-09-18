@@ -99,13 +99,16 @@ def select_segments(context, inputs, parameters):
     segments = pd.DataFrame(report["segments"])
     if segments.empty:
         return output(context, {}, [], status="unavailable", warnings=["insufficient_data：无有效动态窗口"])
-    chosen = select_modeling_rows(train, segments, top_k=parameters.get("top_k",5))
     strict = segments[segments.level == "优质动态段"]
-    refs = [_write_frame(context,"MODELING_DATASET",chosen), persist(context,"SELECTED_SEGMENTS",select_modeling_windows(segments, parameters.get("top_k",5)).to_dict("records"),"selected_segments.json")]
-    return output(context, {"selected_rows":len(chosen),"strict_windows":len(strict),"degraded_candidate":strict.empty},
+    relaxed = bool(report.get("metrics", {}).get("relaxed_acceptance"))
+    accepted = pd.DataFrame(report.get("selected_segments", [])) if relaxed else segments
+    chosen = select_modeling_rows(train, accepted, top_k=parameters.get("top_k",5), strict_first=not relaxed)
+    selected_windows = select_modeling_windows(accepted, parameters.get("top_k",5), strict_first=not relaxed)
+    refs = [_write_frame(context,"MODELING_DATASET",chosen), persist(context,"SELECTED_SEGMENTS",selected_windows.to_dict("records"),"selected_segments.json")]
+    return output(context, {"selected_rows":len(chosen),"strict_windows":len(strict),"accepted_windows":len(selected_windows),"relaxed_acceptance":relaxed,"degraded_candidate":strict.empty},
         [{"method":"select_modeling_rows", "window_score_and_snr_reused":True}], artifacts=refs,
-        status="partial" if strict.empty else "success",
-        warnings=["无严格优质动态段，沿用现有最高分候选策略；不能当作高质量证据"] if strict.empty else [], algorithm="segmentation_service.select_modeling_rows")
+        status="success" if (not strict.empty or relaxed) else "partial",
+        warnings=["小样本自适应分层筛选已接纳工程可用段，严格段数量单独保留用于结果分级"] if relaxed else (["无严格优质动态段，沿用现有最高分候选策略；不能当作高质量证据"] if strict.empty else []), algorithm="segmentation_service.select_modeling_rows")
 
 
 def rank(context, inputs, parameters):

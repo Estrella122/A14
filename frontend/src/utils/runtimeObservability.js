@@ -110,7 +110,7 @@ export function executorHighlights(result) {
   if ((result.executor ?? result.skill_id) === 'segmentation') {
     const evidence = result.evidence?.[0] ?? {}
     return [
-      ['候选窗口', metrics.candidate_count], ['优质动态段', metrics.selected_count],
+      ['候选窗口', metrics.candidate_count], ['接纳动态段', metrics.selected_count],
       ['建模数据行', metrics.selected_row_count], ['Validation 读取', evidence.validation_rows_read],
       ['Test 读取', evidence.test_rows_read],
     ].filter((item) => item[1] !== undefined && item[1] !== null)

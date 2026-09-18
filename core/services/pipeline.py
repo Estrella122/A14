@@ -201,6 +201,7 @@ def _standardize(source_path: Path, run_dir: Path, scenario_id: str, instruction
         "detection": result["detection"],
         "mapping": result["mapping"],
         "conversions": result["conversions"],
+        "derived_fields": result.get("derived_fields", []),
         "issues": result["issues"],
         "data_decision": result["data_decision"],
         "schema_validation": result["schema_validation"],
@@ -426,6 +427,12 @@ def _clean(
         dimensions = report["dimension_scores"]
         report["overall_score"] = round(.25 * dimensions["completeness"] + .20 * dimensions["validity"] + .15 * dimensions["smoothness"] + .30 * dynamic_score + .10 * dimensions["consistency"], 2)
         report["selected_segment_count"] = segmentation["metrics"]["selected_count"]
+        report["strict_selected_segment_count"] = segmentation["metrics"].get("strict_selected_count", segmentation["metrics"]["selected_count"])
+        report["usable_segment_count"] = segmentation["metrics"].get("usable_count", segmentation["metrics"]["dynamic_count"])
+        report["relaxed_acceptance"] = bool(segmentation["metrics"].get("relaxed_acceptance"))
+        report["selection_acceptance_mode"] = segmentation["metrics"].get("acceptance_mode", "strict")
+        if segmentation.get("warnings"):
+            report.setdefault("warnings", []).extend(segmentation["warnings"])
         report["snr"].update(status="estimated", passed_windows=segmentation["metrics"]["selected_count"])
     output_field = next((item for item in dictionary if item.get("standard_name") == primary_output and item["standard_name"] in cleaned.columns), None)
     if output_field is None:
@@ -687,15 +694,18 @@ def _optimize_real_data(
         initial_anchor = max(explored, key=lambda item: item["score"])
         best_so_far = initial_anchor
         refinement_step = max(10, max_lag // 4)
+        top_k_rule = (bounds or {}).get("top_k") or {}
+        top_k_min = max(1, int(top_k_rule.get("min", 2)))
+        top_k_max = max(top_k_min, int(top_k_rule.get("max", 20)))
         seen = {(item["top_k"], item["max_lag"]) for item in iterations}
         directions = [(2, -1), (-1, 1), (3, -2), (-2, 2), (1, -3), (-3, 3), (4, -1), (-4, 1), (2, -2), (-2, 2)]
         for round_number in range(7, max_rounds + 1):
             anchor = initial_anchor if round_number <= 8 else best_so_far
             top_delta, lag_direction = directions[round_number - 7]
-            candidate_top_k = min(20, max(2, anchor["top_k"] + top_delta))
+            candidate_top_k = min(top_k_max, max(top_k_min, anchor["top_k"] + top_delta))
             candidate_max_lag = min(600, max(10, anchor["max_lag"] + lag_direction * refinement_step))
             while (candidate_top_k, candidate_max_lag) in seen:
-                candidate_top_k = 2 + (candidate_top_k - 1) % 19
+                candidate_top_k = top_k_min + (candidate_top_k - top_k_min + 1) % (top_k_max - top_k_min + 1)
                 candidate_max_lag = min(600, candidate_max_lag + 5)
             seen.add((candidate_top_k, candidate_max_lag))
             suffix = "A" if round_number == 7 else "B" if round_number == 8 else f"R{round_number}"
@@ -854,15 +864,17 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
         blockers.append("未提供独立测试集与持续值基线对比")
     elif improvement < 1:
         blockers.append("独立测试相较持续值基线的RMSE改善不足1%")
-    if modeling.get("config", {}).get("family") == "AR":
+    model_family = modeling.get("config", {}).get("family")
+    sparse_target_model = model_family == "FIRX"
+    if model_family == "AR":
         blockers.append("仅自回归基线胜出，尚未证明外部输入到输出的动态模型")
     if diagnostics.get("stable_ar_poles") is not True:
         blockers.append("未通过AR极点稳定性检查")
     multi = test_diag.get("multi_step", {})
-    if not multi.get("metrics") or multi["metrics"]["rmse"] >= multi.get("persistence", {}).get("rmse", 0):
+    if not sparse_target_model and (not multi.get("metrics") or multi["metrics"]["rmse"] >= multi.get("persistence", {}).get("rmse", 0)):
         blockers.append("10步预测未优于同跨度持续值基线或证据不足")
     simulation = test_diag.get("free_simulation", {})
-    if simulation.get("diverged") or not simulation.get("metrics") or simulation["metrics"].get("r2", -1) < 0:
+    if not sparse_target_model and (simulation.get("diverged") or not simulation.get("metrics") or simulation["metrics"].get("r2", -1) < 0):
         blockers.append("自由仿真未通过有效性检查")
     passed = not blockers and decision != "reject" and quality >= 60 and r2 >= 0
     required_coverage = float(standardization.get("mapping", {}).get("required_coverage") or 0)
@@ -874,12 +886,18 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
     simulation_r2 = (simulation.get("metrics") or {}).get("r2")
     dynamic_valid = (
         diagnostics.get("stable_ar_poles") is True
-        and multi_rmse is not None
-        and multi_baseline_rmse is not None
-        and multi_rmse < multi_baseline_rmse
-        and simulation_r2 is not None
-        and simulation_r2 >= 0
-        and not simulation.get("diverged")
+        and (
+            sparse_target_model
+            and r2 >= 0
+            and improvement is not None
+            or not sparse_target_model
+            and multi_rmse is not None
+            and multi_baseline_rmse is not None
+            and multi_rmse < multi_baseline_rmse
+            and simulation_r2 is not None
+            and simulation_r2 >= 0
+            and not simulation.get("diverged")
+        )
     )
     offline_gates = [
         {"id": "field_contract", "passed": decision != "reject" and required_coverage >= 1,
@@ -906,7 +924,7 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
             ),
         })
     soft_sensor_gates = offline_gates + [
-        {"id": "external_inputs_used", "passed": modeling.get("config", {}).get("family") == "ARX" and bool(modeling.get("fitted_inputs")),
+        {"id": "external_inputs_used", "passed": model_family in {"ARX", "FIRX"} and bool(modeling.get("fitted_inputs")),
          "evidence": f"family={modeling.get('config', {}).get('family')}, fitted_inputs={modeling.get('fitted_inputs', [])}"},
         {"id": "residual_whiteness", "passed": bool(acf is not None and acf_bound is not None and acf <= acf_bound),
          "evidence": f"acf_max_abs={acf}, heuristic_95pct_bound={acf_bound}; 上线前仍需正式显著性检验"},
@@ -934,8 +952,11 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
         "policy": "离线通过只表示可继续工程验证；软测量与闭环必须分别通过全部准入门。",
     }
     time_axis_warning = []
-    if standardization.get("scenario", {}).get("time_axis_type") == "ordered_samples":
+    time_axis_type = standardization.get("scenario", {}).get("time_axis_type")
+    if time_axis_type == "ordered_samples":
         time_axis_warning.append("公开数据未提供真实日历时间和采样周期；派生时间轴只保存顺序，时滞单位只能解释为采样点。")
+    elif time_axis_type == "elapsed_hours":
+        time_axis_warning.append("数据只提供累计小时；系统派生相对时间轴用于时序计算，不把它解释为真实日历时间。")
     report = {
         "passed": passed,
         "conclusion": "通过离线候选模型门槛，仍需外部工况验证" if passed else "未通过，需要复核或调整数据",
@@ -969,7 +990,13 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
         "## 总控与子Agent执行链", "",
         "实际执行由本地流水线完成：字段标准化 → 分区与因果清洗 → 训练段SNR估计与评分 → 候选时滞/共线性/结构训练 → 共同验证集寻优 → 独立测试 → 评审。Skill界面展示规划与对应证据读取，不代表每个标签各启动一次算法。", "",
         "## 数据与SNR", "",
-        ("时间轴为公开样本顺序派生轴，物理采样周期未知；所有时滞只表示采样点数。" if standardization.get("scenario", {}).get("time_axis_type") == "ordered_samples" else "时间轴按源数据日历时间解释。"),
+        (
+            "时间轴为公开样本顺序派生轴，物理采样周期未知；所有时滞只表示采样点数。"
+            if standardization.get("scenario", {}).get("time_axis_type") == "ordered_samples"
+            else "时间轴由累计小时派生，仅用于相对时序计算，不代表真实日历时间。"
+            if standardization.get("scenario", {}).get("time_axis_type") == "elapsed_hours"
+            else "时间轴按源数据日历时间解释。"
+        ),
         f"原始规整数据 {cleaning['cleaned_row_count']} 行；训练分区内达标窗口 {cleaning['selected_segment_count']} 个；选中候选训练数据 {modeling['training_rows']} 行。",
         "30点窗口、15点步长，有重叠。达标条件为动态综合分≥80且SNR代理估计≥10 dB；不表示独立激励次数或已证明持续激励。",
         "SNR使用稳健二阶差分估计白噪声方差，以总方差扣除噪声方差估计信号功率；局部曲率、有色噪声和量化会破坏假设。无有效估计的窗口不能标为高SNR。", "",
@@ -990,7 +1017,7 @@ def _analysis_report(snapshot, standardization, cleaning, modeling, review, run_
             lines.append(f"|{row['round']}|{row['top_k']}|{row['max_lag']}|{row['row_count']}|{row['r2']:.4f}|{row['rmse']:.4f}|{row['coverage']:.1%}|{row['score']:.3f}|")
         else: lines.append(f"|{row['round']}|{row['top_k']}|{row['max_lag']}|失败：{row.get('error')}|||||")
     lines += ["", f"选中第 {optimization['best_round']} 轮；验证得分 {optimization['best_score']}。", "",
-        "## 系统辨识结果", "", f"模型：{modeling['config']['family']}，阶次 {modeling['config']['output_order']}；阶次1/2/3及AR/ARX在共同验证集比较。",
+        "## 系统辨识结果", "", f"模型：{modeling['config']['family']}，输出阶次 {modeling['config']['output_order']}、输入阶次 {modeling['config'].get('input_order')}；候选族 {', '.join(modeling['config'].get('candidate_families', []))} 与候选阶次 {modeling['config'].get('candidate_orders', [])} 在共同验证集比较。",
         "|数据分区|有效样本|R²|RMSE|MAE|", "|---|---:|---:|---:|---:|"]
     for label, metric in metrics.items():
         lines.append(f"|{label}|{metric['n_samples']:.0f}|{metric['r2']:.5f}|{metric['rmse']:.5f}|{metric['mae']:.5f}|")
@@ -1176,6 +1203,10 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             _set_stage(snapshot, run_dir, current_stage, "running", "正在冻结优质动态数据段")
             snapshot["results"]["selection"] = {
                 "selected_segment_count": cleaning["selected_segment_count"],
+                "strict_selected_segment_count": cleaning.get("strict_selected_segment_count", cleaning["selected_segment_count"]),
+                "usable_segment_count": cleaning.get("usable_segment_count", cleaning["selected_segment_count"]),
+                "relaxed_acceptance": bool(cleaning.get("relaxed_acceptance")),
+                "acceptance_mode": cleaning.get("selection_acceptance_mode", "strict"),
                 "modeling_row_count": len(modeling_data),
                 "segments": cleaning["segments_preview"],
             }

@@ -303,7 +303,11 @@ class StandardizationAgent:
         if target and value_profile["available"]:
             plausibility = float(value_profile["plausibility"])
             score *= 0.72 + 0.28 * plausibility
-            if value_profile["missing_ratio"] >= 0.8:
+            # Missingness is data-quality evidence, not field-identity evidence.
+            # An exact curated header such as vapour_pressure_kpa remains the
+            # same field even when laboratory observations are intentionally
+            # sparse.  Keep the penalty for inferred/fuzzy candidates only.
+            if value_profile["missing_ratio"] >= 0.8 and method not in {"alias", "normalized_alias", "learned_alias", "point_dictionary"}:
                 score *= 0.72
         physical = {}
         if template.config.get("physical_semantics") and target:
@@ -469,7 +473,13 @@ class StandardizationAgent:
             and ranked[1]["matched_fields"] >= 3
         )
         manual_disagreement = selection_source == "manual" and selected["scenario_id"] != auto_selected["scenario_id"] and selected_margin <= -0.08
-        evidence_conflict = bool(selected["conflicts"])
+        # Missingness and range anomalies are quality warnings.  They must not
+        # turn an otherwise unique, exact scene identity into an ambiguous
+        # scene; true semantic/identity conflicts still require review.
+        evidence_conflict = any(
+            str(item).startswith(("conflicting_feature:", "unit_conflict:"))
+            for item in selected["conflicts"]
+        )
         if low_evidence:
             ambiguity_reason = "场景证据不足"
         elif manual_disagreement:
@@ -579,10 +589,34 @@ class StandardizationAgent:
             frame=frame,
             context=context,
         )
-        scene_recognition_ms = round((perf_counter() - standardization_started) * 1000, 3)
-        scene_recognition_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         selected_id = detection["selected"]["scenario_id"] if scenario_id == "auto" else scenario_id
         template = self.repository.get(selected_id)
+        derived_fields: list[dict[str, Any]] = []
+        time_derivation = template.config.get("time_derivation") or {}
+        timestamp_field = template.config.get("timestamp_field")
+        source_time_field = time_derivation.get("source_field")
+        if timestamp_field not in frame.columns and source_time_field in frame.columns:
+            values = pd.to_numeric(frame[source_time_field], errors="coerce")
+            unit = str(time_derivation.get("unit") or "h")
+            origin = pd.Timestamp(str(time_derivation.get("origin") or "2000-01-01T00:00:00"))
+            derived = origin + pd.to_timedelta(values, unit=unit)
+            if int(derived.notna().sum()) == int(values.notna().sum()) and derived.notna().sum() >= 2:
+                frame = frame.copy()
+                frame[timestamp_field] = derived
+                derived_fields.append({
+                    "field": timestamp_field,
+                    "source_field": source_time_field,
+                    "method": "relative_elapsed_time_to_datetime",
+                    "origin": str(origin),
+                    "unit": unit,
+                    "physical_time_claim": "relative_only",
+                })
+                detection = self.detect_scenario(
+                    list(frame.columns), instruction, selected_scenario_id=selected_id,
+                    frame=frame, context=context,
+                )
+        scene_recognition_ms = round((perf_counter() - standardization_started) * 1000, 3)
+        scene_recognition_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         mapping_started = perf_counter()
         mapping_started_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
         mapping = self.map_columns(list(frame.columns), selected_id, frame=frame, source_metadata=(context or {}).get("field_metadata"))
@@ -705,6 +739,7 @@ class StandardizationAgent:
             "detection": detection,
             "mapping": mapping,
             "conversions": conversions,
+            "derived_fields": derived_fields,
             "skipped_conversions": skipped_conversions,
             "validation": validation,
             "schema_validation": schema_validation,
