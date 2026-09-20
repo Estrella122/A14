@@ -50,3 +50,13 @@ datasets/public/debutanizer/debutanizer_processpilot.csv
 /datasets/field_ground_truth/
 /datasets/field_acceptance_safety/
 /integrations/standardization/training_data/multi_angle_evaluation/
+
+# Release packages, local diagnostics and browser session state.
+/*.zip
+/A14-fix-diagnostics*/
+/A14-diagnostics-release*/
+/a14-engineering-*/
+/applied-files.json
+/验收回执.md
+/browser-storage*.json
+/storage-state*.json

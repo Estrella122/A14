@@ -477,14 +477,30 @@ class OptimizationExecutor:
         standard = runtime_context.get("state", {}).get("standardization") or inputs.get("snapshot", {}).get("results", {}).get("standardization", {})
         receipt = snapshot_policy(inputs["snapshot"], inputs.get("parameters"))
         effective = receipt["effective_parameters"]
-        report, best_model = run_optimization_stage(
-            training, segments, request["field_dictionary"], model, run_dir,
-            effective["decoupling"]["max_lag_samples"], primary_output=request.get("primary_output") or standard.get("scenario", {}).get("primary_output"),
-            model_outputs=[request.get("primary_output") or standard.get("scenario", {}).get("primary_output")],
-            objective=request["objective"], bounds=request["bounds"], constraints=request["constraints"],
-            search_space=request["search_space"], optimization_policy={**effective["optimization"], **request["optimization_policy"]},
-            modeling_policy=effective["decoupling"], selection_policy=effective["selection"],
-        )
+        from core.services.pipeline import OptimizationStopped
+        try:
+            report, best_model = run_optimization_stage(
+                training, segments, request["field_dictionary"], model, run_dir,
+                effective["decoupling"]["max_lag_samples"], primary_output=request.get("primary_output") or standard.get("scenario", {}).get("primary_output"),
+                model_outputs=[request.get("primary_output") or standard.get("scenario", {}).get("primary_output")],
+                objective=request["objective"], bounds=request["bounds"], constraints=request["constraints"],
+                search_space=request["search_space"], optimization_policy={**effective["optimization"], **request["optimization_policy"]},
+                modeling_policy=effective["decoupling"], selection_policy=effective["selection"],
+            )
+        except Exception as exc:
+            report = exc.report if isinstance(exc, OptimizationStopped) else getattr(exc, 'optimization_report', None)
+            if report is None:
+                raise
+            runtime_context.get('state', {}).update(optimization=report)
+            execution_id = str(runtime_context.get('execution_id', 'optimization'))
+            refs = _register_report_artifacts(resolver, report.get('artifacts', {}), skill_id, execution_id, run_dir)
+            state = 'partial' if report.get('execution_status') == 'completed' else 'blocked' if report.get('execution_status') == 'blocked' else 'failed'
+            return _result(skill_id, started, status=state, capabilities=capability_ids,
+                facts=[report.get('stop_reason', str(exc))], findings=[], limitations=['没有合格赢家；正式模型评审未执行。'],
+                metrics={'candidate_counts': report.get('candidate_counts'), 'optimization_outcome': report.get('optimization_outcome'), 'best_candidate': None},
+                artifacts=refs, inputs=list(artifact_fields.values()), outputs=refs,
+                provenance={'producer': skill_id}, evidence=[report], warnings=[],
+                trace=[{'step': 'run_optimization_stage', 'status': state, 'reason': report.get('stop_reason')}])
         feasible = any(item.get("status") == "completed" and item.get("feasible") for item in report["iterations"])
         status = "success" if feasible else "partial"
         runtime_context.get("state", {}).update(optimization=report, modeling=best_model)

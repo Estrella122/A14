@@ -17,12 +17,13 @@ def build_answer_context(message, snapshot, response, budget=24000):
         return {k: deepcopy(source[k]) for k in names if k in source}
     run = {
         'run_id': snapshot.get('run_id'), 'status': snapshot.get('status'),
+        'current_stage': snapshot.get('current_stage'), 'error': snapshot.get('error'), 'stop_reason': snapshot.get('stop_reason'),
         'standardization': {'scenario': pick(scene, ('scenario_id', 'scenario_name', 'primary_output')),
                             'mapping': pick(standard.get('mapping', {}), ('missing_required', 'review_count', 'required_coverage')),
                             'data_decision': standard.get('data_decision', {})},
         'cleaning': pick(results.get('cleaning', {}), ('missing_rate', 'logs', 'snr', 'split', 'selection_metrics', 'selected_segment_count', 'strict_selected_segment_count', 'usable_segment_count', 'modeling_row_count', 'selection_acceptance_mode')),
-        'modeling': pick(results.get('modeling', {}), ('config', 'metrics', 'fitted_inputs', 'fitted_state', 'diagnostics', 'collinearity')),
-        'optimization': pick(results.get('optimization', {}), ('best_parameters', 'best_metrics', 'stopping', 'iterations')),
+        'modeling': pick(results.get('modeling', {}), ('status', 'config', 'metrics', 'fitted_inputs', 'fitted_state', 'diagnostics', 'collinearity')),
+        'optimization': pick(results.get('optimization', {}), ('best_parameters', 'best_metrics', 'stopping', 'iterations', 'candidate_counts', 'execution_status', 'optimization_outcome', 'stop_reason')),
         'policy_receipt': snapshot.get('policy_receipt', {}),
     }
     if response.get('basic_data_profile'):
@@ -79,9 +80,10 @@ def build_answer_context(message, snapshot, response, budget=24000):
     optimization = results.get('optimization', {})
     core = {
         'run_id': snapshot.get('run_id'), 'status': snapshot.get('status'),
+        'current_stage': snapshot.get('current_stage'), 'error': snapshot.get('error'), 'stop_reason': snapshot.get('stop_reason'),
         'source': {'original_name': snapshot.get('original_name'), 'scenario': run['standardization']},
-        'modeling': pick(model, ('config', 'metrics', 'fitted_inputs', 'diagnostics')),
-        'optimization': pick(optimization, ('best_round', 'best_parameters', 'best_metrics', 'best_score', 'stopping')),
+        'modeling': pick(model, ('status', 'config', 'metrics', 'fitted_inputs', 'diagnostics')),
+        'optimization': pick(optimization, ('best_round', 'best_parameters', 'best_metrics', 'best_score', 'stopping', 'candidate_counts', 'execution_status', 'optimization_outcome', 'stop_reason')),
         'selection': results.get('best_selection_receipt') or pick(run['cleaning'], ('selection_metrics', 'modeling_row_count', 'strict_selected_segment_count', 'usable_segment_count')),
         'policy_receipt': {'scope': 'initial_baseline_policy; winner overrides are recorded separately', **snapshot.get('policy_receipt', {})},
         'winner_effective_policy': results.get('best_selection_receipt', {}).get('effective_policy', {'status': 'historical_not_recorded', 'recorded_winner_parameters': results.get('best_selection_receipt', {}).get('requested_parameters', {})}),
@@ -155,11 +157,11 @@ def ground_response(message, snapshot, response):
             if snapshot.get('results', {}).get(section):
                 citation = f"run:{snapshot['run_id']}:{section}"
                 response['used_run_evidence'].append(citation)
-                response['answer_sources'].append({'id': citation, 'run_id': snapshot['run_id'], 'json_pointer': f'/results/{section}', 'source_type': 'current_run'})
+                response['answer_sources'].append({'id': citation, 'run_id': snapshot['run_id'], 'json_pointer': f'/results/{section}', 'source_type': 'current_run', 'stage': section, 'original_name': snapshot.get('original_name'), 'facts': context.get('run_evidence', {}).get(section) or context.get('core_facts', {}).get(section) or {'artifacts': snapshot.get('results', {}).get(section, {}).get('artifacts', {})}})
         if response.get('basic_data_profile'):
             citation = f"run:{snapshot['run_id']}:basic_data_profile"
             response['used_run_evidence'] = [citation]
-            response['answer_sources'].append({'id': citation, 'run_id': snapshot['run_id'], 'source_type': 'raw_profile', 'provenance': response['basic_data_profile']['source']})
+            response['answer_sources'].append({'id': citation, 'run_id': snapshot['run_id'], 'source_type': 'raw_profile', 'provenance': response['basic_data_profile']['source'], 'facts': response['basic_data_profile'], 'original_name': snapshot.get('original_name')})
         for row in response.get('runtime_observability', {}).get('executor_results', []):
             if row.get('metrics'):
                 citation = f"skill:{response.get('skill_run_id')}:{row.get('skill_id')}"

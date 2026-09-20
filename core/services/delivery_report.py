@@ -20,6 +20,9 @@ def artifact_manifest(snapshot):
         ready = bool(path and root in path.parents and path.is_file())
         entries[key] = {'state': 'ready' if ready else 'missing' if relative else 'not_generated',
                         'path': relative, 'source_run': snapshot['run_id']}
+    optimization = snapshot.get('results', {}).get('optimization', {})
+    if optimization and optimization.get('best_round') is None and entries['modeling_csv']['state'] == 'ready':
+        entries['modeling_csv'].update(state='partial_not_winner', reason='初始筛选数据；没有合法赢家，不作为最佳数据导出')
     report = snapshot.get('results', {}).get('report', {})
     if report.get('status') in {'generating', 'failed'}:
         entries['analysis_report_html']['state'] = report['status']
@@ -123,6 +126,12 @@ def _render_report(snapshot):
                         ('候选比较', results.get('optimization')), ('工程限制与下一步', results.get('review'))]:
         sections.append('<h2>' + name + '</h2><pre>' + html.escape(json.dumps(clean_facts(value), ensure_ascii=False, indent=2) if value else '尚未生成对应证据；本次报告未补跑算法。') + '</pre>')
     body = '<!doctype html><html lang="zh"><meta charset="utf-8"><title>A14 工程报告</title><style>body{max-width:1100px;margin:40px auto;font:15px sans-serif;line-height:1.7}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f4f6f8;padding:18px}img{max-width:100%}</style><h1>A14 当前运行工程报告</h1><p>本报告仅使用已保存的当前运行证据。验证集用于选型；测试集仅用于最终评价。未通过工程门禁的结果不可投运。</p>'
+    from .optimization_state import readable_stop
+    stop = readable_stop(snapshot)
+    if stop:
+        body = body.replace('A14 当前运行工程报告', 'A14 部分诊断报告').replace('A14 工程报告', 'A14 部分诊断报告')
+        body += '<p>' + html.escape(stop) + '</p><p>正式模型评审未执行；本报告不构成生产准入或完整成功验收。</p>'
+        manifest['report_scope'] = 'partial_diagnostic'
     body += ''.join(pictures + sections) + '<h2>缺图原因</h2><pre>' + html.escape(json.dumps(manifest['missing_charts'], ensure_ascii=False, indent=2)) + '</pre></html>'
     path = folder / 'analysis_report.html'
     path.write_text(body, encoding='utf-8')

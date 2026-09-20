@@ -1,5 +1,5 @@
 <script setup>
-import { selectedRunId } from '../utils/runBinding'
+import { selectedRunId, selectRun } from '../utils/runBinding'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -20,6 +20,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['notify', 'strategy-accepted'])
 const { latestRun } = useLatestPipelineRun()
+const pipelineWithoutWinner = computed(() => Boolean(latestRun.value?.run_id) && latestRun.value?.results?.optimization?.best_round == null)
 const pipelineOptimization = computed(() => latestRun.value?.results?.optimization ?? null)
 
 const defaultCandidate = {
@@ -71,7 +72,7 @@ let requestController = new AbortController()
 
 function pipelineRunToStudy(snapshot) {
   const optimization = snapshot?.results?.optimization
-  if (!optimization?.iterations?.length) return null
+  if (!optimization?.iterations?.length || optimization.best_round == null) return null
   const cleaning = snapshot.results?.cleaning ?? {}
   const modeling = snapshot.results?.modeling ?? {}
   const review = snapshot.results?.review ?? {}
@@ -502,6 +503,7 @@ function formatHistoryTime(value) {
 }
 
 async function loadLatestStrategy({ announce = false, selectLatest = true } = {}) {
+  if (pipelineWithoutWinner.value) { study.value = null; loading.value = false; return }
   const pipelineStudy = pipelineRunToStudy(latestRun.value)
   if (pipelineStudy) {
     applyStudy(pipelineStudy)
@@ -622,16 +624,17 @@ async function runRemainingSteps() {
 
 async function runOptimization() {
   if (operationBusy.value) return
-  if (study.value?.pipeline_run_id && latestRun.value) {
+  if (latestRun.value?.run_id) {
     clearErrors()
     running.value = true
     try {
       const sourceRun = latestRun.value.run_id
-      const snapshot = await rerunPipeline(sourceRun, { maxLag: params.value.lag_max_seconds })
+      const snapshot = await rerunPipeline(sourceRun, pipelineWithoutWinner.value ? {} : { maxLag: params.value.lag_max_seconds })
       if (selectedRunId() !== sourceRun) return
+      selectRun(snapshot.run_id)
       announcePipelineUpdate(snapshot)
       applyStudy(pipelineRunToStudy(snapshot))
-      emit('notify', { tone: 'success', title: '总控闭环寻优已完成', message: `新任务 ${snapshot.run_id} 已完成，闭环页面已同步全部候选轮次。` })
+      emit('notify', { tone: snapshot.results?.optimization?.best_round == null ? 'warning' : 'success', title: snapshot.results?.optimization?.best_round == null ? '搜索结束，无合格赢家' : '总控闭环寻优已完成', message: snapshot.stop_reason || `新任务已创建，闭环页面已同步候选轮次。` })
     } catch (error) {
       notifyError(error, '总控重新寻优失败')
     } finally {
@@ -784,12 +787,14 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
       description="总控 Agent 将上传 CSV 的辨识结果直接交给闭环寻优引擎，候选轮次、收敛证据和推荐策略统一在此留痕。"
     >
       <template #actions>
-        <button v-if="!study?.pipeline_run_id" class="btn btn-secondary" type="button" :disabled="operationBusy" :aria-expanded="historyOpen" @click="toggleHistory">{{ historyOpen ? '收起运行历史' : '查看仿真历史' }}</button>
+        <button v-if="!latestRun?.run_id && !study?.pipeline_run_id" class="btn btn-secondary" type="button" :disabled="operationBusy" :aria-expanded="historyOpen" @click="toggleHistory">{{ historyOpen ? '收起运行历史' : '查看仿真历史' }}</button>
         <button v-if="running && !study?.pipeline_run_id" class="btn btn-secondary" type="button" :disabled="pauseRequested" @click="pauseOptimization"><AppIcon name="pause" />{{ pauseRequested ? '当前轮后暂停…' : '安全暂停' }}</button>
-        <button class="btn btn-primary" type="button" :disabled="operationBusy" @click="runOptimization"><AppIcon :name="operationBusy ? 'loop' : 'play'" :class="{ spinning: operationBusy }" />{{ startButtonLabel }}</button>
+        <button class="btn btn-primary" type="button" :disabled="operationBusy" @click="runOptimization"><AppIcon :name="operationBusy ? 'loop' : 'play'" :class="{ spinning: operationBusy }" />{{ latestRun?.run_id ? '用当前参数重新寻优' : startButtonLabel }}</button>
       </template>
     </PageHeader>
 
+    <p v-if="pipelineWithoutWinner">本任务尚无合格赢家。候选记录及原因见上方；不会用其他任务的策略代替。</p>
+    <template v-if="!pipelineWithoutWinner">
     <section v-if="study?.pipeline_run_id" class="panel pipeline-optimization-summary">
       <div class="section-heading compact"><div><span class="section-kicker">总控 Agent → 闭环寻优 Agent</span><h2>任务 {{ study.pipeline_run_id }} 已写入统一寻优工作区</h2></div><StatusPill tone="success">真实 CSV · 第 {{ pipelineOptimization?.best_round }} 轮最优</StatusPill></div>
       <p>以下曲线、轮次对比、参数证据和最优策略全部来自本次总控运行，不再使用另一套独立展示数据。</p>
@@ -982,6 +987,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
     <section v-else class="best-strategy-card empty-best-strategy">
       <span><AppIcon name="loop" :size="28" /></span><div><strong>最优策略将在真实计算后生成</strong><p>后端会保存每轮候选、多步模型评价、约束结果、等效签名和决策依据。</p></div>
     </section>
+    </template>
   </div>
 </template>
 

@@ -371,6 +371,10 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         cards = [{"label": "测试 R²", "value": f"{_metric(test.get('r2'))}"}, {"label": "RMSE", "value": f"{_metric(test.get('rmse'))}"}, {"label": "MAE", "value": f"{_metric(test.get('mae'))}"}]
         suggestions = ["这个模型是否可靠", "为什么R²不高", "重新运行模型"]
     elif intent == "optimization":
+        from .optimization_state import readable_stop
+        stopped = readable_stop(snapshot)
+        if stopped:
+            return stopped, [], ["查看候选原因", "查看当前约束"]
         rounds = [item for item in optimization.get("iterations", []) if item.get("status") == "completed"]
         if not rounds:
             return "当前任务未保存已完成的寻优候选，无法判断是否改善；需要对应搜索的候选、验证指标及停止记录。本次未启动新搜索。", [], ["查看当前运行证据"]
@@ -419,6 +423,17 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     if run_id and not snapshot:
         raise PipelineError("指定运行不存在，不能使用其他运行代替。")
     snapshot = final_result_view(snapshot or {"run_id": None, "results": {}, "artifacts": {}})
+    from .optimization_state import readable_stop
+    stopped = readable_stop(snapshot)
+    if stopped and re.search(r'为什么.*(卡|停|失败)|继续分析|结果怎么样|停止原因|失败原因|候选.*原因', message) and not re.search(r'重试|重新(执行|运行|训练|寻优)|再跑', message):
+        # Reading a terminal result never schedules another numerical job.
+        response = {'answer': stopped, 'run_id': snapshot.get('run_id'), 'snapshot': snapshot,
+                    'executed': False, 'blocked': False, 'execution_scope': 'evidence_only',
+                    'execution_mode': 'analysis', 'needs_clarification': False, 'expert_topic': 'optimization',
+                    'skill_run_id': skill_run_id, 'pipeline_status': snapshot.get('status'),
+                    'cards': [], 'logs': [], 'skill_executions': [], 'suggestions': ['查看候选原因', '查看当前约束'],
+                    'intent': {'key': 'optimization', 'matched': ['optimization']}}
+        return _finish_answer(message, snapshot, response, {'provider': 'evidence'}, event_sink)
     from .llm_gateway import propose_task_spec
     task, understanding_audit = propose_task_spec(message, snapshot, llm_config, {'previous_task_spec': {'response_intent': previous_intent, 'response_intents': previous_intents or ([previous_intent] if previous_intent else [])}})
     understanding_audit.pop('final_task_spec', None)

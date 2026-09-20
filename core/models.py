@@ -336,7 +336,7 @@ class RuntimeJob(models.Model):
 
     STATUS_CHOICES = (
         ('queued', '排队中'), ('running', '运行中'), ('completed', '已完成'),
-        ('blocked', '已阻断'), ('failed', '失败'), ('cancelled', '已取消'),
+        ('blocked', '已阻断'), ('failed', '失败'), ('cancelled', '已取消'), ('timed_out', '已超时'),
     )
     job_id = models.CharField('任务ID', max_length=64, unique=True, db_index=True)
     job_type = models.CharField('任务类型', max_length=40, db_index=True)

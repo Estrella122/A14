@@ -14,7 +14,7 @@ const metric = (value, digits = 2) => value != null && Number.isFinite(Number(va
 
 <template>
   <section class="chat-optimization">
-    <h3>闭环寻优 · {{ rounds.length }} 轮记录</h3>
+    <h3>闭环寻优 · {{ report.candidate_counts?.attempted ?? (report.iterations ? rounds.length : '暂未取得') }} 轮记录</h3>
     <p>{{ report.objective || '当前运行的候选比较结果' }}</p>
     <figure v-if="scores.length">
       <svg viewBox="0 0 420 125" role="img" aria-label="各轮候选得分变化，详细数值见下表">
@@ -27,8 +27,8 @@ const metric = (value, digits = 2) => value != null && Number.isFinite(Number(va
       <summary>展开每轮参数、指标与约束结果</summary>
       <div class="round-table" tabindex="0" aria-label="寻优轮次表，可横向滚动">
         <table>
-          <thead><tr><th>轮次</th><th>Top K</th><th>时滞</th><th>R²</th><th>RMSE</th><th>得分</th><th>约束</th></tr></thead>
-          <tbody><tr v-for="row in rounds" :key="row.round"><td>{{ row.round }}</td><td>{{ row.top_k ?? '—' }}</td><td>{{ row.max_lag ?? '—' }}</td><td>{{ metric(row.r2, 3) }}</td><td>{{ metric(row.rmse) }}</td><td>{{ metric(row.score) }}</td><td>{{ row.feasible === true ? '通过' : row.feasible === false ? '未通过' : '未评估' }}</td></tr></tbody>
+          <thead><tr><th>轮次</th><th>Top K</th><th>时滞</th><th>R²</th><th>RMSE</th><th>得分</th><th>约束</th><th>原因</th></tr></thead>
+          <tbody><tr v-for="row in rounds" :key="row.round"><td>{{ row.round }}</td><td>{{ row.top_k ?? '—' }}</td><td>{{ row.max_lag ?? '—' }}</td><td>{{ metric(row.r2, 3) }}</td><td>{{ metric(row.rmse) }}</td><td>{{ metric(row.score) }}</td><td>{{ row.feasible === true ? '通过' : row.feasible === false ? '未通过' : '未评估' }}</td><td>{{ row.reason_message || row.rejection_reason || row.error || '暂未取得' }}</td></tr></tbody>
         </table>
       </div>
     </details>

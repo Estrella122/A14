@@ -44,6 +44,13 @@ class PipelineError(RuntimeError):
     pass
 
 
+class OptimizationStopped(PipelineError):
+    def __init__(self, report):
+        self.report = report
+        super().__init__(report.get('stop_reason', '寻优已停止'))
+
+
+
 @contextmanager
 def _module_path(path: Path) -> Iterator[None]:
     value = str(path)
@@ -143,7 +150,7 @@ def _set_stage(snapshot: dict[str, Any], run_dir: Path, key: str, status: str, m
             stage["message"] = message
             if status == "running":
                 stage["started_at"] = now
-            if status in {"completed", "failed", "skipped"}:
+            if status in {"completed", "failed", "skipped", "partial", "blocked", "cancelled", "timed_out"}:
                 stage["finished_at"] = now
                 if stage.get("started_at"):
                     stage["elapsed_ms"] = max(0, round((datetime.fromisoformat(now) - datetime.fromisoformat(stage["started_at"])).total_seconds() * 1000))
@@ -620,7 +627,40 @@ def _candidate_score(metrics: dict[str, Any], coverage: float, weights: dict[str
     ), 3)
 
 
-def _optimize_real_data(
+def _optimize_real_data(*args, on_progress=None, cancel_check=None, timeout_seconds=None, **kwargs):
+    from .optimization_state import SearchJournal, SearchStopped
+    run_dir = args[4] if len(args) > 4 else kwargs['run_dir']
+    timeout = timeout_seconds if timeout_seconds is not None else getattr(settings, 'PROCESSPILOT_OPTIMIZATION_TIMEOUT_SECONDS', 300)
+    journal = SearchJournal(run_dir, _write_json, on_progress, cancel_check, timeout)
+    try:
+        journal.save('optimization_started')
+        journal.check()
+        report, model = _search_optimization(*args, journal=journal, **kwargs)
+        journal.report.update(report)
+        journal.report.update(status='completed', execution_status='completed', optimization_outcome='qualified_candidate', model_quality='qualified_search_candidate')
+        journal.save('optimization_completed')
+        return journal.report, model
+    except SearchStopped as exc:
+        try:
+            journal.stop(exc.outcome, str(exc))
+        except Exception as storage_error:
+            journal.report['persistence_error'] = {'type': type(storage_error).__name__, 'message': str(storage_error)}
+            journal.report.update(execution_status='failed', optimization_outcome='failed', stop_reason='结果持久化失败：'+str(storage_error))
+            storage_error.optimization_report = journal.report
+            raise storage_error from exc
+        raise OptimizationStopped(journal.report) from exc
+    except Exception as exc:
+        outcome = 'timed_out' if isinstance(exc, TimeoutError) else 'failed'
+        try:
+            journal.stop(outcome, str(exc), error=exc)
+        except Exception as persistence_error:
+            # The original failure remains the cause even if storage also fails.
+            journal.report['persistence_error'] = {'type': type(persistence_error).__name__, 'message': str(persistence_error)}
+        exc.optimization_report = journal.report
+        raise
+
+
+def _search_optimization(
     cleaned: pd.DataFrame,
     segments: pd.DataFrame,
     dictionary: list[dict[str, Any]],
@@ -636,6 +676,7 @@ def _optimize_real_data(
     optimization_policy: dict[str, Any] | None = None,
     modeling_policy: dict[str, Any] | None = None,
     selection_policy: dict[str, Any] | None = None,
+    journal=None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     exploration_candidates = list((optimization_policy or {}).get("candidates") or [
         {"round": 1, "top_k": 5, "max_lag": max_lag, "label": "基线策略"},
@@ -645,10 +686,11 @@ def _optimize_real_data(
         {"round": 5, "top_k": 10, "max_lag": min(600, max_lag * 2), "label": "高覆盖长时滞"},
         {"round": 6, "top_k": 4, "max_lag": min(600, max(10, round(max_lag * 1.25))), "label": "低覆盖稳健辨识"},
     ])
-    iterations = []
+    iterations = journal.rows
     best_model = baseline_model
 
     def evaluate(candidate: dict[str, Any]) -> dict[str, Any]:
+        row = journal.start(candidate)
         started = perf_counter()
         from .segmentation_service import select_modeling_windows
         from .algorithm_policy import resolve_algorithm_policy
@@ -665,17 +707,22 @@ def _optimize_real_data(
                 if rule and not float(rule["min"]) <= float(candidate[variable]) <= float(rule["max"]):
                     iteration = {**candidate, 'effective_parameters': None, 'training_rows': None, 'target_observations': None, 'selected_window_count': None, 'model_family': None, 'fitted_inputs': None, 'validation_metrics': None, 'objective_components': None, 'artifact_refs': {}, 'audit_status': 'not_computed', "status": "infeasible", "error": f"{variable} 超出显式边界", "score": -1.0, "feasible": False}
                     iteration.update(duration_seconds=perf_counter() - started, rejection_reason=iteration['error'])
-                    iterations.append(iteration)
-                    return iteration
+                    iteration.update(reason_code='parameter_out_of_bounds', reason_message=iteration['error'])
+                    return journal.finish(row, iteration)
             # Every round uses exactly its declared selection, including round 1.
             data = _select_modeling_rows(cleaned, segments, top_k=candidate["top_k"], strict_first=True, policy=selection_policy)
             candidate_dir = run_dir / "05_optimization" / f"candidate_{candidate['round']:02d}"
             candidate_path = candidate_dir / "modeling_dataset.csv"
             candidate_dir.mkdir(parents=True, exist_ok=True)
             data.reset_index().to_csv(candidate_path, index=False, encoding="utf-8-sig")
+            row.update(training_rows=len(data), target_observations=int(data[primary_output].notna().sum()) if primary_output in data else None,
+                       artifact_refs={'modeling_csv': _artifact(run_dir, candidate_path)})
+            journal.check()
             model = _model(data, dictionary, run_dir, candidate["max_lag"],
                            modeling_path=candidate_path, output_dir=candidate_dir / "modeling",
                            primary_output=primary_output, modeling_policy=modeling_policy)
+            row.update(model_fitted=True, effective_parameters=model.get('config'), artifact_refs=model.get('artifacts', {}))
+            journal.save('candidate_fitted')
             chosen = select_modeling_windows(segments, candidate['top_k'], True, selection_policy)
             selection_receipt = {
                 'selected_window_ids': [str(row.get('segment_id', index)) for index, row in chosen.iterrows()],
@@ -721,13 +768,33 @@ def _optimize_real_data(
                 "artifact_refs": model.get('artifacts', {}),
             }
         except Exception as exc:
+            from .optimization_state import SearchStopped
+            if isinstance(exc, SearchStopped):
+                raise
+            input_reason = isinstance(exc, (ValueError, PipelineError)) and any(text in str(exc) for text in (
+                '训练样本不足', '评估样本不足', '验证指标不可定义', '无有效因果时滞证据', '无法预测共同评估样本', '预测非有限值'))
+            if not input_reason:
+                row.update(reason_code='candidate_exception', reason_message=str(exc))
+                raise
             iteration = {**candidate, 'effective_parameters': None, 'training_rows': None, 'target_observations': None, 'selected_window_count': None, 'model_family': None, 'fitted_inputs': None, 'validation_metrics': None, 'objective_components': None, 'artifact_refs': {}, 'feasible': False, 'audit_status': 'not_computed', "status": "failed", "error": str(exc), "score": -1.0}
         iteration['duration_seconds'] = round(perf_counter() - started, 6)
         iteration['rejection_reason'] = iteration.get('error') or (None if iteration.get('feasible') else 'validation or coverage constraint not met')
-        iterations.append(iteration)
-        return iteration
+        if iteration.get('status') == 'failed':
+            iteration.update(status='infeasible', reason_code='insufficient_samples_or_metrics',
+                             training_rows=row.get('training_rows'), target_observations=row.get('target_observations'),
+                             artifact_refs=row.get('artifact_refs', {}))
+        elif not iteration.get('feasible'):
+            violated = []
+            if iteration['r2'] < float((constraints or {}).get('min_r2', 0)):
+                violated.append(f"验证 R² {iteration['r2']:.6g} < {float((constraints or {}).get('min_r2', 0)):g}")
+            if coverage < float((constraints or {}).get('min_coverage', .05)):
+                violated.append(f"训练覆盖率 {coverage:.2%} < {float((constraints or {}).get('min_coverage', .05)):.2%}")
+            iteration.update(reason_code='constraints_not_met', rejection_reason='；'.join(violated),
+                             effective_constraints=constraints or {'min_r2': 0, 'min_coverage': .05})
+        return journal.finish(row, iteration)
 
-    for candidate in exploration_candidates:
+    journal.report.update(bounds=bounds or {}, constraints=constraints or {}, initial_policy=optimization_policy or {})
+    for candidate in exploration_candidates[:16]:
         evaluate(candidate)
 
     min_rounds = 8
@@ -747,14 +814,22 @@ def _optimize_real_data(
         top_k_max = max(top_k_min, int(top_k_rule.get("max", 20)))
         seen = {(item["top_k"], item["max_lag"]) for item in iterations}
         directions = [(2, -1), (-1, 1), (3, -2), (-2, 2), (1, -3), (-3, 3), (4, -1), (-4, 1), (2, -2), (-2, 2)]
-        for round_number in range(7, max_rounds + 1):
+        for round_number in range(max(7, len(iterations)+1), max_rounds + 1):
             anchor = initial_anchor if round_number <= 8 else best_so_far
             top_delta, lag_direction = directions[round_number - 7]
             candidate_top_k = min(top_k_max, max(top_k_min, anchor["top_k"] + top_delta))
             candidate_max_lag = min(600, max(10, anchor["max_lag"] + lag_direction * refinement_step))
+            probes = 0
             while (candidate_top_k, candidate_max_lag) in seen:
+                journal.check()
+                probes += 1
+                if probes > 601 * (top_k_max-top_k_min+1):
+                    break
                 candidate_top_k = top_k_min + (candidate_top_k - top_k_min + 1) % (top_k_max - top_k_min + 1)
                 candidate_max_lag = min(600, candidate_max_lag + 5)
+            if (candidate_top_k, candidate_max_lag) in seen:
+                stop_reason = '候选空间已耗尽，已停止重复生成。'
+                break
             seen.add((candidate_top_k, candidate_max_lag))
             suffix = "A" if round_number == 7 else "B" if round_number == 8 else f"R{round_number}"
             previous_best_score = float(best_so_far["score"])
@@ -773,21 +848,19 @@ def _optimize_real_data(
             if round_number >= min_rounds and feasible and no_improvement_rounds >= patience:
                 early_stopped = True
                 stop_reason = (
-                    f"最优候选满足搜索早停的最低可计算性门槛（R²≥0、覆盖率≥5%），"
+                    f"最优候选满足当前有效约束（R²≥{float((constraints or {}).get('min_r2', 0)):g}、覆盖率≥{float((constraints or {}).get('min_coverage', .05)):.0%}），"
                     f"连续{no_improvement_rounds}轮综合分改善低于{min_improvement}分；"
                     "是否通过工程硬约束以评审结果为准"
                 )
                 break
 
     completed = [item for item in iterations if item["status"] == "completed"]
+    from .optimization_state import SearchStopped
     if not completed:
-        _write_json(run_dir / "05_optimization/optimization_report.json", {"status": "failed", "iterations": iterations})
-        reasons = list(dict.fromkeys(item.get("error", "未知错误") for item in iterations))
-        raise PipelineError("所有候选均失败：" + "；".join(reasons[:3]))
-    feasible_candidates = [item for item in completed if item.get("feasible")]
+        raise SearchStopped('insufficient_input', '所有候选均因参数边界或拟合/评价条件不足而不可评估；详见逐轮原因。')
+    feasible_candidates = [item for item in completed if item.get('feasible')]
     if not feasible_candidates:
-        _write_json(run_dir / "05_optimization/optimization_report.json", {'status': 'blocked', 'best_round': None, 'iterations': [{k: v for k, v in row.items() if k != 'model'} for row in iterations], 'reason': 'no_feasible_candidate', 'test_evaluations': 0})
-        raise PipelineError('没有满足验证与覆盖约束的合法候选；未选择胜者、未评价测试集。')
+        raise SearchStopped('no_feasible_candidate', '搜索已结束，但没有满足当前验证与覆盖约束的候选；未选择胜者、未评价测试集。')
     best = max(feasible_candidates, key=lambda item: item["score"])
     if not stop_reason:
         best_feasible = bool(best.get("feasible"))
@@ -795,8 +868,11 @@ def _optimize_real_data(
     hashes = {item["evaluation_target_hash"] for item in completed}
     if len(hashes) != 1:
         raise PipelineError("候选验证目标不一致，拒绝比较。")
+    journal.check()
     best_model = best["model"]
     # Test is touched only after the winner and all hyperparameters are frozen.
+    journal.report.update(test_evaluations=1, frozen_winner_round=best['round'])
+    journal.save('winner_frozen_before_test')
     with _module_path(INTEGRATIONS_DIR / "identification"):
         from validated_modeling import finalize_test
         metrics, diagnostics = finalize_test(run_dir / best_model["output_dir"], run_dir / "03_cleaning" / "test.csv")
@@ -1125,7 +1201,7 @@ run_review_stage = _review
 run_report_stage = _analysis_report
 
 
-def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str | None = None, max_lag: int | None = None, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None, run_id: str | None = None, cancel_check: Callable[[], bool] | None = None, parameters: dict | None = None, asset_id: str | None = None, owner_id: int | None = None) -> dict[str, Any]:
+def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto", project_scene: str = "", instruction: str = "", resample_rule: str | None = None, max_lag: int | None = None, stop_after: str = "report", overrides: dict[str, str] | None = None, on_created: Callable[[dict[str, Any]], None] | None = None, ingest_timing: dict[str, float] | None = None, run_id: str | None = None, cancel_check: Callable[[], bool] | None = None, parameters: dict | None = None, asset_id: str | None = None, owner_id: int | None = None, source_run_id: str | None = None) -> dict[str, Any]:
     if stop_after not in dict(STAGES):
         raise PipelineError("未知的流水线停止阶段。")
     with _RUN_LOCK:
@@ -1140,6 +1216,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
         now = datetime.now().astimezone().isoformat(timespec="seconds")
         snapshot = {
             'asset_id': asset_id, 'owner_id': owner_id, 'project': 'A14',
+            'source_run_id': source_run_id, 'source_sha256': hashlib.sha256(stored_path.read_bytes()).hexdigest(),
             "run_id": run_id,
             "status": "running",
             "current_stage": "standardization",
@@ -1296,7 +1373,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             modeling = {"status": "pending_candidate_search", "artifacts": {}}
             snapshot["results"]["modeling"] = modeling
             snapshot["artifacts"].update(modeling["artifacts"])
-            _set_stage(snapshot, run_dir, current_stage, "completed", "已冻结分区，辨识随候选搜索执行")
+            _set_stage(snapshot, run_dir, current_stage, "pending", "分区准备完成，等待候选拟合；尚无模型产物")
             if stop_after == "modeling":
                 modeling = _model(modeling_data, standardization["dictionary"], run_dir, effective_max_lag,
                                   primary_output=primary_output, modeling_policy=modeling_policy)
@@ -1313,6 +1390,17 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             cleaned_frame = _read_csv(run_dir / "03_cleaning" / "train.csv")
             cleaned_frame["timestamp"] = pd.to_datetime(cleaned_frame["timestamp"], errors="raise")
             cleaned_frame = cleaned_frame.set_index("timestamp")
+            def optimization_progress(report):
+                snapshot['results']['optimization'] = report
+                snapshot['artifacts'].update(report.get('artifacts', {}))
+                snapshot['updated_at'] = report['updated_at']
+                snapshot['execution_status'] = report['execution_status']
+                snapshot['optimization_outcome'] = report['optimization_outcome']
+                fitted = report['candidate_counts']['fitted']
+                model_stage = next(row for row in snapshot['stages'] if row['key'] == 'modeling')
+                model_stage.update(status='partial' if fitted else 'pending',
+                    message='候选拟合已执行，等待合格赢家' if fitted else '准备完成，等待候选拟合')
+                _write_json(run_dir / 'snapshot.json', snapshot)
             optimization, modeling = _optimize_real_data(
                 cleaned_frame,
                 segments,
@@ -1327,6 +1415,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 search_space=optimization_policy.get("search_space"),
                 optimization_policy=optimization_policy,
                 modeling_policy=modeling_policy, selection_policy=selection_policy,
+                on_progress=optimization_progress, cancel_check=cancel_check,
             )
             snapshot['results']['baseline_selection_receipt'] = json.loads(json.dumps(cleaning.get('selection_metrics', {})))
             snapshot['results']['best_selection_receipt'] = optimization['best_selection_receipt']
@@ -1334,6 +1423,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["results"]["modeling"] = modeling
             snapshot["artifacts"].update(optimization["artifacts"])
             snapshot["artifacts"].update(modeling["artifacts"])
+            _set_stage(snapshot, run_dir, "modeling", "completed", "候选拟合完成，已有真实胜者模型产物")
             _set_stage(
                 snapshot,
                 run_dir,
@@ -1380,9 +1470,31 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
             snapshot["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
             _write_json(run_dir / "snapshot.json", snapshot)
             return snapshot
+        except OptimizationStopped as exc:
+            report = exc.report
+            snapshot['results']['optimization'] = report
+            snapshot['artifacts'].update(report.get('artifacts', {}))
+            snapshot.update(status='needs_review' if report['execution_status'] in {'completed', 'blocked'} else report['execution_status'],
+                            execution_status=report['execution_status'], optimization_outcome=report['optimization_outcome'],
+                            stop_reason=report['stop_reason'], model_quality='no_qualified_winner')
+            snapshot['review_required'] = {'stage': 'optimization', 'message': report['stop_reason']}
+            snapshot['results']['modeling'].update(status='fitted_no_winner' if report['candidate_counts']['fitted'] else 'not_fitted')
+            _set_stage(snapshot, run_dir, 'modeling', 'partial' if report['candidate_counts']['fitted'] else 'blocked',
+                       '候选已拟合但没有合格赢家' if report['candidate_counts']['fitted'] else '尚无有效拟合模型')
+            for stage in snapshot['stages']:
+                if stage['status'] == 'pending': stage.update(status='skipped', message='没有合格赢家，未执行后续阶段')
+            _set_stage(snapshot, run_dir, 'optimization', 'partial' if report['execution_status']=='completed' else report['execution_status'], report['stop_reason'])
+            return snapshot
         except Exception as exc:
-            _set_stage(snapshot, run_dir, current_stage, "failed", str(exc))
-            snapshot["status"] = "failed"
+            if hasattr(exc, 'optimization_report'):
+                snapshot['results']['optimization'] = exc.optimization_report
+                snapshot['artifacts'].update(exc.optimization_report.get('artifacts', {}))
+                snapshot.update(execution_status=exc.optimization_report.get('execution_status'), optimization_outcome=exc.optimization_report.get('optimization_outcome'))
+            terminal = 'timed_out' if isinstance(exc, TimeoutError) else 'failed'
+            snapshot['status'] = terminal
+            for stage in snapshot['stages']:
+                if stage['key'] == current_stage:
+                    stage.update(status=terminal, message=str(exc), finished_at=datetime.now().astimezone().isoformat())
             if hasattr(exc, 'rejected'):
                 snapshot['policy_receipt'] = {'requested_parameters': locals().get('request_parameters', parameters or {}),
                     'scene_parameters': locals().get('standardization', {}).get('scenario', {}).get('algorithm_profile', {}),
@@ -1393,7 +1505,10 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 if stage["status"] == "pending":
                     stage["status"] = "skipped"
                     stage["message"] = "前序阶段失败，未执行"
-            _write_json(run_dir / "snapshot.json", snapshot)
+            try:
+                _write_json(run_dir / 'snapshot.json', snapshot)
+            except Exception as storage_error:
+                exc.add_note('保存失败状态时另有错误：'+str(storage_error))
             raise PipelineError(str(exc)) from exc
 
 
@@ -1403,7 +1518,8 @@ def get_run(run_id: str | None = None) -> dict[str, Any] | None:
         record = PipelineRunRecord.objects.filter(run_id=run_id).first() if run_id else PipelineRunRecord.objects.order_by("-created_at").first()
         if record:
             from .delivery_report import artifact_manifest
-            result = record.snapshot
+            from .optimization_state import recover_snapshot
+            result = recover_snapshot(record.snapshot, RUNS_DIR)
             result['artifact_availability'] = artifact_manifest(result)
             return result
     except (OperationalError, ProgrammingError, DatabaseOperationForbidden):
@@ -1414,6 +1530,8 @@ def get_run(run_id: str | None = None) -> dict[str, Any] | None:
         return None
     result = _read_json(RUNS_DIR / run_id / "snapshot.json")
     if result:
+        from .optimization_state import recover_snapshot
+        result = recover_snapshot(result, RUNS_DIR)
         from .delivery_report import artifact_manifest
         result['artifact_availability'] = artifact_manifest(result)
     return result
@@ -1427,7 +1545,8 @@ def list_runs(limit: int = 100, scenario_id: str | None = None) -> list[dict[str
         records = PipelineRunRecord.objects.all()
         if scenario_id:
             records = records.filter(scenario_id=scenario_id)
-        database_snapshots = [record.snapshot for record in records[:safe_limit]]
+        from .optimization_state import recover_snapshot
+        database_snapshots = [recover_snapshot(record.snapshot, RUNS_DIR) for record in records[:safe_limit]]
         if database_snapshots:
             return database_snapshots
     except (OperationalError, ProgrammingError, DatabaseOperationForbidden):
@@ -1446,7 +1565,8 @@ def list_runs(limit: int = 100, scenario_id: str | None = None) -> list[dict[str
         )
         if scenario_id and actual_scenario != scenario_id:
             continue
-        snapshots.append(snapshot)
+        from .optimization_state import recover_snapshot
+        snapshots.append(recover_snapshot(snapshot, RUNS_DIR))
         if len(snapshots) >= safe_limit:
             break
     return snapshots
@@ -1487,5 +1607,5 @@ def rerun_pipeline(run_id: str, resample_rule: str | None = None, max_lag: int |
         overrides=overrides if overrides is not None else previous.get("mapping_overrides", {}),
         run_id=new_run_id,
         cancel_check=cancel_check,
-        parameters=parameters, asset_id=previous.get('asset_id'), owner_id=previous.get('owner_id'),
+        parameters=parameters if parameters is not None else previous.get('policy_receipt', {}).get('requested_parameters', {}), asset_id=previous.get('asset_id'), owner_id=previous.get('owner_id'), source_run_id=run_id,
     )

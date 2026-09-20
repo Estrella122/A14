@@ -73,16 +73,23 @@ def execute(job: RuntimeJob) -> None:
         else:
             raise ValueError(f"未知后台任务类型：{job.job_type}")
         refreshed_status = RuntimeJob.objects.filter(pk=job.pk).values_list("status", flat=True).first()
-        if refreshed_status not in {"blocked", "cancelled"}:
+        if refreshed_status not in {"blocked", "cancelled", "failed", "timed_out"}:
             RuntimeJob.objects.filter(pk=job.pk).update(status="completed", error="", error_code="")
         RuntimeJob.objects.filter(pk=job.pk).update(
             finished_at=timezone.now(), locked_by="", locked_at=None,
         )
     except Exception as exc:
         refreshed = RuntimeJob.objects.get(pk=job.pk)
-        terminal = refreshed.attempts >= refreshed.max_attempts
+        terminal = refreshed.job_type in {"pipeline", "mcp_pipeline"} or refreshed.attempts >= refreshed.max_attempts
+        failure_status = "failed"
+        if refreshed.job_type in {"pipeline", "mcp_pipeline"}:
+            from .pipeline import get_run
+            result_id = refreshed.payload.get('target_run_id') or refreshed.payload.get('run_id') or refreshed.result_ref
+            recorded = get_run(result_id) if result_id else None
+            if recorded and recorded.get('status') in {'cancelled', 'timed_out'}:
+                failure_status = recorded['status']
         RuntimeJob.objects.filter(pk=job.pk).update(
-            status="failed" if terminal else "queued", error=str(exc), error_code="EXECUTION_FAILED",
+            status=failure_status if terminal else "queued", error=str(exc), error_code="TIMEOUT" if failure_status == "timed_out" else "EXECUTION_FAILED",
             finished_at=timezone.now() if terminal else None, locked_by="", locked_at=None,
             available_at=timezone.now() + timedelta(seconds=min(30, 2 ** refreshed.attempts)),
         )
@@ -102,11 +109,11 @@ def _execute_pipeline(job: RuntimeJob) -> None:
     handle.close()
     shutil.copy2(source_path, attempt_source)
     try:
-        run_pipeline(attempt_source, run_id=run_id, **payload)
+        snapshot = run_pipeline(attempt_source, run_id=run_id, cancel_check=lambda: RuntimeJob.objects.filter(pk=job.pk, cancel_requested_at__isnull=False).exists(), **payload)
     finally:
         attempt_source.unlink(missing_ok=True)
     source_path.unlink(missing_ok=True)
-    RuntimeJob.objects.filter(pk=job.pk).update(result_ref=run_id)
+    RuntimeJob.objects.filter(pk=job.pk).update(result_ref=run_id, status="blocked" if snapshot.get("status") == "needs_review" else snapshot.get("status", "completed"), error=snapshot.get("stop_reason", ""))
 
 
 def _execute_agent_chat(job: RuntimeJob) -> None:
@@ -157,7 +164,7 @@ def _execute_mcp_pipeline(job: RuntimeJob) -> None:
     )
     terminal_status = (
         "blocked" if snapshot.get("status") == "needs_review"
-        else "cancelled" if snapshot.get("status") == "cancelled"
+        else snapshot["status"] if snapshot.get("status") in {"cancelled", "timed_out", "failed"}
         else "completed"
     )
     RuntimeJob.objects.filter(pk=job.pk).update(

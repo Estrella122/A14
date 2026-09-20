@@ -9,12 +9,10 @@ const trace = ref(null)
 const loading = ref(false)
 const error = ref('')
 const expanded = ref([])
-const activeStep = ref(0)
 let controller
 let stepTimer
 
 const nodes = computed(() => trace.value?.nodes ?? [])
-const activeIndex = computed(() => props.running ? Math.min(nodes.value.length - 1, activeStep.value) : -1)
 const traceSource = computed(() => trace.value ? '后端真实轨迹' : '暂无真实轨迹')
 
 function toggle(id) {
@@ -38,10 +36,10 @@ async function loadTrace() {
   }
 }
 
-function stateOf(node, index) {
-  if (props.running && index === activeIndex.value) return 'running'
-  if (props.running && index > activeIndex.value) return 'skipped'
-  return node.status
+function stateOf(node) { return node.status }
+const fieldLabels = {rounds:'已尝试',best_round:'合格胜者',reason:'原因',review:'评审',status:'状态'}
+function summary(value) {
+  return Object.entries(value ?? {}).slice(0,2).map(([key,item]) => `${fieldLabels[key] || key}=${item == null ? '暂未取得 / 未执行' : Array.isArray(item) ? item.length : typeof item === 'object' ? '查看详情' : item}`).join(' · ')
 }
 
 watch(() => props.runId, loadTrace, { immediate: true })
@@ -50,8 +48,7 @@ watch(() => props.fallbackScenarioId, loadTrace)
 watch(() => props.running, (value) => {
   window.clearInterval(stepTimer)
   if (value) {
-    activeStep.value = 0
-    stepTimer = window.setInterval(() => { activeStep.value = Math.min(activeStep.value + 1, Math.max(nodes.value.length - 1, 0)) }, 620)
+    stepTimer = window.setInterval(loadTrace, 2000)
   } else if (props.runId) loadTrace()
 }, { immediate: true })
 onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
@@ -76,8 +73,8 @@ onBeforeUnmount(() => { controller?.abort(); window.clearInterval(stepTimer) })
         </span>
         <button type="button" :aria-expanded="expanded.includes(node.id)" @click="toggle(node.id)">
           <span><small>0{{ index + 1 }} · {{ node.kind }}</small><strong>{{ node.name }}</strong></span>
-          <span class="trace-summary"><small>输入</small>{{ Object.entries(node.input ?? {}).slice(0, 2).map(([key, value]) => `${key}=${Array.isArray(value) ? value.length : value}`).join(' · ') }}</span>
-          <span class="trace-summary"><small>输出</small>{{ Object.entries(node.output ?? {}).slice(0, 2).map(([key, value]) => `${key}=${Array.isArray(value) ? value.length : value}`).join(' · ') }}</span>
+          <span class="trace-summary"><small>输入</small>{{ summary(node.input) }}</span>
+          <span class="trace-summary"><small>输出</small>{{ summary(node.output) }}</span>
           <span class="trace-duration">{{ node.duration_ms }} ms</span>
           <AppIcon name="chevron" :class="{ rotated: expanded.includes(node.id) }" :size="15" />
         </button>

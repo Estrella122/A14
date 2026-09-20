@@ -1,9 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import RunOutcomePanel from '../components/RunOutcomePanel.vue'
+import CitationAnswer from '../components/CitationAnswer.vue'
+import { readableAnswer, streamedAnswer } from '../utils/answerCitations'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
-import { executionStatus } from '../utils/executionStatus'
+import { executionStatus, pipelineStatus } from '../utils/executionStatus'
 import IntegratedEvidencePanel from '../components/IntegratedEvidencePanel.vue'
 import AgentTracePanel from '../components/AgentTracePanel.vue'
 import AgentSkillCenter from '../components/AgentSkillCenter.vue'
@@ -199,6 +202,7 @@ const activeRunStatusText = computed(() => {
   if (uploading.value) return '上传数据后正在生成基础分析'
   if (isRunning.value) return liveProgress.value == null ? 'Agent 正在同步运行事件' : `Agent 正在运行 · ${liveProgress.value}%`
   if (activeRun.value?.status === 'completed') return '当前任务已完成'
+  if (['failed', 'needs_review', 'cancelled', 'timed_out'].includes(activeRun.value?.status)) return pipelineStatus(activeRun.value)
   if (activeRun.value?.status === 'running') return '深度分析进行中'
   return '等待上传或提问'
 })
@@ -363,8 +367,8 @@ function applyLivePayload(live, timelineMessage, draftMessage, payload) {
   const after = Number(payload.next_sequence ?? events.at(-1)?.sequence ?? activeLiveRun.value?.after ?? 0)
   timelineMessage.status = payload.status ?? timelineMessage.status
   timelineMessage.metrics = payload.metrics ?? timelineMessage.metrics
-  const answerDelta = events.filter((event) => event.event_type === 'llm_response_delta').map((event) => event.metadata?.delta || '').join('')
-  if (answerDelta && draftMessage) draftMessage.text += answerDelta
+  const answerDelta = streamedAnswer(timelineMessage.events)
+  if (answerDelta && draftMessage) draftMessage.text = answerDelta
   const latestStage = [...events].reverse().find((event) => event.event_type !== 'llm_response_delta' && event.message)
   if (latestStage && draftMessage) draftMessage.phase = latestStage.message
   activeLiveRun.value = { ...live, after, status: payload.status ?? 'running' }
@@ -451,7 +455,7 @@ function appendAgentResult(result, prefix = '', draftMessage = null, sourceRun =
     id: Date.now() + 2, role: 'agent', text: prefix + result.answer, cards: result.cards,
     skills: result.skill_executions?.map((item) => ({ id: item.skill_id, name: item.name, status: item.status, activity: item.activity, execution_state: item.execution_state, executor_selection_kind: item.executor_selection_kind })) ?? [],
     skillRunId: result.skill_run_id, skillSummary: result.skill_summary, deliverables: result.deliverables ?? [],
-    runId: result.run_id, charts: result.charts ?? [], llm: result.llm, streaming: false, phase: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    runId: result.run_id, answerSources: result.answer_sources ?? [], rawAnswer: result.answer, rawStream: draftMessage?.text || '', charts: result.charts ?? [], llm: result.llm, streaming: false, phase: '', time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
   }
   if (draftMessage) Object.assign(draftMessage, completedMessage, { id: draftMessage.id })
   else messages.value.push(completedMessage)
@@ -475,7 +479,8 @@ async function executeLiveMessage(userText, runId, prefix = '') {
     liveProgress.value = null
     return result
   } catch (error) {
-    Object.assign(draftMessage, { text: `本次请求失败：${error.message}`, phase: '', streaming: false, error: true })
+    const partial = draftMessage.text || ''
+    Object.assign(draftMessage, { rawAnswer: partial, text: `${partial}${partial ? '\n\n' : ''}本次回答中断：${error.message}`, phase: '', streaming: false, error: true })
     error.renderedInConversation = true
     throw error
   }
@@ -503,12 +508,12 @@ async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
 async function monitorExtendedAnalysis(runId) {
   const threadId = conversationId.value
   try {
-    const snapshot = await waitForPipeline(runId, (item) => ['completed', 'failed', 'needs_review'].includes(item.status), 10 * 60 * 1000)
+    const snapshot = await waitForPipeline(runId, (item) => ['completed', 'failed', 'needs_review', 'cancelled', 'timed_out'].includes(item.status), 10 * 60 * 1000)
     if (disposed) return
     if (snapshot.status === 'completed') {
       messages.value.push({ id: Date.now(), role: 'agent', text: '深度分析已在后台完成：系统辨识、候选寻优、评审与报告产物现已可用。', runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
-    } else if (snapshot.status === 'failed') {
-      messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析失败：${snapshot.error?.message ?? '未知错误'}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
+    } else if (['failed', 'needs_review', 'cancelled', 'timed_out'].includes(snapshot.status)) {
+      messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析已终止：${snapshot.stop_reason || snapshot.error?.message || '请查看本次数值任务状态'}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
     }
   } catch (error) {
     if (!disposed && conversationId.value === threadId && error.name !== 'AbortError') messages.value.push({ id: Date.now(), role: 'agent', text: `基础分析已保留；后台深度分析状态：${error.message}`, error: true, runId, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
@@ -554,7 +559,7 @@ function chooseCsv() {
 }
 
 function exportConversation() {
-  const body = messages.value.map((message) => `## ${message.role === 'agent' ? 'Agent' : '用户'} · ${message.time}\n\n${message.text}`).join('\n\n')
+  const body = messages.value.map((message) => `## ${message.role === 'agent' ? 'Agent' : '用户'} · ${message.time}\n\n${message.role === 'agent' ? readableAnswer(message.text, message.answerSources, message.runId) : message.text}`).join('\n\n')
   const blob = new Blob([`# ProcessPilot Agent 对话记录\n\n任务：${contextRunId.value}\n\n${body}\n`], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -755,6 +760,7 @@ async function switchRun(event) {
         <input v-if="userBoard" ref="fileInput" class="visually-hidden" type="file" accept=".csv,text/csv" @change="handleCsv" />
         <div v-if="userBoard" class="conversation-context"><span>{{ activeRun?.original_name || '未关联数据 · 上传 CSV 开始分析' }}</span><span v-if="activeRun">{{ sceneState.data_scene.display_name }} · {{ activeRunStatusText }}</span></div>
         <div ref="chatThread" class="chat-thread">
+          <RunOutcomePanel v-if="userBoard" :run="activeRun" />
           <PipelineChatProgress v-if="userBoard && activeRun?.stages?.length" :run="activeRun" />
           <div v-for="message in messages" :key="message.id" class="message" :class="message.role === 'agent' ? 'message-agent' : message.role === 'runtime' ? 'message-runtime' : 'message-user'">
             <AgentExecutionTimeline v-if="message.role === 'runtime'" :events="message.events" :status="message.status" :metrics="message.metrics" :compact="userBoard" />
@@ -762,7 +768,7 @@ async function switchRun(event) {
             <div v-if="message.role !== 'runtime'" class="message-bubble" :class="{ 'rich-message': message.cards?.length, 'message-error': message.error }">
               <span v-if="message.streaming" class="streaming-phase"><AppIcon name="loop" class="spinning" :size="11" />{{ message.phase }}</span>
               <ChatCharts v-if="message.charts?.length" :charts="message.charts" />
-              <p>{{ message.text || (message.streaming ? '正在读取数据证据与 Skill 执行结果…' : '') }}<i v-if="message.streaming" class="streaming-cursor"></i></p>
+              <CitationAnswer v-if="message.role === 'agent'" :text="message.text || (message.streaming ? '正在读取数据证据与 Skill 执行结果…' : '')" :sources="message.answerSources ?? []" :run-id="message.runId" :streaming="message.streaming" /><p v-else>{{ message.text }}</p>
               <span v-if="message.llm" class="message-model"><AppIcon name="spark" :size="11" />{{ message.llm.used ? `${message.llm.provider} · ${message.llm.model}` : message.llm.fallback ? '大模型不可用 · Evidence 回退' : 'Evidence Agent' }}</span>
               <div v-if="message.cards?.length" class="intent-chips"><span v-for="card in message.cards" :key="card.label">{{ card.label }}：{{ card.value ?? '—' }}</span></div>
               <div v-if="message.skills?.length" class="message-skill-chain">

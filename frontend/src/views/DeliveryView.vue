@@ -52,9 +52,9 @@ const reviewItems = computed(() => [
 const conclusion = computed(() => review.value.conclusion ?? '等待真实任务评审')
 
 const artifacts = computed(() => [
-  { type: 'csv', key: 'modeling_csv', title: '优选建模数据集', file: 'modeling_dataset.csv', meta: `${cleaning.value.modeling_row_count ?? 0} 行 · ${modeling.value.selected_inputs?.length ?? 0} 个模型输入`, icon: 'database', action: '导出 CSV' },
+  { type: 'csv', key: 'modeling_csv', title: latestRun.value?.artifact_labels?.modeling_csv || (optimization.value.best_round == null && optimization.value.optimization_outcome ? '初始筛选数据（非胜者）' : '优选建模数据集'), file: 'modeling_dataset.csv', meta: `${cleaning.value.modeling_row_count ?? 0} 行 · ${modeling.value.selected_inputs?.length ?? 0} 个模型输入`, icon: 'database', action: '导出 CSV' },
   { type: 'report', key: 'analysis_report_html', title: 'Agent分析报告', file: 'analysis_report.html', meta: `任务 ${latestRun.value?.run_id ?? '等待运行'} · 自包含 HTML`, icon: 'report', action: '导出报告' },
-  { type: 'trace', key: 'optimization_json', title: '闭环寻优记录', file: 'optimization_report.json', meta: `${optimization.value.iterations?.length ?? 0} 轮候选 · 最优第 ${optimization.value.best_round ?? '—'} 轮`, icon: 'loop', action: '导出 JSON' },
+  { type: 'trace', key: 'optimization_json', title: '闭环寻优记录', file: 'optimization_report.json', meta: `${optimization.value.candidate_counts?.attempted ?? optimization.value.iterations?.length ?? '暂未取得记录'} 轮候选 · 最优第 ${optimization.value.best_round ?? '—'} 轮`, icon: 'loop', action: '导出 JSON' },
   { type: 'review', key: 'review_json', title: '独立评审记录', file: 'agent_review.json', meta: conclusion.value, icon: 'shield', action: '导出 JSON' },
 ])
 
@@ -126,7 +126,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       <p v-if="downloadError" role="alert">{{ downloadError }}</p><div class="artifact-grid">
         <article v-for="artifact in artifacts" :key="artifact.type" class="artifact-card">
           <span class="artifact-icon"><AppIcon :name="artifact.icon" :size="24" /></span>
-          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p><p>状态：{{ artifactState(artifact.key) }}</p></div>
+          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p><p>状态：{{ ({ready:'可查看', partial_not_winner:'非胜者数据，不作为最佳数据导出', missing:'产物文件缺失', not_generated:'尚未生成', failed:'生成失败', generating:'生成中'})[artifactState(artifact.key)] || artifactState(artifact.key) }}</p></div>
           <button class="btn btn-secondary" type="button" :disabled="downloading || artifactState(artifact.key) !== 'ready'" @click="exportArtifact(artifact)"><AppIcon name="download" :size="16" />{{ artifact.action }}</button>
         </article>
       </div>

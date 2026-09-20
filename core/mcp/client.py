@@ -7,7 +7,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 
-TERMINAL_STATUSES = {"completed", "partial", "blocked", "failed", "cancelled"}
+TERMINAL_STATUSES = {"completed", "partial", "blocked", "failed", "cancelled", "timed_out"}
 REQUIRED_MODELING_TOOLS = {
     "run_dynamic_selection",
     "run_decoupling_identification",

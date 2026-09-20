@@ -41,8 +41,8 @@ export async function rerunPipeline(runId, options = {}) {
   const payload = await apiRequest(`/pipeline/runs/${runId}/rerun/`, {
     method: 'POST',
     body: {
-      resample_rule: options.resampleRule ?? '10s',
-      max_lag: options.maxLag ?? 60,
+      resample_rule: options.resampleRule,
+      max_lag: options.maxLag,
       scenario_id: options.scenarioId,
       overrides: options.overrides,
     },

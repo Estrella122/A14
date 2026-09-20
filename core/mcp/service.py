@@ -203,7 +203,7 @@ def cancel_job(job_id: str, *, caller_id: str = "local-agent") -> dict[str, Any]
         raise MCPServiceError("JOB_NOT_FOUND", "任务不存在。")
     if job.caller_id and job.caller_id != caller_id:
         raise MCPServiceError("ACCESS_DENIED", "无权取消其他调用方创建的任务。")
-    if job.status in {"completed", "blocked", "failed", "cancelled"}:
+    if job.status in {"completed", "blocked", "failed", "cancelled", "timed_out"}:
         return job_result(job)
     now = timezone.now()
     updates: dict[str, Any] = {"cancel_requested_at": now}
@@ -330,6 +330,7 @@ def _metrics(tool_name: str, snapshot: dict[str, Any] | None) -> dict[str, Any]:
             "best_parameters": optimization.get("best_parameters", {}),
             "best_metrics": optimization.get("best_metrics", {}),
             "stopping": optimization.get("stopping", {}),
+            **{key: optimization.get(key) for key in ("candidate_counts", "execution_status", "optimization_outcome", "stop_reason", "iterations")},
         }
     return {}
 
@@ -339,8 +340,8 @@ def job_result(job: RuntimeJob, *, reused: bool = False) -> dict[str, Any]:
     status = job.status
     if snapshot and snapshot.get("status") == "needs_review":
         status = "blocked"
-    elif snapshot and snapshot.get("status") == "failed":
-        status = "failed"
+    elif snapshot and snapshot.get("status") in {"failed", "cancelled", "timed_out"}:
+        status = snapshot["status"]
     elif job.tool_name == "run_dynamic_selection" and status == "completed":
         selection = snapshot.get("results", {}).get("selection", {}) if snapshot else {}
         if int(selection.get("selected_segment_count") or 0) == 0 and int(selection.get("modeling_row_count") or 0) > 0:
