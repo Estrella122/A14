@@ -54,18 +54,63 @@ class SearchEvidenceTests(TestCase):
         self.assertEqual(disk['progress_events'][-1]['candidate_counts'],disk['candidate_counts'])
         return disk
 
-    def test_no_feasible_retains_every_attempt_without_test_or_winner(self):
-        with patch.dict('sys.modules', {'validated_modeling':__import__('unittest.mock',fromlist=['Mock']).Mock()}) as _:
-            with self.assertRaises(pipeline.OptimizationStopped):self.search()
+    def finalized_search(self, **kwargs):
+        from types import SimpleNamespace
+        calls=[]
+        def finalize(out,test_path):
+            frozen=json.loads((self.run/'05_optimization/optimization_report.json').read_text())
+            self.assertTrue(frozen['frozen_winner_round'])
+            self.assertEqual(frozen['test_evaluations'],1)
+            calls.append(out)
+            return {'validation':{'r2':.9},'test':{'r2':-.5,'rmse':.4}},{}
+        with patch.dict('sys.modules',{'validated_modeling':SimpleNamespace(finalize_test=finalize)}),patch.object(pipeline,'_read_csv',return_value=pd.DataFrame({'actual':[1,2],'predicted':[.8,1.7]})):
+            result=self.search(**kwargs)
+        self.assertEqual(len(calls),1)
+        self.assertEqual(str(calls[0].relative_to(self.run)),result[1]['output_dir'])
+        return result
+
+    def test_no_qualified_candidate_selects_best_and_keeps_warnings(self):
+        _,model=self.finalized_search()
         report=self.assert_consistent()
         self.assertEqual(report['execution_status'],'completed')
+        self.assertEqual(report['optimization_outcome'],'best_available_candidate')
         self.assertEqual(report['candidate_counts']['attempted'],16)
         self.assertEqual(report['candidate_counts']['evaluated'],16)
-        self.assertEqual(report['test_evaluations'],0)
-        self.assertIsNone(report['best_round'])
-        self.assertNotIn('best_selection_receipt',report)
+        self.assertEqual(report['candidate_counts']['feasible'],0)
+        self.assertEqual(report['test_evaluations'],1)
+        self.assertEqual(report['best_round'],1)  # Stable tie; test score cannot change selection.
+        self.assertFalse(report['best_feasible'])
+        self.assertIn('best_selection_receipt',report)
+        self.assertTrue(model['prediction_preview'])
+        self.assertEqual(model['status'],'completed')
+        self.assertFalse(model['selection_qualified'])
+        self.assertEqual(model['selection_warnings'],report['selection_warnings'])
         self.assertIn('覆盖率',report['iterations'][0]['reason_message'])
         self.assertTrue(all(row['started_at'] and row['finished_at'] for row in report['iterations']))
+
+    def test_best_validation_score_can_beat_a_lower_scoring_qualified_candidate(self):
+        original=self.model
+        def model(data,*args,**kwargs):
+            result=original(data,*args,**kwargs)
+            result['metrics']['validation']['r2']=.99 if len(data)==30 else .1
+            return result
+        self.model_mock.side_effect=model
+        with patch.object(pipeline,'_select_modeling_rows',side_effect=lambda *a,**kw:self.frame.iloc[:30 if kw['top_k']==5 else 90]):
+            report,_=self.finalized_search()
+        self.assertGreater(report['candidate_counts']['feasible'],0)
+        self.assertEqual(report['best_round'],1)
+        self.assertFalse(report['best_feasible'])
+        self.assertEqual(report['best_score'],max(r['score'] for r in report['iterations'] if r['status']=='completed'))
+
+    def test_selected_with_warnings_is_not_reported_as_stopped_or_production_ready(self):
+        from core.services.optimization_state import readable_stop
+        report,model=self.finalized_search()
+        self.assertIsNone(readable_stop({'status':'completed','results':{'optimization':report}}))
+        review=pipeline._review({}, {'overall_score':90}, model, self.run)
+        self.assertFalse(review['passed'])
+        self.assertIn(report['selection_warnings'][0],review['blockers'])
+        gate=next(g for g in review['deployment_readiness']['offline_model']['gates'] if g['id']=='search_quality_constraints')
+        self.assertFalse(gate['passed'])
 
     def test_input_conditions_are_not_code_failure(self):
         self.model_mock.side_effect=ValueError('连续有效训练样本不足以辨识当前阶次')

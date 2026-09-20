@@ -1,6 +1,5 @@
 <script setup>
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import RunOutcomePanel from './components/RunOutcomePanel.vue'
 import AppIcon from './components/AppIcon.vue'
 import StatusPill from './components/StatusPill.vue'
 import { navGroups, navItems, projects } from './data/projectData'
@@ -239,7 +238,6 @@ onBeforeUnmount(() => {
 
       <main class="content-main" :class="{ 'portal-main': isPortal, 'user-main': isUserBoard }">
         <p v-if="pipelineError" role="alert" class="pipeline-error">{{ pipelineError }}</p>
-        <RunOutcomePanel v-if="!isPortal && !isUserBoard" :run="activeLatestRun" />
         <component
           :is="activeView"
           :key="`${activePath}-${effectiveProject.id}`"

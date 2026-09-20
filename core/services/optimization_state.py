@@ -95,7 +95,7 @@ def readable_stop(snapshot):
     if not optimization and (snapshot.get('error') or {}).get('stage') != 'optimization' and snapshot.get('current_stage') != 'optimization':
         return None
     outcome = optimization.get('optimization_outcome')
-    if outcome in {None, 'searching', 'qualified_candidate'} and snapshot.get('status') not in {'failed', 'needs_review', 'cancelled', 'timed_out'}:
+    if outcome in {None, 'searching', 'qualified_candidate', 'best_available_candidate'} and snapshot.get('status') not in {'failed', 'needs_review', 'cancelled', 'timed_out'}:
         return None
     attempted = optimization.get('candidate_counts', {}).get('attempted')
     reason = optimization.get('stop_reason') or optimization.get('reason_message') or (snapshot.get('error') or {}).get('message') or '历史记录不完整，暂未取得停止原因。'

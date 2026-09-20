@@ -83,7 +83,7 @@ def build_answer_context(message, snapshot, response, budget=24000):
         'current_stage': snapshot.get('current_stage'), 'error': snapshot.get('error'), 'stop_reason': snapshot.get('stop_reason'),
         'source': {'original_name': snapshot.get('original_name'), 'scenario': run['standardization']},
         'modeling': pick(model, ('status', 'config', 'metrics', 'fitted_inputs', 'diagnostics')),
-        'optimization': pick(optimization, ('best_round', 'best_parameters', 'best_metrics', 'best_score', 'stopping', 'candidate_counts', 'execution_status', 'optimization_outcome', 'stop_reason')),
+        'optimization': pick(optimization, ('best_round', 'best_parameters', 'best_metrics', 'best_score', 'best_feasible', 'selection_warnings', 'selection_rule', 'stopping', 'candidate_counts', 'execution_status', 'optimization_outcome', 'stop_reason')),
         'selection': results.get('best_selection_receipt') or pick(run['cleaning'], ('selection_metrics', 'modeling_row_count', 'strict_selected_segment_count', 'usable_segment_count')),
         'policy_receipt': {'scope': 'initial_baseline_policy; winner overrides are recorded separately', **snapshot.get('policy_receipt', {})},
         'winner_effective_policy': results.get('best_selection_receipt', {}).get('effective_policy', {'status': 'historical_not_recorded', 'recorded_winner_parameters': results.get('best_selection_receipt', {}).get('requested_parameters', {})}),

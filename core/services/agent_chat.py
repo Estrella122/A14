@@ -390,6 +390,8 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
             f"top_k={params.get('top_k', '—')}、max_lag={params.get('max_lag', '—')}，综合得分 {optimization.get('best_score', '—')}。"
             f"胜者验证集 R²={_metric(best.get('r2'))}、RMSE={_metric(best.get('rmse'))}，数据覆盖率 {float(best.get('coverage') or 0):.1%}。"
         )
+        if optimization.get('selection_warnings'):
+            answer += '最佳模型及预测结果已保留。质量提示：' + '；'.join(optimization['selection_warnings']) + '。是否适合生产使用以工程评审为准。'
         cards = [{"label": "候选轮次", "value": len(rounds)}, {"label": "最优轮次", "value": optimization.get("best_round")}, {"label": "综合得分", "value": optimization.get("best_score")}]
         suggestions = ["为什么这一轮最好", "最优模型是否可靠", "以稳健性优先重新执行闭环寻优"]
     elif intent == "review":

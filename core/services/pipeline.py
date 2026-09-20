@@ -637,7 +637,10 @@ def _optimize_real_data(*args, on_progress=None, cancel_check=None, timeout_seco
         journal.check()
         report, model = _search_optimization(*args, journal=journal, **kwargs)
         journal.report.update(report)
-        journal.report.update(status='completed', execution_status='completed', optimization_outcome='qualified_candidate', model_quality='qualified_search_candidate')
+        qualified = report['best_feasible']
+        journal.report.update(status='completed', execution_status='completed',
+                              optimization_outcome='qualified_candidate' if qualified else 'best_available_candidate',
+                              model_quality='qualified_search_candidate' if qualified else 'selected_with_warnings')
         journal.save('optimization_completed')
         return journal.report, model
     except SearchStopped as exc:
@@ -858,18 +861,21 @@ def _search_optimization(
     from .optimization_state import SearchStopped
     if not completed:
         raise SearchStopped('insufficient_input', '所有候选均因参数边界或拟合/评价条件不足而不可评估；详见逐轮原因。')
-    feasible_candidates = [item for item in completed if item.get('feasible')]
-    if not feasible_candidates:
-        raise SearchStopped('no_feasible_candidate', '搜索已结束，但没有满足当前验证与覆盖约束的候选；未选择胜者、未评价测试集。')
-    best = max(feasible_candidates, key=lambda item: item["score"])
+    # Qualification is reported separately; invalid metrics and out-of-bounds
+    # candidates never enter `completed`. Stable ties preserve the earlier round.
+    best = max(completed, key=lambda item: item["score"])
+    best_feasible = bool(best.get('feasible'))
+    selection_warnings = [] if best_feasible else [best['reason_message']]
     if not stop_reason:
-        best_feasible = bool(best.get("feasible"))
-        stop_reason = f"达到最大轮次{max_rounds}轮；{'已获得可行候选' if best_feasible else '最优候选仍未通过R²与覆盖率门槛，建议返回数据优选或辨识阶段'}"
+        stop_reason = f"达到最大轮次{max_rounds}轮；已选出验证综合分最高的第 {best['round']} 轮模型。"
+    if selection_warnings:
+        stop_reason += ' 已保留最佳模型与预测结果；质量提示：' + '；'.join(selection_warnings)
     hashes = {item["evaluation_target_hash"] for item in completed}
     if len(hashes) != 1:
         raise PipelineError("候选验证目标不一致，拒绝比较。")
     journal.check()
     best_model = best["model"]
+    best_model.update(status='completed', selection_qualified=best_feasible, selection_warnings=selection_warnings)
     # Test is touched only after the winner and all hyperparameters are frozen.
     journal.report.update(test_evaluations=1, frozen_winner_round=best['round'])
     journal.save('winner_frozen_before_test')
@@ -962,6 +968,10 @@ def _search_optimization(
         "optimization_policy": optimization_policy or {"mode": "legacy_pipeline_default"},
         "iterations": public_iterations,
         "best_round": best["round"],
+        "selection_rule": "highest_validation_objective_among_evaluated_candidates",
+        "best_feasible": best_feasible,
+        "selection_warnings": selection_warnings,
+        "stop_reason": stop_reason,
         "best_label": best["label"],
         "best_score": best["score"],
         "best_parameters": {"top_k": best["top_k"], "max_lag": best["max_lag"]},
@@ -990,7 +1000,7 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
     r2 = number(test_metrics.get("r2"))
     quality = float(cleaning.get("overall_score") or 0)
     decision = standardization.get("data_decision", {}).get("status", "review")
-    blockers = []
+    blockers = list(modeling.get('selection_warnings', []))
     if decision == "reject":
         blockers.append("字段标准化结果被拒绝")
     if quality < 60:
@@ -1055,6 +1065,9 @@ def _review(standardization: dict[str, Any], cleaning: dict[str, Any], modeling:
          )},
     ]
     requested_model_outputs = standardization.get("scenario", {}).get("model_outputs") or []
+    if modeling.get('selection_qualified') is not None:
+        offline_gates.append({'id': 'search_quality_constraints', 'passed': modeling['selection_qualified'],
+                              'evidence': '；'.join(modeling.get('selection_warnings', [])) or '选中模型满足搜索质量约束'})
     if len(requested_model_outputs) > 1:
         mimo = modeling.get("mimo", {})
         offline_gates.append({
@@ -1399,7 +1412,7 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
                 fitted = report['candidate_counts']['fitted']
                 model_stage = next(row for row in snapshot['stages'] if row['key'] == 'modeling')
                 model_stage.update(status='partial' if fitted else 'pending',
-                    message='候选拟合已执行，等待合格赢家' if fitted else '准备完成，等待候选拟合')
+                    message='候选拟合已执行，正在比较验证得分' if fitted else '准备完成，等待候选拟合')
                 _write_json(run_dir / 'snapshot.json', snapshot)
             optimization, modeling = _optimize_real_data(
                 cleaned_frame,

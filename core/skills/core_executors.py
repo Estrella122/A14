@@ -501,14 +501,15 @@ class OptimizationExecutor:
                 artifacts=refs, inputs=list(artifact_fields.values()), outputs=refs,
                 provenance={'producer': skill_id}, evidence=[report], warnings=[],
                 trace=[{'step': 'run_optimization_stage', 'status': state, 'reason': report.get('stop_reason')}])
-        feasible = any(item.get("status") == "completed" and item.get("feasible") for item in report["iterations"])
+        feasible = next((bool(item.get('feasible')) for item in report['iterations'] if item.get('round') == report.get('best_round')), False)
         status = "success" if feasible else "partial"
         runtime_context.get("state", {}).update(optimization=report, modeling=best_model)
         execution_id = str(runtime_context.get("execution_id", "optimization"))
         refs = _register_report_artifacts(resolver, report.get("artifacts", {}), skill_id, execution_id, run_dir)
         winner_ref = resolver.write_json(ArtifactType.OPTIMIZATION_WINNER,
             {"best_round": report.get("best_round"), "best_parameters": report.get("best_parameters"),
-             "validation": report.get("best_metrics"), "test": best_model.get("metrics", {}).get("test", {})},
+             "validation": report.get("best_metrics"), "test": best_model.get("metrics", {}).get("test", {}),
+             "selection_qualified": feasible, "selection_warnings": report.get('selection_warnings', [])},
             Path(runtime_context["output_dir"]) / "artifacts" / "optimization_winner.json", skill_id, execution_id)
         refs.append(winner_ref.public())
         evidence = {"candidate_count": len(report["iterations"]), "winner": report.get("best_parameters"),
@@ -517,7 +518,7 @@ class OptimizationExecutor:
         return _result(skill_id, started, status=status, capabilities=capability_ids,
             facts=[f"在真实训练/验证数据上评估 {len(report['iterations'])} 个候选，冻结赢家后测试一次。"],
             findings=[f"最优候选为第 {report['best_round']} 轮，验证得分 {report['best_score']}。"],
-            limitations=[] if feasible else ["搜索完成，但没有候选满足显式可行性约束。"],
+            limitations=[] if feasible else report.get('selection_warnings', ["最佳模型已选出，但未满足全部质量约束。"]),
             metrics={"objective": report["objective"], "candidate_count": len(report["iterations"]),
                      "best_candidate": report["best_parameters"], "validation_scores": report["best_metrics"],
                      "test_score": best_model.get("metrics", {}).get("test", {}), "feasibility": feasible,

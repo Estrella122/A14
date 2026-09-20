@@ -27,6 +27,7 @@ export function executionStatus(status) {
 
 export function pipelineStatus(run) {
   const outcome = run?.results?.optimization?.optimization_outcome
+  if (outcome === 'best_available_candidate') return '已选出最佳模型（附质量提示）'
   const labels = { no_feasible_candidate: '搜索结束，无合格候选', insufficient_input: '拟合或评价条件不足', failed: '程序或服务异常', cancelled: '已取消', timed_out: '执行超时', unknown: '历史记录不完整' }
   return labels[outcome] || executionStatus(run?.status).label
 }

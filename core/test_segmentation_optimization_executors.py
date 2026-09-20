@@ -123,7 +123,7 @@ class OptimizationExecutorTests(SimpleTestCase):
             "optimization_policy": {"mode": "real_data", "test_policy": "winner_once"}, "field_dictionary": DICTIONARY,
             "primary_output": "output", "real_data": True,
         }
-        self.fake_report = {"iterations": [{"status": "completed", "feasible": True}], "best_round": 1, "best_score": 88,
+        self.fake_report = {"iterations": [{"round": 1, "status": "completed", "feasible": True}], "best_round": 1, "best_score": 88,
                             "best_parameters": {"top_k": 5, "max_lag": 60}, "best_metrics": {"r2": .8},
                             "objective": "maximize validation score", "validation_target_hash": "h", "artifacts": {"optimization_json": "result.json"}}
         self.fake_model = {"metrics": {"test": {"r2": .75}}}
@@ -135,6 +135,14 @@ class OptimizationExecutorTests(SimpleTestCase):
 
     def test_real_data_optimization_executes_service(self):
         result, service = self.execute(); service.assert_called_once(); self.assertEqual(result["status"], "success")
+
+    def test_selected_quality_uses_winner_not_another_qualified_candidate(self):
+        self.fake_report['iterations'] = [{'round':1,'status':'completed','feasible':False}, {'round':2,'status':'completed','feasible':True}]
+        self.fake_report['selection_warnings'] = ['训练覆盖率不足']
+        result,_ = self.execute()
+        self.assertEqual(result['status'],'partial')
+        self.assertFalse(result['metrics']['feasibility'])
+        self.assertEqual(result['metrics']['best_candidate'],self.fake_report['best_parameters'])
 
     def test_objective_missing_blocks(self):
         request = {**self.request, "objective": ""}; self.assertEqual(self.execute(request)[0]["status"], "blocked")
