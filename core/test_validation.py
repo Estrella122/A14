@@ -179,6 +179,6 @@ class CausalModelingTests(SimpleTestCase):
         from core.services.agent_chat import chat
         snapshot = {'run_id':'example', 'results':{'standardization':{'scenario':{'scenario_name':'钢铁高炉铁水质量预测'}}}}
         with patch('core.services.agent_chat.get_run', return_value=snapshot), patch('core.services.agent_chat.rerun_pipeline') as rerun:
-            with self.assertRaisesRegex(pipeline.PipelineError, 'top_k'):
-                chat('提取加热炉动态数据 top_k=3')
+            with self.assertRaisesRegex(ValueError, 'top_k|modeling_top_k'):
+                chat('提取加热炉动态数据 top_k=0', run_id='example', parameters={'top_k': 0})
             rerun.assert_not_called()

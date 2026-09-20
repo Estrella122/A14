@@ -73,7 +73,7 @@ class ThreeSceneSkillTests(SimpleTestCase):
             self.assertTrue(all(not row['metrics'] for row in rows.values()))
         else:
             for key in CORE:
-                self.assertIn(rows[key]['status'],{'success','partial'})
+                self.assertIn(rows[key]['status'],{'success','partial','read'})
                 self.assertTrue(rows[key]['audit']['executor_invoked'])
             self.assertTrue(rows['arx_structure_order_selector']['metrics']['candidate_count'])
             self.assertFalse(rows['arx_structure_order_selector']['evidence'][0]['test_accessed'])
@@ -113,7 +113,7 @@ class ThreeSceneSkillTests(SimpleTestCase):
         for receipt in self.receipts.values():
             self.assertEqual('md_registry',receipt['skill_plan']['analysis']['routing_source'])
             self.assertTrue(all(row['manifest_source']=='SKILL.md' for row in receipt['skill_plan']['steps']))
-            self.assertEqual(receipt['scene_context']['default_parameters']['max_lag'], receipt['parameters']['time_delay_estimator_compensator']['max_lag'])
+            self.assertEqual(receipt['scene_context']['metadata']['algorithm_profile']['decoupling']['max_lag_samples'], receipt['parameters']['time_delay_estimator_compensator']['max_lag'])
 
     def test_api_compatibility_and_boundaries(self):
         response = self.client.get('/api/agent/skills/')

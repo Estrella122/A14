@@ -53,7 +53,7 @@ suggested_next_skills: []
 MODELING_DATASET, CLEANED_VALIDATION, TIME_DELAY_ESTIMATES, COLLINEARITY_REPORT, SNR_ESTIMATES。项目预设场景不得替代数据识别场景。
 
 # 参数说明
-复用现有算法固定搜索空间，不增加另一套默认值。
+读取生效 decoupling 策略，前置时滞、共线性、max_features 与结构搜索共享普通流水线算法；候选族和阶次来自 policy。
 
 # 执行逻辑
 读取上游时滞、共线性建议和 SNR 证据，调用共享 search_structure_orders；训练拟合并在共同验证目标上比较。

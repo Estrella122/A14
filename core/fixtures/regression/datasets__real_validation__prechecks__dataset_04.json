@@ -1,0 +1,32 @@
+{
+  "source_hash": "f3ae03e28f29f2b0b29fe932a5833603c5bdbae48af6ba85c0369be0a920c60b",
+  "required_count": 9,
+  "matched_required": 1,
+  "final_eligibility": "UNUSABLE",
+  "reasons": [
+    "MISSING_METADATA: source class/hash/evidence not verified",
+    "LICENSE_BLOCKED: permitted analysis not established",
+    "MISSING_REQUIRED_SENSORS_OR_MAPPING: bottom_butane_content, bottom_temperature_a, bottom_temperature_b, next_process_flow, timestamp, top_pressure, top_temperature, tray6_temperature",
+    "MISSING_METADATA: canonical physical units not independently documented",
+    "MISSING_METADATA: timestamp or sampling not verified",
+    "INSUFFICIENT_DATA: less than existing 150-row minimum or no target observations"
+  ],
+  "rows": 11399,
+  "columns": [
+    "Unnamed: 0",
+    "Feed Flow to DB",
+    "Reboiler o/l Temp",
+    "Column top Temp",
+    "Reboiling steam flow",
+    "Reflux flow",
+    "Column Top pressure",
+    "Column bottom temp",
+    "Control tay temp",
+    "C4H6 in DB bottom",
+    "C4H8 in DB bottom"
+  ],
+  "missing_fields": [
+    "bottom_butane_content",
+    "timestamp"
+  ]
+}

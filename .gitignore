@@ -29,3 +29,24 @@ integrations/standardization/models/training_progress.json
 datasets/public/debutanizer/debutanizer_data.txt
 datasets/public/debutanizer/debutanizer_original.csv
 datasets/public/debutanizer/debutanizer_processpilot.csv
+
+# Local release preparation and generated evidence (functional resources remain tracked).
+/dist/
+/reports/
+/output/
+/.playwright-cli/
+/.pytest_cache/
+/.ruff_cache/
+/venv/
+/node_modules/
+/*.db
+/*.db-*
+/*.sqlite
+/*.log
+/synthetic.csv
+/acceptance/reports/
+/training/skill_router/reports/
+/datasets/real_validation/
+/datasets/field_ground_truth/
+/datasets/field_acceptance_safety/
+/integrations/standardization/training_data/multi_angle_evaluation/

@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_REPORT = Path(__file__).parent / "reports" / "acceptance.json"
+DEFAULT_REPORT = ROOT / "core/fixtures/regression/training__skill_router__reports__acceptance.json"
 MODEL_PATH = ROOT / "core" / "skills" / "models" / "skill_router.json.gz"
 TEST_PATH = Path(__file__).parent / "data" / "test.jsonl"
 THRESHOLDS = {

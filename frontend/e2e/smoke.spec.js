@@ -47,7 +47,8 @@ test('键盘焦点可见且页面具有唯一主标题', async ({ page }) => {
 })
 
 test('缺少资产的跨场景任务不会覆盖当前项目模型与拓扑', async ({ page }) => {
-  await page.route('**/api/pipeline/runs/latest/', (route) => route.fulfill({
+  // The selected run is reloaded by ID after the initial latest-run response.
+  await page.route('**/api/pipeline/runs/{latest,run-cross-scene}/', (route) => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: {
       run_id: 'run-cross-scene', original_name: 'Steel_industry_data.csv', status: 'completed',

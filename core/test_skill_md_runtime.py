@@ -198,6 +198,7 @@ class MDSkillRuntimeTests(SimpleTestCase):
         with patch("core.services.agent_chat.get_run", return_value=self.snapshot):
             result = chat("当前数据的信噪比是多少？", self.snapshot["run_id"])
         self.assertEqual("md_registry", result["skill_plan"]["analysis"]["routing_source"])
-        self.assertTrue(result["executed"])
+        self.assertFalse(result["executed"])
         self.assertIn("SNR", result["answer"])
-        self.assertIn("dB", result["answer"])
+        self.assertIn("不能给出真实数值", result["answer"])
+        self.assertFalse(result["runtime_observability"]["executor_results"])

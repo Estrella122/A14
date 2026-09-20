@@ -4,7 +4,8 @@ import AppIcon from './components/AppIcon.vue'
 import StatusPill from './components/StatusPill.vue'
 import { navGroups, navItems, projects } from './data/projectData'
 import CommandPalette from './components/CommandPalette.vue'
-import { useLatestPipelineRun } from './composables/useLatestPipelineRun'
+import { pathWithRun, selectedRunId } from './utils/runBinding'
+import { useLatestPipelineRun, getRunScenarioId } from './composables/useLatestPipelineRun'
 import { buildSceneState } from './composables/useSceneBinding'
 import { apiRequest } from './api/client'
 
@@ -44,10 +45,10 @@ function getStoredProject() {
 const activePath = ref(normalizePath(window.location.pathname))
 const currentProjectId = ref(getStoredProject())
 const currentProject = computed(() => projects.find((project) => project.id === currentProjectId.value) ?? projects[0])
-const { latestRun } = useLatestPipelineRun()
+const { latestRun, pipelineError } = useLatestPipelineRun()
 const sceneState = computed(() => buildSceneState(currentProject.value, latestRun.value))
 const dataSceneText = computed(() => sceneState.value.data_scene.display_name)
-const effectiveProject = computed(() => currentProject.value)
+const effectiveProject = computed(() => projects.find(project => project.scenarioId === getRunScenarioId(latestRun.value)) ?? currentProject.value)
 const dataSceneStatus = computed(() => sceneState.value.data_scene_status_label)
 const activeLatestRun = computed(() => latestRun.value)
 const isPortal = computed(() => activePath.value === '/portal/')
@@ -76,7 +77,7 @@ async function refreshHealth() {
 
 function navigate(path) {
   const normalized = normalizePath(path)
-  if (normalized !== activePath.value) window.history.pushState({}, '', normalized)
+  if (normalized !== activePath.value) window.history.pushState({}, '', pathWithRun(normalized, selectedRunId()))
   activePath.value = normalized
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -190,7 +191,7 @@ onBeforeUnmount(() => {
           <a
             v-for="item in group.items"
             :key="item.path"
-            :href="item.path"
+            :href="pathWithRun(item.path, selectedRunId())"
             :class="{ active: activePath === item.path }"
             :aria-current="activePath === item.path ? 'page' : undefined"
             :title="item.label"
@@ -236,6 +237,7 @@ onBeforeUnmount(() => {
       </header>
 
       <main class="content-main" :class="{ 'portal-main': isPortal, 'user-main': isUserBoard }">
+        <p v-if="pipelineError" role="alert" class="pipeline-error">{{ pipelineError }}</p>
         <component
           :is="activeView"
           :key="`${activePath}-${effectiveProject.id}`"

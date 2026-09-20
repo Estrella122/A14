@@ -10,7 +10,7 @@ from core.skills.context import build_scene_context
 from core.skills.runtime import execute_skill_plan, plan_skills
 
 
-def run_scene_skill_pipeline(source, message="分析当前场景的数据质量并判断是否适合 ARX 建模。", *, output_root=None):
+def run_scene_skill_pipeline(source, message="分析当前场景的数据质量并判断是否适合 ARX 建模。", *, output_root=None, parameters=None):
     from .pipeline import run_standardization_stage, _write_json
     tick = perf_counter()
     source = Path(source).resolve()
@@ -28,6 +28,7 @@ def run_scene_skill_pipeline(source, message="分析当前场景的数据质量�
     snapshot["artifact_registry"] = refs
     context = build_scene_context(snapshot).public()
     plan = plan_skills(message,run_id,snapshot=snapshot)
+    plan["parameters"] = dict(parameters or plan.get("parameters", {}))
     decision = standard.get("data_decision",{})
     blocked = "字段/单位标准化拒绝：" + "；".join(decision.get("reasons",[])) if decision.get("status") == "reject" else None
     if standard.get("mapping",{}).get("missing_required"):

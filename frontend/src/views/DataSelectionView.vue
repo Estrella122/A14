@@ -15,7 +15,7 @@ const seriesPreview = computed(() => liveCleaning.value.timeseries_preview ?? {}
 const seriesPoints = computed(() => (seriesPreview.value.points ?? []).filter((item) => Number.isFinite(Number(item.input)) && Number.isFinite(Number(item.output))))
 const inputMeta = computed(() => seriesPreview.value.input ?? { label: props.project.mv, unit: props.project.mvUnit })
 const outputMeta = computed(() => seriesPreview.value.output ?? { label: props.project.target, unit: props.project.targetUnit })
-const relaxedAcceptance = computed(() => Boolean(liveCleaning.value.relaxed_acceptance))
+const frozenWinner = computed(() => liveCleaning.value.selection_view === 'frozen_winner')
 
 const weights = ref({ dynamic: 38, snr: 27, integrity: 20, coverage: 15 })
 const selectedIds = ref([])
@@ -28,7 +28,8 @@ const segments = computed(() => {
     const start = new Date(row.start_time)
     const end = new Date(row.end_time)
     return {
-      id: `SEG-${String(index + 1).padStart(3, '0')}`,
+      id: `SEG-${row.window_id ?? index}`,
+      selected: row.selected === true,
       time: `${row.start_time} — ${row.end_time}`,
       duration: `${Math.max(0, (end - start) / 60000).toFixed(1)} min`,
       type: row.level,
@@ -76,7 +77,7 @@ const segmentBands = computed(() => (liveCleaning.value.segments_preview ?? []).
   const left = timelineRatio(item.start_time)
   const right = timelineRatio(item.end_time)
   const rejected = String(item.level ?? '').includes('异常') || Number(item.anomaly_score ?? 100) < 60
-  const selected = item.level === '优质动态段' || (relaxedAcceptance.value && item.level === '可用数据段')
+  const selected = item.selected === true
   return {
     id: `SEG-${String(index + 1).padStart(3, '0')}`,
     score: Number(item.segment_score ?? 0),
@@ -96,7 +97,9 @@ const chartTimeTicks = computed(() => {
     return { x: 60 + index * 1030 / 5, label: date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replaceAll('/', '-') }
   })
 })
-watch(segments, (rows) => { selectedIds.value = rows.filter((item) => item.type === '优质动态段' || (relaxedAcceptance.value && item.type === '可用数据段')).map((item) => item.id) }, { immediate: true })
+watch(segments, (rows) => { selectedIds.value = rows.filter((item) => item.selected).map((item) => item.id) }, { immediate: true })
+const actualSelectedCount = computed(() => liveCleaning.value.selection_metrics?.actual_selected_window_count ?? '未记录')
+const acceptanceReason = computed(() => liveCleaning.value.selection_metrics?.selection_reason ?? '缺少本次接纳回执')
 const selectedCount = computed(() => Number(liveCleaning.value.selected_segment_count ?? selectedIds.value.length))
 const candidateCount = computed(() => segments.value.length)
 const modelingRate = computed(() => Number(liveCleaning.value.modeling_row_count ?? 0) / Math.max(Number(liveCleaning.value.cleaned_row_count ?? 0), 1))
@@ -105,7 +108,7 @@ const averageScore = computed(() => scoredSegments.value.length ? scoredSegments
 function rescoreSegments() {
   if (!latestRun.value) { emit('notify', { tone: 'warning', title: '尚无真实任务', message: '请先上传并运行 CSV；系统不会用演示片段替代真实结果。' }); return }
   scoringApplied.value = true
-  emit('notify', { tone: 'success', title: '动态段已重新评分', message: `已按 ${weights.value.dynamic}/${weights.value.snr}/${weights.value.integrity}/${weights.value.coverage} 权重重算并排序。` })
+  emit('notify', { tone: 'success', title: '预览评分已更新', message: `已按 ${weights.value.dynamic}/${weights.value.snr}/${weights.value.integrity}/${weights.value.coverage} 权重重算并排序，仅影响本页预览，不修改冻结胜者。` })
 }
 
 function saveScoreTemplate() {
@@ -119,7 +122,7 @@ function toggleSegment(id) {
 
 function freezeDataset() {
   if (!latestRun.value) { emit('notify', { tone: 'warning', title: '无法冻结', message: '当前没有真实优选结果。' }); return }
-  emit('notify', { tone: 'success', title: '当前优选结果已确认', message: `任务 ${latestRun.value?.run_id ?? '—'} 的 ${selectedCount.value} 个训练达标窗口已记录。` })
+  emit('notify', { tone: 'success', title: '当前优选结果已确认', message: `任务 ${latestRun.value?.run_id ?? '—'} 的 ${selectedCount.value} 个策略接纳候选已记录；实际选中 ${actualSelectedCount.value} 个窗口。` })
 }
 </script>
 
@@ -139,8 +142,8 @@ function freezeDataset() {
 
     <section class="metric-grid four-col">
       <article class="metric-card"><span class="metric-label">检测候选段</span><div class="metric-value">{{ candidateCount }} <small>段</small></div><p>当前任务 {{ latestRun?.run_id ?? '等待运行' }}</p><span class="metric-trend neutral">真实滑动窗口结果</span></article>
-      <article class="metric-card accent-cyan"><span class="metric-label">有效动态窗口</span><div class="metric-value">{{ selectedCount }} <small>段</small></div><p>严格优质 {{ liveCleaning.strict_selected_segment_count ?? selectedCount }} 段 · 建模 {{ liveCleaning.modeling_row_count ?? '—' }} 行</p><span class="metric-trend positive">{{ relaxedAcceptance ? '小样本自适应筛选' : '严格评分与SNR门槛' }}</span></article>
-      <article class="metric-card"><span class="metric-label">建模数据保留率</span><div class="metric-value">{{ (modelingRate * 100).toFixed(1) }}%</div><p>规整后 {{ liveCleaning.cleaned_row_count ?? '—' }} 行</p><span class="metric-trend positive">候选不足时使用Top窗口兜底</span></article>
+      <article class="metric-card accent-cyan"><span class="metric-label">策略接纳候选</span><div class="metric-value">{{ selectedCount }} <small>段</small></div><p>严格优质 {{ liveCleaning.strict_selected_segment_count ?? selectedCount }} 段 · 实际选中 {{ actualSelectedCount }} 段 · 建模 {{ liveCleaning.modeling_row_count ?? '—' }} 行</p><span class="metric-trend positive">{{ acceptanceReason }}</span></article>
+      <article class="metric-card"><span class="metric-label">建模数据保留率</span><div class="metric-value">{{ (modelingRate * 100).toFixed(1) }}%</div><p>规整后 {{ liveCleaning.cleaned_row_count ?? '—' }} 行</p><span class="metric-trend positive">接纳模式不代表生产准入</span></article>
       <article class="metric-card"><span class="metric-label">候选质量均分</span><div class="metric-value">{{ averageScore.toFixed(1) }}</div><p>综合五维动态评分</p><span class="metric-trend positive">来自本次CSV</span></article>
     </section>
 
@@ -149,7 +152,7 @@ function freezeDataset() {
     <section class="panel segment-chart-panel">
       <div class="section-heading compact">
         <div><span class="section-kicker">全时域动态检测</span><h2>{{ inputMeta.label }} → {{ outputMeta.label }}</h2></div>
-        <div class="chart-legend"><span><i class="legend-dot target"></i>{{ outputMeta.label }}{{ outputMeta.unit ? ` (${outputMeta.unit})` : '' }}</span><span><i class="legend-dot mv"></i>{{ inputMeta.label }}{{ inputMeta.unit ? ` (${inputMeta.unit})` : '' }}</span><span><i class="legend-block selected"></i>{{ relaxedAcceptance ? '接纳动态段' : '优质动态段' }}</span><span><i class="legend-block rejected"></i>异常剔除</span></div>
+        <div class="chart-legend"><span><i class="legend-dot target"></i>{{ outputMeta.label }}{{ outputMeta.unit ? ` (${outputMeta.unit})` : '' }}</span><span><i class="legend-dot mv"></i>{{ inputMeta.label }}{{ inputMeta.unit ? ` (${inputMeta.unit})` : '' }}</span><span><i class="legend-block selected"></i>{{ frozenWinner ? '胜者实际选窗' : '窗口候选预览' }}</span><span><i class="legend-block rejected"></i>异常剔除</span></div>
       </div>
       <svg class="line-chart segment-chart" viewBox="0 0 1120 300" role="img" :aria-label="`${inputMeta.label}到${outputMeta.label}的真实全时域波形与动态段`">
         <g class="chart-grid"><path d="M60 35H1090M60 95H1090M60 155H1090M60 215H1090M60 255H1090" /><path d="M60 35V255M266 35V255M472 35V255M678 35V255M884 35V255M1090 35V255" /></g>
@@ -189,7 +192,7 @@ function freezeDataset() {
                 <td><div class="mini-score-bars"><span title="动态性"><i :style="{ width: `${segment.dynamic}%` }"></i></span><span title="信噪比"><i :style="{ width: `${segment.snr}%` }"></i></span><span title="完整性"><i :style="{ width: `${segment.integrity}%` }"></i></span></div></td>
                 <td><strong class="large-score" :class="{ 'is-low': segment.score < 80 }">{{ Number(segment.score).toFixed(1) }}</strong></td>
                 <td class="reason-cell">{{ segment.reason }}</td>
-                <td><button class="segment-toggle" :class="{ 'is-on': selectedIds.includes(segment.id) }" type="button" :aria-pressed="selectedIds.includes(segment.id)" @click="toggleSegment(segment.id)"><span></span>{{ selectedIds.includes(segment.id) ? '已入选' : '未入选' }}</button></td>
+                <td><button class="segment-toggle" :class="{ 'is-on': selectedIds.includes(segment.id) }" type="button" :disabled="frozenWinner" :aria-pressed="selectedIds.includes(segment.id)" @click="toggleSegment(segment.id)"><span></span>{{ selectedIds.includes(segment.id) ? (frozenWinner ? '胜者已选' : '预览选中') : (frozenWinner ? '胜者未选' : '预览未选') }}</button></td>
               </tr>
               <tr v-if="!visibleSegments.length"><td colspan="6">当前筛选条件下没有数据段。</td></tr>
             </tbody>
@@ -199,7 +202,7 @@ function freezeDataset() {
     </div>
 
     <div class="selection-footer-card">
-      <div class="dataset-freeze"><span><AppIcon name="database" /></span><div><strong>优选数据集 {{ latestRun?.run_id ?? '等待运行' }}</strong><p>{{ selectedCount }} 个接纳窗口 · {{ liveCleaning.modeling_row_count ?? 0 }} 行建模数据</p></div></div>
+      <div class="dataset-freeze"><span><AppIcon name="database" /></span><div><strong>优选数据集 {{ latestRun?.run_id ?? '等待运行' }}</strong><p>{{ actualSelectedCount }} 个实际选中窗口 · {{ liveCleaning.modeling_row_count ?? 0 }} 行建模数据</p></div></div>
       <div class="dataset-gains"><span>建模保留率<strong>{{ (modelingRate * 100).toFixed(1) }}%</strong></span><span>质量评分<strong>{{ liveCleaning.overall_score ?? '—' }}</strong></span><a v-if="latestRun" :href="artifactUrl(latestRun.run_id, 'modeling_csv')">下载优选CSV</a></div>
       <button class="btn btn-primary" type="button" @click="emit('navigate', '/identification-modeling/')">进入解耦辨识 <AppIcon name="arrow" /></button>
     </div>

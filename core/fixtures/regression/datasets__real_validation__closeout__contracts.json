@@ -1,0 +1,14 @@
+{
+  "debutanizer_column": {
+    "hashes": {
+      "fields.csv": "3287b616f5153119d786a365e3995d6294daad48f7dafd2c351de4a048c7da37",
+      "template.json": "49dabf3243966cbee1af40f2f89ee5a1823638d9fbfc9b86f853b9e5dea1df2c"
+    }
+  },
+  "industrial_dryer": {
+    "hashes": {
+      "fields.csv": "f1b5b453ab4ee5cfa1ff61cd2dff0f78618eb4f0c85c72b5ca6522954c30e45f",
+      "template.json": "c5ed80f40eae34b0e3d97e08238fcea4693b1c2f3f22b608d445ace8cbaf61ce"
+    }
+  }
+}

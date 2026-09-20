@@ -1,4 +1,5 @@
 <script setup>
+import { evidenceMetric } from '../utils/evidenceMetric'
 import { computed } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -21,7 +22,7 @@ const optimization = computed(() => result.value.optimization ?? {})
 const review = computed(() => result.value.review ?? {})
 const testMetrics = computed(() => modeling.value.metrics?.test ?? {})
 const candidateBars = computed(() => (optimization.value.iterations ?? []).filter((item) => item.status === 'completed').map((item) => ({ ...item, height: Math.max(4, Math.min(100, (Number(item.r2) + 0.05) * 95)) })))
-const bestR2 = computed(() => Number(testMetrics.value.r2 ?? 0))
+const bestR2 = computed(() => testMetrics.value.r2)
 const selectedRate = computed(() => ((Number(cleaning.value.modeling_row_count ?? 0) / Math.max(Number(cleaning.value.cleaned_row_count ?? 0), 1)) * 100).toFixed(1))
 const fieldCount = computed(() => standard.value.mapping?.mappings?.length ?? 0)
 const updatedTime = computed(() => latestRun.value?.updated_at ? new Date(latestRun.value.updated_at).toLocaleTimeString('zh-CN', { hour12: false }) : '等待运行')
@@ -114,8 +115,8 @@ function runFullLoop() {
       </article>
       <article class="metric-card accent-blue">
         <span class="metric-label">当前最佳 R²</span>
-        <div class="metric-value">{{ bestR2.toFixed(3) }}</div>
-        <p>RMSE {{ Number(testMetrics.rmse ?? 0).toFixed(3) }}</p>
+        <div class="metric-value">{{ evidenceMetric(bestR2) }}</div>
+        <p>RMSE {{ evidenceMetric(testMetrics.rmse, 3) }}</p>
         <span class="metric-trend positive">最优候选第 {{ optimization.best_round ?? '—' }} 轮</span>
       </article>
       <article class="metric-card accent-amber">
@@ -165,15 +166,15 @@ function runFullLoop() {
           <div class="chart-grid-lines"></div>
           <div v-for="item in candidateBars" :key="item.round" class="bar-group" :class="{ 'is-best': item.round === optimization.best_round }">
             <div v-if="item.round === optimization.best_round" class="best-flag">BEST</div>
-            <div class="bar-value">{{ Number(item.r2).toFixed(3) }}</div>
+            <div class="bar-value">{{ evidenceMetric(item.r2, 3) }}</div>
             <div class="bar" :class="item.round === optimization.best_round ? 'best-bar' : item.round === 1 ? 'raw-bar' : 'clean-bar'" :style="{ height: `${item.height}%` }"></div>
             <span>第 {{ item.round }} 轮</span>
           </div>
         </div>
         <div class="model-metric-strip">
-          <div><span>最佳 R²</span><strong>{{ bestR2.toFixed(3) }}</strong></div>
-          <div><span>RMSE</span><strong>{{ Number(testMetrics.rmse ?? 0).toFixed(3) }}</strong></div>
-          <div><span>MAE</span><strong>{{ Number(testMetrics.mae ?? 0).toFixed(3) }}</strong></div>
+          <div><span>最佳 R²</span><strong>{{ evidenceMetric(bestR2) }}</strong></div>
+          <div><span>RMSE</span><strong>{{ evidenceMetric(testMetrics.rmse, 3) }}</strong></div>
+          <div><span>MAE</span><strong>{{ evidenceMetric(testMetrics.mae, 3) }}</strong></div>
           <div><span>最优参数</span><strong>Top {{ optimization.best_parameters?.top_k ?? '—' }} · Lag {{ optimization.best_parameters?.max_lag ?? '—' }}</strong></div>
         </div>
       </section>
@@ -194,8 +195,8 @@ function runFullLoop() {
 
     <section class="panel coverage-panel">
       <div class="section-heading compact">
-        <div><span class="section-kicker">任务能力覆盖</span><h2>赛题核心能力 7 / 7 已形成演示闭环</h2></div>
-        <StatusPill tone="brand">A14 要求覆盖 100%</StatusPill>
+        <div><span class="section-kicker">任务能力覆盖</span><h2>赛题核心能力与当前证据</h2></div>
+        <StatusPill tone="brand">实际覆盖以本轮验收为准</StatusPill>
       </div>
       <div class="coverage-grid">
         <article v-for="item in requirementCoverage" :key="item.label" class="coverage-item">

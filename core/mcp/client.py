@@ -113,8 +113,9 @@ def invoke_and_wait(
     tool_name: str,
     source_run_id: str,
     *,
-    resample_rule: str = "10s",
-    max_lag: int = 60,
+    resample_rule: str | None = None,
+    max_lag: int | None = None,
+    parameters: dict | None = None,
     request_key: str | None = None,
     timeout_seconds: float = 180,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
@@ -124,6 +125,7 @@ def invoke_and_wait(
         "caller_id": "processpilot-agent",
         "idempotency_key": request_key or f"agent-{uuid4().hex}",
         "resample_rule": resample_rule,
+        "parameters": parameters,
     }
     if tool_name == "run_dynamic_selection":
         arguments["max_lag"] = max_lag

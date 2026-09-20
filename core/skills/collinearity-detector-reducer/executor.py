@@ -11,10 +11,11 @@ def execute(context, inputs, parameters):
     data = frame.dropna(subset=columns + [target])
     if len(data) < 20:
         return output(context, {}, [], status="unavailable", warnings=["时滞对齐后完整训练样本不足 20"])
-    correlation = correlation_matrix(data, columns)
-    vif = compute_vif(data, columns)
-    recommendation = recommend_variables(data, columns, target, parameters["corr_threshold"], parameters["vif_threshold"])
-    recommendation["final_vif"] = compute_vif(data, recommendation["keep"]).to_dict("records")
+    from core.services.pipeline import INTEGRATIONS_DIR, _module_path
+    with _module_path(INTEGRATIONS_DIR / "identification"):
+        from validated_modeling import select_training_variables
+        correlation, vif, _, recommendation = select_training_variables(
+            frame, columns, target, context["policy_receipt"]["effective_parameters"]["decoupling"])
     metrics = {"recommendation": recommendation, "vif": vif.to_dict("records"), "correlation": correlation.to_dict(), "sample_count": len(data)}
     artifact = persist(context, "COLLINEARITY_REPORT", metrics, "collinearity.json")
     result = output(context, metrics, [{"method": "Pearson and VIF", "training_only": True,

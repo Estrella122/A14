@@ -1,0 +1,302 @@
+[
+  {
+    "name": "Fixed Mendeley derived 720h",
+    "required_field_count": 6,
+    "matched_required_count": 6,
+    "review_required_count": 0,
+    "missing_required_count": 0,
+    "coverage": 1.0,
+    "classification": "CAN_RUN_NOW",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Fortuna 文本镜像",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 8,
+    "missing_required_count": 1,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Coimbra 大学原始 MAT 包",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 8,
+    "missing_required_count": 1,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "DC-dataset CSV 镜像",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 8,
+    "missing_required_count": 1,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "LostRunes DB DATA-B",
+    "required_field_count": 9,
+    "matched_required_count": 2,
+    "review_required_count": 4,
+    "missing_required_count": 3,
+    "coverage": 0.2222222222222222,
+    "classification": "MIXED_LIMITATION",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "本地 360 行 raw sample",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 8,
+    "missing_required_count": 1,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Danny-Taehyun-Kim hybrid demo",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "LPG composition paper",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Column flooding paper",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Fortuna 其他复用仓库",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "DAISY 96-016 industrial dryer",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 3,
+    "missing_required_count": 4,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Coffee microwave/oven temperature experiment",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 1,
+    "missing_required_count": 6,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Filter media drying moisture",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Solar multipurpose dryer",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Solar biomass fish dryer",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Industrial laundry exhaust",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "LARCO tumble dryers",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "WUR EHD dryer model",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Rotary potash dryer paper",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Batch rotary NARX paper",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Rotary nickel CO paper",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "本地 867 行合成验收集",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 0,
+    "missing_required_count": 7,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "本地 360 行 dryer raw sample",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 0,
+    "missing_required_count": 7,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "StevenShaw98 Fortuna CSV",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 8,
+    "missing_required_count": 1,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Basque refinery pentanes classification",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "UTP CRU debutanizer thesis",
+    "required_field_count": 9,
+    "matched_required_count": 0,
+    "review_required_count": 9,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Tobacco Primary Processing data2",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Solar dryer with thermal storage",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Kiln beech-chip residence time",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  },
+  {
+    "name": "Cassava dryer IoT design files",
+    "required_field_count": 7,
+    "matched_required_count": 0,
+    "review_required_count": 7,
+    "missing_required_count": 0,
+    "coverage": 0.0,
+    "classification": "DATA_LIMITED",
+    "learnable_verified_fields": []
+  }
+]

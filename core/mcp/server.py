@@ -64,8 +64,9 @@ def run_dynamic_selection(
     caller_id: str = "local-agent",
     idempotency_key: str = "",
     scene_id: str = "auto",
-    resample_rule: str = "10s",
-    max_lag: int = 60,
+    resample_rule: str | None = None,
+    max_lag: int | None = None,
+    parameters: dict | None = None,
     overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """筛选并评分高信噪比动态建模数据段。
@@ -76,7 +77,7 @@ def run_dynamic_selection(
     return _call(lambda: enqueue_modeling_tool(
         "run_dynamic_selection", source_run_id, caller_id=caller_id,
         idempotency_key=idempotency_key, scene_id=scene_id,
-        resample_rule=resample_rule, max_lag=max_lag, overrides=overrides,
+        resample_rule=resample_rule, max_lag=max_lag, overrides=overrides, parameters=parameters,
     ))
 
 
@@ -86,8 +87,9 @@ def run_decoupling_identification(
     caller_id: str = "local-agent",
     idempotency_key: str = "",
     scene_id: str = "auto",
-    resample_rule: str = "10s",
-    maximum_lag_samples: int = 60,
+    resample_rule: str | None = None,
+    maximum_lag_samples: int | None = None,
+    parameters: dict | None = None,
     overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """执行因果方向受限的时滞估计、共线性分析和 AR/ARX 辨识验证。
@@ -98,7 +100,7 @@ def run_decoupling_identification(
     return _call(lambda: enqueue_modeling_tool(
         "run_decoupling_identification", source_run_id, caller_id=caller_id,
         idempotency_key=idempotency_key, scene_id=scene_id,
-        resample_rule=resample_rule, max_lag=maximum_lag_samples, overrides=overrides,
+        resample_rule=resample_rule, max_lag=maximum_lag_samples, overrides=overrides, parameters=parameters,
     ))
 
 
@@ -108,8 +110,9 @@ def run_closed_loop_optimization(
     caller_id: str = "local-agent",
     idempotency_key: str = "",
     scene_id: str = "auto",
-    resample_rule: str = "10s",
-    maximum_lag_samples: int = 60,
+    resample_rule: str | None = None,
+    maximum_lag_samples: int | None = None,
+    parameters: dict | None = None,
     overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """循环搜索预处理与建模候选，以冻结验证集指标反馈选择最佳方案。
@@ -120,7 +123,7 @@ def run_closed_loop_optimization(
     return _call(lambda: enqueue_modeling_tool(
         "run_closed_loop_optimization", source_run_id, caller_id=caller_id,
         idempotency_key=idempotency_key, scene_id=scene_id,
-        resample_rule=resample_rule, max_lag=maximum_lag_samples, overrides=overrides,
+        resample_rule=resample_rule, max_lag=maximum_lag_samples, overrides=overrides, parameters=parameters,
     ))
 
 

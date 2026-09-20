@@ -17,12 +17,12 @@ class KnowledgeBaseTests(TestCase):
     def test_seed_covers_all_supported_scenes_and_every_skill(self):
         self.assertEqual(KnowledgeEntity.objects.filter(entity_type='scene', status='approved').count(), 6)
         self.assertEqual(SkillKnowledgeRule.objects.filter(status='approved').count(), len(SKILLS))
-        self.assertEqual(KnowledgeDocument.objects.filter(status='approved').count(), 7)
+        self.assertEqual(KnowledgeDocument.objects.filter(status='approved').exclude(source_type='implementation_note').count(), 7)
 
     def test_seed_is_idempotent(self):
         call_command('seed_knowledge_base', verbosity=0)
         self.assertEqual(SkillKnowledgeRule.objects.count(), len(SKILLS))
-        self.assertEqual(KnowledgeDocument.objects.count(), 7)
+        self.assertEqual(KnowledgeDocument.objects.exclude(source_type='implementation_note').count(), 7)
 
     def test_real_dataset_scene_knowledge_is_searchable(self):
         vapor = search_knowledge('蒸气压力稀疏化验目标为什么不能插值', 'vapor_pressure_soft_sensor')
@@ -49,7 +49,7 @@ class KnowledgeBaseTests(TestCase):
     def test_agent_plan_exposes_auditable_knowledge_context(self):
         plan = plan_skills('请提取脱丁烷塔高信噪比动态段')
         retrieval = plan['analysis']['knowledge_retrieval']
-        self.assertEqual(retrieval['retrieval_mode'], 'structured_lexical_v1')
+        self.assertEqual(retrieval['retrieval_mode'], 'structured_lexical_v2')
         self.assertIn('builtin-skill-routing-v1', retrieval['provenance'])
         self.assertIn('high_snr_dynamic_segment_extractor', [row['skill_id'] for row in retrieval['skill_suggestions']])
 

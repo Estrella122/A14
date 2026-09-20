@@ -341,7 +341,13 @@ class DataCleaningSelectionAgent:
             if mean_abs == 0:
                 scores.append(0)
                 continue
-            relative_range = (data[column].max() - data[column].min()) / mean_abs
+            # A single spike must not count as sustained excitation. Use the
+            # central 90% observed amplitude; do not invent sparse targets.
+            observed = data[column].dropna()
+            if len(observed) < 3:
+                scores.append(0.0)
+                continue
+            relative_range = (observed.quantile(.95) - observed.quantile(.05)) / mean_abs
             scores.append(min(100, relative_range * scale))
         return float(np.mean(scores))
 

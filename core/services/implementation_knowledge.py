@@ -1,0 +1,21 @@
+"""Reviewed against the named local functions; implementation notes, not industrial validation."""
+IMPLEMENTATION_NOTES = [
+ ('snr', 'A14 信噪比实现', 'integrations/data_cleaning/src/data_cleaning_agent.py', 'DataCleaningSelectionAgent.snr_details', ['信噪比', 'SNR', '噪声', '二阶差分'],
+  '信噪比描述信号功率与噪声功率的相对大小，通常用10 log10(P信号/P噪声)表示。A14 在窗口内对二阶差分用 MAD/(0.67448975×√6) 估计白噪声标准差，噪声功率为其平方，信号功率取总方差减去噪声功率并作正数保护。至少15个有效点且足够连续差分才估计；常量、噪声尺度为零或样本不足返回缺失。假设局部信号平滑且噪声近似白噪声；有色噪声、量化和快速曲率会影响估计，不代表仪表标定。'),
+ ('segments', '严格段与候选接纳', 'core/services/segmentation_service.py', 'run_segmentation_stage', ['严格', '动态段', '可用候选', '回退', '建模'],
+  '严格优质段必须同时通过评分、有效观测与SNR门槛。严格段为空且allow_usable_fallback为真时才接纳满足可用条件的候选；其状态为engineering_usable。原有最高分兜底记录为highest_score_fallback，不能冒充工程可用或生产通过。无满足目标观测条件的窗口应报告不足。实际窗口、行数及阈值必须读取本次分段回执。'),
+ ('firx', '稀疏目标与 FIRX', 'integrations/identification/validated_modeling.py', 'features; search_structure_orders; evaluation', ['FIRX', '稀疏', '化验', '自回归', '外部输入'],
+  '普通AR/ARX需要连续的实测输出滞后项；稀疏化验会让大量特征行缺失。FIRX不构造输出自回归滞后项，只用可信输入的历史样本预测真实观测目标。缺失target不插值，不以预测补标签；拟合仍要求不少于max(20, 2×(特征数+1))个有效样本，评估至少10个共同有效目标。FIRX没有AR反馈，不等于满足闭环控制或工业投运条件。配置使用FIRX不能证明已经拟合；实际模型族和输入必须读取fitted_state。'),
+ ('lag', '当前时滞估计边界', 'integrations/identification/validated_modeling.py', 'estimate_training_delays; shifted', ['时滞', '延迟', '互相关', '因果'],
+  'A14仅在训练分区的连续段内搜索非负Pearson相关时滞；每个候选至少20对有效观测。最大时滞受有效配置和冻结分区guard约束。最大绝对相关只提供统计关联与时间先后线索，不能证明因果或操纵权限。'),
+ ('features', '共线性与实际特征限制', 'integrations/identification/validated_modeling.py', 'select_training_variables', ['共线性', 'VIF', 'max_features', '变量', '输入'],
+  '先用训练数据做时滞对齐，再以相关阈值和VIF筛除冗余。max_features大于0且保留变量过多时，按训练目标绝对相关排序，按名称稳定打破并列，再限制实际输入集合并重算VIF。最终拟合输入可能比共线性推荐更少，例如AR不使用外部输入；回答最终输入应读取fitted_state。'),
+ ('search', '没有改善与程序失败', 'core/services/pipeline.py', '_optimize_real_data', ['寻优', '改善', '候选', '失败', '停止'],
+  '候选全部正常执行但验证得分没有超过基线，属于本次搜索范围内未改善；有候选异常、输入不足或质量门禁不通过，应分别记录failed或infeasible及原因。上次为何没有改善只能读取上次候选、验证指标与停止记录；解释请求不授权重新寻优。'),
+ ('split', '训练验证测试协议', 'core/services/pipeline.py', '_clean; _optimize_real_data', ['训练', '验证', '测试', '重训', '重新训练', '泄漏'],
+  'A14按时间60%/20%/20%冻结训练、验证、测试分区后各区独立清洗。输入最多有限前填，输出缺失保留；时滞和变量筛选只读训练数据，候选以共同验证目标选择。测试在最终冻结候选后评价，不参与参数、窗口或模型选择。重新训练通常用于数据分布或输入契约改变后的再验证，是否有这些变化须另有当前证据；解释重训原因不能触发训练。'),
+ ('policy', '有效参数与拒绝原因', 'core/services/algorithm_policy.py', 'resolve_algorithm_policy', ['参数', '配置', '生效', '拒绝', 'policy'],
+  '有效配置优先级为经过校验的显式请求、大于当前数据识别场景的版本化profile、大于兼容场景默认和算法默认。别名冲突、未知参数、类型和范围错误应拒绝；描述性字段不改变算法行为。不可覆盖数据来源、字段身份或冻结分区。生效hash只含规范化行为配置，不含运行编号和时间。'),
+ ('admission', '数据不足时可执行的任务', 'core/services/task_admission.py', 'capability_availability; basic_data_profile', ['缺失', '排风湿度', '还能做什么', '不足', '字段', '复核'],
+  '缺完整场景字段仍可解释方法、读取已有结果、说明缺口，以及读取有权限的原始文件统计列名、类型、行数、缺失、常量、重复和时间可解析性。未知列仅按原名描述；这不等于场景Contract PASS。有物理含义的分析仍要求对应字段身份、单位与时间条件；建模和寻优保留完整输入与验证门禁，生产控制还需独立验证、联锁及人工审批。'),
+]

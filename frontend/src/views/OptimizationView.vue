@@ -1,4 +1,5 @@
 <script setup>
+import { selectedRunId } from '../utils/runBinding'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -625,7 +626,9 @@ async function runOptimization() {
     clearErrors()
     running.value = true
     try {
-      const snapshot = await rerunPipeline(latestRun.value.run_id, { maxLag: params.value.lag_max_seconds })
+      const sourceRun = latestRun.value.run_id
+      const snapshot = await rerunPipeline(sourceRun, { maxLag: params.value.lag_max_seconds })
+      if (selectedRunId() !== sourceRun) return
       announcePipelineUpdate(snapshot)
       applyStudy(pipelineRunToStudy(snapshot))
       emit('notify', { tone: 'success', title: '总控闭环寻优已完成', message: `新任务 ${snapshot.run_id} 已完成，闭环页面已同步全部候选轮次。` })

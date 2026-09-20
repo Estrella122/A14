@@ -153,7 +153,7 @@ def build_scene_context(snapshot, repository=None):
     repository = repository or ScenarioRepository()
     template = next((t for t in repository.list() if t.scenario_id == scenario_id), None)
     if template:
-        config = template.config
+        config = {**template.config, **scene}
         dictionary = [f.as_dict() for f in template.fields]
     roles = config.get("field_roles", {})
     inputs = roles.get("inputs", [f["standard_name"] for f in dictionary if f.get("role") in {"manipulated", "disturbance", "state"}])
@@ -166,7 +166,7 @@ def build_scene_context(snapshot, repository=None):
         dataset_ref=(snapshot or {}).get("dataset_ref") or (snapshot or {}).get("run_id"), timestamp_column=roles.get("timestamp", config.get("timestamp_field", "timestamp")),
         input_columns=list(inputs), target_column=target, units={f["standard_name"]: f.get("unit", "") for f in dictionary},
         sampling_interval=seconds, constraints=config.get("constraints", {}), default_parameters=defaults,
-        metadata={"family": config.get("family", config.get("industry")), "display": config.get("display", {}),
+        metadata={"algorithm_profile": config.get("algorithm_profile", {}), "family": config.get("family", config.get("industry")), "display": config.get("display", {}),
                   "model_outputs": config.get("model_outputs", [target]), "source": config.get("source"),
                   "skill_overrides": config.get("skill_overrides", {}), "config_source": "ScenarioRepository" if template else "snapshot",
                   "project_context_scene": (snapshot or {}).get("project_scene")})

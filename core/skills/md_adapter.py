@@ -4,9 +4,12 @@ from importlib import import_module
 from pathlib import Path
 from time import perf_counter
 import math
+import hashlib
+import json
 
 from .artifacts import RuntimeArtifactResolver
 from .contracts import execution_state_for
+from core.services.algorithm_policy import resolve_algorithm_policy, parameter_view, KEY_SECTIONS, ALIASES
 
 
 def json_value(value):
@@ -37,10 +40,13 @@ def persist(context, artifact_type, payload, filename):
 
 def effective_parameters(manifest, scene, explicit=None):
     parameters = {p["name"]: p["default"] for p in manifest.metadata.get("parameters", []) if "default" in p}
-    parameters.update(scene.get("default_parameters", {}))
-    parameters.update(scene.get("metadata", {}).get("skill_overrides", {}).get(manifest.id, {}))
-    parameters.update(explicit or {})
+    declared = {p['name'] for p in manifest.metadata.get('parameters', [])}
+    extras = declared - set(KEY_SECTIONS) - set(ALIASES)
+    for layer in (scene.get('default_parameters', {}), scene.get('metadata', {}).get('skill_overrides', {}).get(manifest.id, {}), explicit or {}):
+        parameters.update({k: v for k, v in layer.items() if k in extras})
+    parameters.update(parameter_view(resolve_algorithm_policy(scene, {k: v for k, v in (explicit or {}).items() if k not in extras})))
     return parameters
+
 
 
 class MarkdownExecutor:
@@ -57,12 +63,26 @@ class MarkdownExecutor:
             ref = resolver.resolve(required)
             input_refs.append(ref.public() if ref else {"artifact_type": required, "source": "snapshot"})
         scene = data_context.get("scene_context", {})
-        parameters = effective_parameters(manifest, scene, inputs.get("parameters"))
+        parameters = {}
+        policy_receipt = {}
         context = {**runtime_context, "skill_id": manifest.id, "resolver": resolver,
                    "task_spec": task_spec, "data_context": data_context, "scene_context": scene,
                    "output_dir": Path(runtime_context["output_dir"]) / manifest.id}
         invoked = False
         try:
+            declared = {row["name"] for row in manifest.metadata.get("parameters", [])}
+            extras = declared - set(KEY_SECTIONS) - set(ALIASES)
+            policy_receipt = resolve_algorithm_policy(scene, {k: v for k, v in (inputs.get("parameters") or {}).items() if k not in extras})
+            parameters = effective_parameters(manifest, scene, inputs.get("parameters"))
+            additional = {key: parameters[key] for key in extras if parameters.get(key)}
+            if additional:
+                policy_receipt["effective_parameters"]["skill_parameters"] = additional
+                policy_receipt["requested_parameters"] = inputs.get("parameters") or {}
+                for key in additional:
+                    policy_receipt["parameter_sources"][f"skill_parameters.{key}"] = "request" if key in (inputs.get("parameters") or {}) else "scene_or_manifest"
+                behavior = {"algorithm_policy_hash": policy_receipt["effective_policy_hash"], "skill_parameters": additional}
+                policy_receipt["effective_policy_hash"] = hashlib.sha256(json.dumps(behavior, sort_keys=True).encode()).hexdigest()
+            context["policy_receipt"] = policy_receipt
             for declaration in manifest.metadata.get("parameters", []):
                 key = declaration["name"]
                 if declaration.get("required") and key not in parameters:
@@ -88,6 +108,12 @@ class MarkdownExecutor:
                     result["status"] = "partial"
                     result["warnings"].append("缺少声明产物或执行证据：" + ", ".join(sorted(missing)))
         except Exception as exc:
+            if not policy_receipt:
+                profile = scene.get('metadata', {}).get('algorithm_profile', {})
+                policy_receipt = {'requested_parameters': inputs.get('parameters', {}), 'scene_parameters': profile,
+                                  'effective_parameters': None, 'parameter_sources': {},
+                                  'ignored_or_rejected_parameters': getattr(exc, 'rejected', [{'reason': str(exc)}]),
+                                  'profile_version': profile.get('version'), 'effective_policy_hash': None}
             result = output(context, {}, [], status="failed", warnings=[f"{type(exc).__name__}: {exc}"])
         result = json_value(result)
         result.update(schema_version="skill-execution-result-v2", skill_id=manifest.id, executor=manifest.id,
@@ -99,7 +125,7 @@ class MarkdownExecutor:
             "manifest_path": str(manifest.path), "manifest_hash": manifest.digest,
             "executor_module": manifest.executor["module"], "executor_function": manifest.executor["function"],
             "execution_mode": manifest.execution_mode, "input_refs": input_refs, "parameter_snapshot": parameters,
-            "executor_invoked": invoked,
+            "executor_invoked": invoked, **policy_receipt,
             "scene_context": scene,
             "dependency_runs": [{"skill_id": r["skill_id"], "status": r["status"],
                                  "manifest_hash": r.get("audit", {}).get("manifest_hash"),

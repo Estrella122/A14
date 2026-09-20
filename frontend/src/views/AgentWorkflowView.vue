@@ -13,6 +13,7 @@ import ChatOptimizationSummary from '../components/ChatOptimizationSummary.vue'
 import ChatCharts from '../components/ChatCharts.vue'
 import PipelineChatProgress from '../components/PipelineChatProgress.vue'
 import { getAgentLLMProviders, getAgentSkillRun, getAgentSkillEvents, getAgentSkills, startAgentLiveRun, streamAgentSkillEvents, testAgentLLMConnection } from '../api/agent'
+import { selectedRunId, selectRun, createRunResponseGuard, loadExplicitRunForSubmission } from '../utils/runBinding'
 import { announcePipelineUpdate, artifactUrl, getPipelineRun, listPipelineRuns, uploadPipelineFile } from '../api/pipeline'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
@@ -104,6 +105,7 @@ function openConversation(entry) {
   responseState.value = stored.responseState
   runtimeHistory.value = stored.runtimeHistory || {}
   liveLogs.value = stored.liveLogs || []
+  selectRun(stored.selectedRun?.run_id ?? null)
   selectedRun.value = stored.selectedRun
   noDataContext.value = stored.noDataContext || !stored.selectedRun
   prompt.value = ''
@@ -175,7 +177,8 @@ let scrollFrame
 let disposed = false
 const activeRun = computed(() => noDataContext.value ? null : selectedRun.value ?? latestRun.value)
 watch(latestRun, (run) => {
-  if (run && selectedRun.value?.run_id === run.run_id) selectedRun.value = run
+  if (run && run.run_id === selectedRunId()) { selectedRun.value = run; noDataContext.value = false }
+  else if (!run) selectedRun.value = null
   if (run?.status === 'completed' && activeRun.value?.run_id === run.run_id) {
     for (const message of messages.value) {
       if ((message.pipelineWaitTimeout && message.runId === run.run_id) || /^CSV执行失败：基础分析在 \d+ 秒内未返回$/.test(message.text || '')) {
@@ -188,6 +191,7 @@ watch(latestRun, (run) => {
 const sceneState = computed(() => buildSceneState(props.project, activeRun.value))
 const runtimeObservation = computed(() => buildRuntimeObservability(responseState.value ?? {}))
 const hasRuntimeObservation = computed(() => Boolean(
+  runtimeObservation.value?.llm ||
   runtimeObservation.value?.capabilities?.length ||
   runtimeObservation.value?.execution_dag?.steps?.length
 ))
@@ -439,7 +443,7 @@ async function streamLiveRun(live, timelineMessage, draftMessage) {
   }
 }
 
-function appendAgentResult(result, prefix = '', draftMessage = null) {
+function appendAgentResult(result, prefix = '', draftMessage = null, sourceRun = selectedRunId()) {
   responseState.value = result
   rememberRuntime(result)
   liveLogs.value = [...(result.logs ?? []), ...liveLogs.value].slice(0, 18)
@@ -451,7 +455,7 @@ function appendAgentResult(result, prefix = '', draftMessage = null) {
   }
   if (draftMessage) Object.assign(draftMessage, completedMessage, { id: draftMessage.id })
   else messages.value.push(completedMessage)
-  if (result.snapshot) {
+  if (result.snapshot && selectedRunId() === sourceRun) {
     noDataContext.value = false
     latestRun.value = result.snapshot
     selectedRun.value = result.snapshot
@@ -466,7 +470,7 @@ async function executeLiveMessage(userText, runId, prefix = '') {
   messages.value.push(timelineMessage, draftMessage)
   try {
     const result = await streamLiveRun(started, timelineMessage, draftMessage)
-    appendAgentResult(result, prefix, draftMessage)
+    appendAgentResult(result, prefix, draftMessage, runId)
     activeLiveRun.value = null
     liveProgress.value = null
     return result
@@ -483,7 +487,7 @@ async function waitForPipeline(runId, predicate, timeoutMs = 60000) {
   let delay = 500
   while (Date.now() - started < timeoutMs) {
     const snapshot = await getPipelineRun(runId)
-    if (disposed || conversationId.value !== threadId) throw new DOMException('对话已切换', 'AbortError')
+    if (disposed || conversationId.value !== threadId || selectedRunId() !== runId) throw new DOMException('对话已切换', 'AbortError')
     latestRun.value = snapshot
     selectedRun.value = snapshot
     announcePipelineUpdate(snapshot)
@@ -513,15 +517,12 @@ async function monitorExtendedAnalysis(runId) {
 
 async function runWorkflow() {
   if (!prompt.value.trim() || isRunning.value) return
-  if (!activeRun.value?.run_id) {
-    emit('notify', { tone: 'warning', title: '请先关联数据', message: '当前聊天服务需要数据上下文。请上传 CSV 后提问，以免引用其他任务的数据。' })
-    return
-  }
   if (llmProvider.value !== 'evidence' && !activeLLMProvider.value?.configured && !llmCredential.value) {
     llmSettingsOpen.value = true
     emit('notify', { tone: 'warning', title: '请先连接模型', message: '填写 API Key 后点击“测试并应用”，连接成功后即可发送。' })
     return
   }
+  const sourceRun = selectedRunId() || activeRun.value?.run_id
   const userText = prompt.value.trim()
   messages.value.push({ id: Date.now(), role: 'user', text: userText, skillPreference: skillCatalog.value?.skills?.find((item) => item.id === preferredSkill.value)?.name, time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) })
   prompt.value = ''
@@ -531,7 +532,12 @@ async function runWorkflow() {
   try {
     const chosen = skillCatalog.value?.skills?.find((item) => item.id === preferredSkill.value)
     const requestText = chosen ? `技能偏好：${chosen.name}（${chosen.id}）\n用户问题：${userText}` : userText
-    const result = await executeLiveMessage(requestText, activeRun.value?.run_id)
+    if (sourceRun && activeRun.value?.run_id !== sourceRun) {
+      const loaded = await loadExplicitRunForSubmission(sourceRun, activeRun.value, getPipelineRun, selectedRunId)
+      selectedRun.value = loaded
+      noDataContext.value = false
+    }
+    const result = await executeLiveMessage(requestText, sourceRun)
     emit('notify', { tone: result.blocked ? 'warning' : 'success', title: result.blocked ? 'Agent 已阻断不匹配任务' : 'Agent 执行完成', message: `意图：${intentLabels[result.intent.key] ?? result.intent.key}` })
   } catch (error) {
     activeLiveRun.value = null
@@ -624,7 +630,7 @@ onMounted(async () => {
     getAgentSkills().then((result) => { skillCatalog.value = result }).catch((error) => { skillCatalogError.value = error.message }).finally(() => { skillCatalogLoading.value = false }),
     listPipelineRuns({ limit: 20 }).then(async (payload) => {
       recentRuns.value = (Array.isArray(payload) ? payload : payload?.results ?? payload?.runs ?? []).slice(0, 20)
-      if (savedChat?.selectedRunId && !noDataContext.value) {
+      if (!selectedRunId() && savedChat?.selectedRunId && !noDataContext.value) {
         try { selectedRun.value = await getPipelineRun(savedChat.selectedRunId) }
         catch { noDataContext.value = true; selectedRun.value = null }
       }
@@ -665,11 +671,25 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => { disposed = true; pollController?.abort(); if (scrollFrame) window.cancelAnimationFrame(scrollFrame) })
 
+const switchGuard = createRunResponseGuard()
 async function switchRun(event) {
+  const selectionToken = switchGuard.next()
+  if (conversationBusy.value) return
+  if (!event.target.value) {
+    newConversation()
+    noDataContext.value = true
+    selectRun(null)
+    selectedRun.value = null
+    messages.value = [{ ...welcomeMessage, text: '未关联数据。可以提问一般知识和方法；查询当前指标或执行算法时请先关联数据。' }]
+    return
+  }
   const run = recentRuns.value.find((item) => item.run_id === event.target.value)
   if (!run || isRunning.value) return
   try {
+    selectRun(run.run_id)
+    selectedRun.value = null
     const snapshot = await getPipelineRun(run.run_id)
+    if (!switchGuard.current(selectionToken) || selectedRunId() !== snapshot.run_id) return
     if (props.userBoard) newConversation()
     noDataContext.value = false
     selectedRun.value = snapshot
@@ -751,7 +771,7 @@ async function switchRun(event) {
               </div>
               <div v-if="message.deliverables?.length" class="message-deliverables">
                 <strong><AppIcon name="download" :size="12" />结果产物</strong>
-                <a v-for="item in message.deliverables" :key="item.key" :href="artifactUrl(message.runId, item.key)">{{ item.label }}</a>
+                <a v-for="item in message.deliverables" :key="item.key" :href="artifactUrl(message.runId, item.key)">{{ item.label || item.key }}</a>
               </div>
               <small v-if="message.skillPreference" class="skill-preference-note">技能偏好：{{ message.skillPreference }}</small>
               <span>{{ message.time }}<template v-if="userBoard && message.runId"> · 数据运行 {{ message.runId.slice(-8) }}</template></span>
@@ -859,7 +879,7 @@ async function switchRun(event) {
 
     <aside v-if="userBoard && detailsOpen" class="conversation-details" aria-label="过程与结果">
       <header><h2>过程与结果</h2><button type="button" @click="detailsOpen = false" aria-label="关闭过程与结果">✕</button></header>
-      <label class="detail-run-picker">关联数据<select :value="activeRun?.run_id || ''" :disabled="conversationBusy" aria-label="选择对话数据" @change="switchRun"><option value="" disabled>选择已有数据，或上传 CSV</option><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
+      <label class="detail-run-picker">关联数据<select :value="activeRun?.run_id || ''" :disabled="conversationBusy" aria-label="选择对话数据" @change="switchRun"><option value="">未关联数据 · 一般知识问答</option><option v-for="run in recentRuns" :key="run.run_id" :value="run.run_id">{{ run.original_name }} · {{ run.run_id.slice(-8) }}</option></select></label>
       <p>{{ activeRun?.original_name || '尚未关联数据' }}</p>
       <p v-if="activeRun">{{ sceneState.data_scene.display_name }} · {{ activeRunStatusText }}</p>
       <section><h3>执行步骤</h3><p v-if="!planNodes.length">发送问题后，这里显示实际计划和执行状态。</p><ol><li v-for="node in planNodes" :key="node.key"><strong>{{ node.name }} · {{ executionStatus(node.activityStatus ?? node.status).label }}</strong><p>{{ node.output }}</p></li></ol></section>

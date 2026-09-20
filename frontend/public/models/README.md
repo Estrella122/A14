@@ -7,7 +7,7 @@ The repository does not redistribute the source Collada file. The checked-in GLB
 To rebuild after downloading the licensed source model from 3D Warehouse:
 
 ```bash
-npm run import:dryer-cad -- /absolute/path/to/model.dae
+npm --prefix frontend run import:dryer-cad -- /absolute/path/to/model.dae
 ```
 
 The stable semantic nodes are `dryer_drum`, `feed_hopper`, `air_heater`, `supply_fan`, `exhaust_outlet`, `product_outlet`, `process_piping`, and `maintenance_platform`. `air_heater` represents the source model's real air preparation inlet (filter and damper); this CAD does not contain a separate burner shell. Renaming these nodes breaks field-to-mesh binding.
@@ -22,7 +22,7 @@ The stable semantic nodes are `dryer_drum`, `feed_hopper`, `air_heater`, `supply
 The assets are original parts of the ProcessPilot project and are reproducible without Blender or an account:
 
 ```bash
-npm run generate:industrial-scenes
+npm --prefix frontend run generate:industrial-scenes
 ```
 
 Stable high-furnace nodes: `furnace_body`, `burden_system`, `hot_blast`, and `hearth`. Stable debutanizer nodes: `column_shell`, `condenser`, `reflux_drum`, `reboiler`, and `feed_line`. Renaming these roots breaks field-to-mesh binding.

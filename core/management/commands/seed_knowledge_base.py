@@ -68,6 +68,19 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         now = timezone.now()
+        from core.services.implementation_knowledge import IMPLEMENTATION_NOTES
+        for key, title, uri, locator, keywords, body in IMPLEMENTATION_NOTES:
+            digest = hashlib.sha256(body.encode()).hexdigest()
+            document, _ = KnowledgeDocument.objects.get_or_create(
+                document_id=f"implementation-{key}-{digest[:12]}", defaults={
+                    'title': title, 'source_type': 'implementation_note', 'source_uri': uri,
+                    'scene_id': '', 'version': digest[:12], 'status': 'approved',
+                    'approved_by': 'implementation_contract_review', 'checksum': digest, 'effective_at': now})
+            KnowledgeChunk.objects.get_or_create(chunk_id=f"implementation-{key}-{digest[:12]}", defaults={
+                'document': document, 'ordinal': 1, 'content': body, 'keywords': keywords,
+                'metadata': {'category': 'algorithm_knowledge', 'source_locator': locator,
+                             'external_industrial_review': False}})
+
         scene_count = 0
         variable_count = 0
         registered_scenes = {row['id']: row for row in list_scene_configs()}

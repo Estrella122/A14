@@ -1,0 +1,321 @@
+{
+  "scenes": [
+    {
+      "scene": "blast_furnace",
+      "pipeline": "PASS",
+      "receipt": {
+        "run_id": "scene_ed1c2a6475c3",
+        "skill_run_id": "skillrun_52647467c364",
+        "dataset_ref": "/recorded/a14/frontend/public/datasets/blast_furnace_real_720h.csv",
+        "dataset_sha256": "337389aab42fa898d018d432dd5383fd2b48c4780890b9e3a9cb61d00dbfdaa2",
+        "comparison": {
+          "dataset_sha256": true,
+          "skill_ids": true,
+          "executor_modules": true,
+          "metrics": true
+        },
+        "skill_ids": [
+          "time_axis_alignment_resampler",
+          "missing_anomaly_cleaner",
+          "signal_noise_ratio_estimator",
+          "steady_transient_state_detector",
+          "high_snr_dynamic_segment_extractor",
+          "segment_quality_scorer_ranker",
+          "time_delay_estimator_compensator",
+          "collinearity_detector_reducer",
+          "modeling_dataset_assembler",
+          "arx_structure_order_selector",
+          "system_identification_trainer",
+          "model_diagnostics_evaluator"
+        ],
+        "manifest_paths": [
+          "/recorded/a14/core/skills/time-axis-alignment-resampler/SKILL.md",
+          "/recorded/a14/core/skills/missing-anomaly-cleaner/SKILL.md",
+          "/recorded/a14/core/skills/signal-noise-ratio-estimator/SKILL.md",
+          "/recorded/a14/core/skills/steady-transient-state-detector/SKILL.md",
+          "/recorded/a14/core/skills/high-snr-dynamic-segment-extractor/SKILL.md",
+          "/recorded/a14/core/skills/segment-quality-scorer-ranker/SKILL.md",
+          "/recorded/a14/core/skills/time-delay-estimator-compensator/SKILL.md",
+          "/recorded/a14/core/skills/collinearity-detector-reducer/SKILL.md",
+          "/recorded/a14/core/skills/modeling-dataset-assembler/SKILL.md",
+          "/recorded/a14/core/skills/arx-structure-order-selector/SKILL.md",
+          "/recorded/a14/core/skills/system-identification-trainer/SKILL.md",
+          "/recorded/a14/core/skills/model-diagnostics-evaluator/SKILL.md"
+        ],
+        "executor_modules": [
+          "core.skills.time-axis-alignment-resampler.executor",
+          "core.skills.missing-anomaly-cleaner.executor",
+          "core.skills.signal-noise-ratio-estimator.executor",
+          "core.skills.steady-transient-state-detector.executor",
+          "core.skills.high-snr-dynamic-segment-extractor.executor",
+          "core.skills.segment-quality-scorer-ranker.executor",
+          "core.skills.time-delay-estimator-compensator.executor",
+          "core.skills.collinearity-detector-reducer.executor",
+          "core.skills.modeling-dataset-assembler.executor",
+          "core.skills.arx-structure-order-selector.executor",
+          "core.skills.system-identification-trainer.executor",
+          "core.skills.model-diagnostics-evaluator.executor"
+        ],
+        "skill_plan": {
+          "analysis": {
+            "routing_source": "md_registry"
+          }
+        },
+        "artifacts": [
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          },
+          {
+            "run_id": "scene_ed1c2a6475c3",
+            "source_execution_id": "skillrun_52647467c364"
+          }
+        ],
+        "executions": [
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/time-axis-alignment-resampler/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.time-axis-alignment-resampler.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/missing-anomaly-cleaner/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.missing-anomaly-cleaner.executor"
+            }
+          },
+          {
+            "status": "partial",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/signal-noise-ratio-estimator/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.signal-noise-ratio-estimator.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/steady-transient-state-detector/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.steady-transient-state-detector.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/high-snr-dynamic-segment-extractor/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.high-snr-dynamic-segment-extractor.executor"
+            }
+          },
+          {
+            "status": "read",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/segment-quality-scorer-ranker/SKILL.md",
+              "execution_mode": "read",
+              "executor_module": "core.skills.segment-quality-scorer-ranker.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/time-delay-estimator-compensator/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.time-delay-estimator-compensator.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/collinearity-detector-reducer/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.collinearity-detector-reducer.executor"
+            }
+          },
+          {
+            "status": "read",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/modeling-dataset-assembler/SKILL.md",
+              "execution_mode": "read",
+              "executor_module": "core.skills.modeling-dataset-assembler.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/arx-structure-order-selector/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.arx-structure-order-selector.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/system-identification-trainer/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.system-identification-trainer.executor"
+            }
+          },
+          {
+            "status": "success",
+            "metrics": {},
+            "warnings": [],
+            "evidence": [],
+            "artifacts": [],
+            "audit": {
+              "executor_invoked": true,
+              "manifest_path": "/recorded/a14/core/skills/model-diagnostics-evaluator/SKILL.md",
+              "execution_mode": "execute",
+              "executor_module": "core.skills.model-diagnostics-evaluator.executor"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "scene": "debutanizer_column",
+      "pipeline": "UNAVAILABLE",
+      "run_id": null
+    },
+    {
+      "scene": "industrial_dryer",
+      "pipeline": "UNAVAILABLE",
+      "run_id": null
+    }
+  ]
+}

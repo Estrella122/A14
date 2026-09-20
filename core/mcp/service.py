@@ -117,9 +117,9 @@ def _validate_common(source_run_id: str, scene_id: str, resample_rule: str, max_
         raise MCPServiceError("ARTIFACT_PRECONDITION_MISSING", "源运行缺少可复用的 SOURCE_DATA。") from exc
     if scene_id != "auto" and not scene_id.replace("_", "").isalnum():
         raise MCPServiceError("INVALID_ARGUMENT", "scene_id 格式无效。")
-    if not resample_rule or len(resample_rule) > 20:
+    if resample_rule is not None and (not resample_rule or len(resample_rule) > 20):
         raise MCPServiceError("INVALID_ARGUMENT", "resample_rule 格式无效。")
-    if not 1 <= int(max_lag) <= 600:
+    if max_lag is not None and (isinstance(max_lag, bool) or not isinstance(max_lag, int) or not 1 <= max_lag <= 600):
         raise MCPServiceError("INVALID_ARGUMENT", "max_lag 必须在 1 到 600 之间。")
     return source
 
@@ -131,13 +131,24 @@ def enqueue_modeling_tool(
     caller_id: str = "local-agent",
     idempotency_key: str = "",
     scene_id: str = "auto",
-    resample_rule: str = "10s",
-    max_lag: int = 60,
+    resample_rule: str | None = None,
+    max_lag: int | None = None,
+    parameters: dict | None = None,
     overrides: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     if tool_name not in TOOL_SPECS:
         raise MCPServiceError("INVALID_ARGUMENT", f"未知 MCP 工具：{tool_name}")
-    _validate_common(source_run_id, scene_id, resample_rule, max_lag)
+    source = _validate_common(source_run_id, scene_id, resample_rule, max_lag)
+    from core.services.algorithm_policy import snapshot_policy, PolicyError
+    requested = dict(parameters or {})
+    if resample_rule is not None:
+        requested["resample_rule"] = resample_rule
+    if max_lag is not None:
+        requested["max_lag"] = max_lag
+    try:
+        snapshot_policy(source, requested)
+    except PolicyError as exc:
+        raise MCPServiceError("INVALID_ARGUMENT", str(exc)) from exc
     if not caller_id or len(caller_id) > 160:
         raise MCPServiceError("INVALID_ARGUMENT", "caller_id 格式无效。")
     if len(idempotency_key) > 200:
@@ -163,7 +174,8 @@ def enqueue_modeling_tool(
         "stop_after": spec["stop_after"],
         "scene_id": scene_id,
         "resample_rule": resample_rule,
-        "max_lag": int(max_lag),
+        "max_lag": max_lag,
+        "parameters": parameters,
         "overrides": overrides,
     }
     try:

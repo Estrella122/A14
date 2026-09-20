@@ -41,10 +41,18 @@ export function capabilityStatus(candidate) {
 }
 
 export function buildRuntimeObservability(source = {}) {
-  if (source.runtime_observability) return source.runtime_observability
+  const answerStatus = {
+    llm: source.llm,
+    answer_mode: source.answer_mode,
+    knowledge: source.answer_context?.retrieval_observability,
+    context: source.answer_context?.context_observability,
+    capability_availability: source.capability_availability,
+  }
+  if (source.runtime_observability) return { ...source.runtime_observability, ...answerStatus }
   const plan = source.skill_plan ?? source.plan ?? {}
   const analysis = plan.analysis ?? {}
   return {
+    ...answerStatus,
     capabilities: analysis.capability_resolution?.candidates ?? [],
     execution_dag: analysis.execution_plan?.core ?? { steps: [], target_groups: [] },
     skill_loading: analysis.skill_runtime ?? {},

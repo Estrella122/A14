@@ -1,4 +1,5 @@
 <script setup>
+import { selectedRunId } from '../utils/runBinding'
 import { computed, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -62,6 +63,7 @@ async function executeCleaning() {
     const latest = latestRun.value
     if (!latest) throw new Error('当前场景尚无运行数据，请先在“数据资产”页面上传CSV。')
     const snapshot = await rerunPipeline(latest.run_id, { resampleRule: config.value.sample.replace(' ', '') })
+    if (selectedRunId() !== latest.run_id) return
     latestRun.value = snapshot
     announcePipelineUpdate(snapshot)
     const quality = snapshot.results?.cleaning?.overall_score

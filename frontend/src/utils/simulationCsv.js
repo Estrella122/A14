@@ -94,7 +94,7 @@ export function buildBlastFurnaceSimulationCsv(config = {}) {
     rowCount,
     variableCount: blastFurnaceHeaders.length - 1,
     period: '90 d · 1 h 采样',
-    summary: `高炉仿真压力测试 · 稳态 ${steady}% · 激励 ${step}% · 噪声 ${noiseSigma}σ · 异常 ${anomalyCount} 点`,
+    summary: `高炉仿真压力测试 · 无阶跃基段 ${steady}%（仍含周期扰动） · 激励 ${step}% · 噪声 ${noiseSigma}σ · 异常 ${anomalyCount} 点`,
   }
 }
 

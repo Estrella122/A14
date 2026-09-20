@@ -60,7 +60,7 @@ class DebutanizerScenarioTests(SimpleTestCase):
     def test_prepared_public_dataset_is_complete(self):
         path = Path(settings.BASE_DIR) / "datasets/public/debutanizer/debutanizer_processpilot.csv"
         if not path.exists():
-            self.skipTest("上游数据未声明可再分发许可证；按 datasets/public/debutanizer/README.md 在本地获取后运行此项")
+            self.skipTest("上游数据未声明可再分发许可证；按 README.md 在本地获取后运行此项")
         frame = pd.read_csv(path)
         self.assertEqual(frame.shape, (2394, 10))
         self.assertFalse(frame.isna().any().any())

@@ -4,12 +4,19 @@ import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { requirementCoverage } from '../data/projectData'
-import { artifactUrl } from '../api/pipeline'
+import { announcePipelineUpdate } from '../api/pipeline'
+import { secureFetch, apiRequest } from '../api/client'
+import { selectedRunId } from '../utils/runBinding'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 
 defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate'])
 const { latestRun } = useLatestPipelineRun()
+const downloadError = ref('')
+const downloading = ref(false)
+const metric = (value, digits = 3) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '未计算/指标不可定义'
+const artifactState = (key) => latestRun.value?.artifact_availability?.[key]?.state ?? 'not_generated'
+const readyCount = computed(() => artifacts.value.filter(item => artifactState(item.key) === 'ready').length)
 const results = computed(() => latestRun.value?.results ?? {})
 const cleaning = computed(() => results.value.cleaning ?? {})
 const modeling = computed(() => results.value.modeling ?? {})
@@ -38,7 +45,7 @@ const reviewItems = computed(() => [
   { label: '数据质量', result: Number(cleaning.value.overall_score ?? 0) >= 60 ? '通过' : '待复核', detail: `质量评分 ${cleaning.value.overall_score ?? '—'}，规整后 ${cleaning.value.cleaned_row_count ?? '—'} 行`, tone: Number(cleaning.value.overall_score ?? 0) >= 60 ? 'success' : 'warning' },
   { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '无可用片段', detail: `${cleaning.value.selected_segment_count ?? 0} 个接纳窗口（严格 ${cleaning.value.strict_selected_segment_count ?? cleaning.value.selected_segment_count ?? 0} 个），建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
   { label: '时滞与共线性', result: modeling.value.selected_inputs?.length ? '完成' : '待运行', detail: `${modeling.value.input_cols?.length ?? 0} 个输入筛选为 ${modeling.value.selected_inputs?.length ?? 0} 个模型特征`, tone: modeling.value.selected_inputs?.length ? 'success' : 'warning' },
-  { label: '辨识效果', result: Number(testMetrics.value.r2 ?? -1) >= 0 ? '通过' : '未通过', detail: `测试 R² ${Number(testMetrics.value.r2 ?? 0).toFixed(3)}，RMSE ${Number(testMetrics.value.rmse ?? 0).toFixed(3)}`, tone: Number(testMetrics.value.r2 ?? -1) >= 0 ? 'success' : 'warning' },
+  { label: '辨识效果', result: Number(testMetrics.value.r2 ?? -1) >= 0 ? '通过' : '未通过', detail: `测试 R² ${metric(testMetrics.value.r2, 3)}，RMSE ${metric(testMetrics.value.rmse, 3)}`, tone: Number(testMetrics.value.r2 ?? -1) >= 0 ? 'success' : 'warning' },
   { label: 'Agent评审', result: reviewPassed.value ? '通过' : '待复核', detail: `${review.value.blockers?.length ?? 0} 项阻断，${review.value.warnings?.length ?? 0} 项警告`, tone: reviewPassed.value ? 'success' : 'warning' },
 ])
 
@@ -46,17 +53,44 @@ const conclusion = computed(() => review.value.conclusion ?? '等待真实任务
 
 const artifacts = computed(() => [
   { type: 'csv', key: 'modeling_csv', title: '优选建模数据集', file: 'modeling_dataset.csv', meta: `${cleaning.value.modeling_row_count ?? 0} 行 · ${modeling.value.selected_inputs?.length ?? 0} 个模型输入`, icon: 'database', action: '导出 CSV' },
-  { type: 'report', key: 'analysis_report_md', title: 'Agent分析报告', file: 'analysis_report.md', meta: `任务 ${latestRun.value?.run_id ?? '等待运行'} · Markdown`, icon: 'report', action: '导出报告' },
+  { type: 'report', key: 'analysis_report_html', title: 'Agent分析报告', file: 'analysis_report.html', meta: `任务 ${latestRun.value?.run_id ?? '等待运行'} · 自包含 HTML`, icon: 'report', action: '导出报告' },
   { type: 'trace', key: 'optimization_json', title: '闭环寻优记录', file: 'optimization_report.json', meta: `${optimization.value.iterations?.length ?? 0} 轮候选 · 最优第 ${optimization.value.best_round ?? '—'} 轮`, icon: 'loop', action: '导出 JSON' },
   { type: 'review', key: 'review_json', title: '独立评审记录', file: 'agent_review.json', meta: conclusion.value, icon: 'shield', action: '导出 JSON' },
 ])
 
-function exportArtifact(artifact) {
-  if (!latestRun.value) return
-  const anchor = document.createElement('a')
-  anchor.href = artifactUrl(latestRun.value.run_id, artifact.key)
-  anchor.click()
-  emit('notify', { tone: 'success', title: '下载已开始', message: `${artifact.file} 来自任务 ${latestRun.value.run_id}。` })
+async function exportArtifact(artifact) {
+  if (!latestRun.value || downloading.value || artifactState(artifact.key) !== 'ready') return
+  const sourceRun = latestRun.value.run_id
+  downloading.value = true
+  downloadError.value = ''
+  try {
+    const response = await secureFetch(`/pipeline/runs/${encodeURIComponent(sourceRun)}/artifacts/${encodeURIComponent(artifact.key)}/`)
+    if (!response.ok) throw new Error(`产物下载失败（HTTP ${response.status}），请刷新产物状态后重试。`)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = artifact.file
+    anchor.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    emit('notify', { tone: 'success', title: '下载已开始', message: `${artifact.file} 来自任务 ${sourceRun}。` })
+  } catch (error) {
+    downloadError.value = error.message
+  } finally {
+    downloading.value = false
+  }
+}
+
+async function generateCurrentReport() {
+  if (!latestRun.value || downloading.value) return
+  const sourceRun = latestRun.value.run_id
+  downloading.value = true
+  downloadError.value = ''
+  try {
+    const payload = await apiRequest('/agent/chat/', { method: 'POST', body: { message: '基于本次结果生成图文报告', run_id: sourceRun, llm: { provider: 'evidence' } } })
+    if (selectedRunId() === sourceRun && payload.data.snapshot) announcePipelineUpdate(payload.data.snapshot)
+  } catch (error) { downloadError.value = error.message }
+  finally { downloading.value = false }
 }
 
 function handleGlobalCommand(event) {
@@ -74,8 +108,9 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       description="执行 Agent 提交完整运行证据，评审 Agent 验证数据、模型与报告一致性，最终输出工程报告、优选数据和可追溯清单。"
     >
       <template #actions>
+        <button class="btn btn-secondary" type="button" :disabled="!latestRun || downloading" @click="generateCurrentReport">生成当前图文报告</button>
         <button class="btn btn-secondary" type="button" :disabled="!latestRun" @click="activeReportSection = 'summary'">浏览完整报告</button>
-        <button class="btn btn-primary" type="button" @click="exportArtifact(artifacts[1])"><AppIcon name="download" />导出图文报告</button>
+        <button class="btn btn-primary" type="button" :disabled="downloading || artifactState(artifacts[1].key) !== 'ready'" @click="exportArtifact(artifacts[1])"><AppIcon name="download" />导出图文报告</button>
       </template>
     </PageHeader>
 
@@ -87,12 +122,12 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
     </section>
 
     <section class="panel artifacts-panel">
-      <div class="section-heading compact"><div><span class="section-kicker">一键交付</span><h2>本次运行产物</h2></div><StatusPill tone="success">4 / 4 已生成</StatusPill></div>
-      <div class="artifact-grid">
+      <div class="section-heading compact"><div><span class="section-kicker">一键交付</span><h2>本次运行产物</h2></div><StatusPill tone="success">{{ readyCount }} / {{ artifacts.length }} 可下载</StatusPill></div>
+      <p v-if="downloadError" role="alert">{{ downloadError }}</p><div class="artifact-grid">
         <article v-for="artifact in artifacts" :key="artifact.type" class="artifact-card">
           <span class="artifact-icon"><AppIcon :name="artifact.icon" :size="24" /></span>
-          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p></div>
-          <button class="btn btn-secondary" type="button" @click="exportArtifact(artifact)"><AppIcon name="download" :size="16" />{{ artifact.action }}</button>
+          <div><strong>{{ artifact.title }}</strong><code>{{ artifact.file }}</code><p>{{ artifact.meta }}</p><p>状态：{{ artifactState(artifact.key) }}</p></div>
+          <button class="btn btn-secondary" type="button" :disabled="downloading || artifactState(artifact.key) !== 'ready'" @click="exportArtifact(artifact)"><AppIcon name="download" :size="16" />{{ artifact.action }}</button>
         </article>
       </div>
     </section>
@@ -109,9 +144,9 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
             <div class="report-page-header"><span>PROCESSPILOT · ANALYSIS REPORT</span><strong>{{ latestRun?.run_id ?? '等待运行' }}</strong></div>
             <template v-if="activeReportSection === 'summary'">
               <h3>执行摘要</h3>
-              <p>本次运行面向 <strong>{{ standardization.scenario?.scenario_name ?? project.unit }}</strong> 的系统辨识任务。Agent 对 {{ Number(cleaning.cleaned_row_count ?? 0).toLocaleString('zh-CN') }} 行规整数据完成动态优选、时滞解耦、系统辨识和真实候选寻优。</p>
+              <p>本次运行面向 <strong>{{ standardization.scenario?.scenario_name ?? project.unit }}</strong> 的系统辨识任务。规整行数：{{ cleaning.cleaned_row_count ?? '尚未计算' }}；运行状态：{{ latestRun?.status ?? '尚未运行' }}。各阶段是否完成以实际产物为准。</p>
               <div class="report-highlight"><span><AppIcon name="spark" /></span><p><strong>Agent 核心结论</strong>第 {{ optimization.best_round ?? '—' }} 轮“{{ optimization.best_label ?? '等待寻优' }}”综合得分最高（{{ optimization.best_score ?? '—' }}）。最终评审：{{ conclusion }}。</p></div>
-              <div class="report-kpis"><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>核心变量</span><strong>{{ modeling.selected_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>独立测试 R²</span><strong>{{ Number(testMetrics.r2 ?? 0).toFixed(3) }}</strong><small>RMSE {{ Number(testMetrics.rmse ?? 0).toFixed(3) }}</small></div></div>
+              <div class="report-kpis"><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>核心变量</span><strong>{{ modeling.selected_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>独立测试 R²</span><strong>{{ metric(testMetrics.r2, 3) }}</strong><small>RMSE {{ metric(testMetrics.rmse, 3) }}</small></div></div>
             </template>
 
             <template v-else-if="activeReportSection === 'quality'">
@@ -137,7 +172,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
             <template v-else-if="activeReportSection === 'modeling'">
               <h3>系统辨识评价</h3>
               <p>当前输出变量为 <strong>{{ modeling.output_col ?? '—' }}</strong>，{{ modeling.config?.family ?? '—' }} 模型实际使用 {{ modeling.fitted_inputs?.length ?? 0 }} 个外部输入特征。评审以时序留出测试集为主，不使用训练集分数替代泛化结论。</p>
-              <div class="report-kpis"><div><span>测试 R²</span><strong>{{ Number(testMetrics.r2 ?? 0).toFixed(4) }}</strong><small>越接近 1 越好</small></div><div><span>测试 RMSE</span><strong>{{ Number(testMetrics.rmse ?? 0).toFixed(4) }}</strong><small>原始量纲误差</small></div><div><span>测试 MAE</span><strong>{{ Number(testMetrics.mae ?? 0).toFixed(4) }}</strong><small>绝对误差均值</small></div></div>
+              <div class="report-kpis"><div><span>测试 R²</span><strong>{{ metric(testMetrics.r2, 4) }}</strong><small>越接近 1 越好</small></div><div><span>测试 RMSE</span><strong>{{ metric(testMetrics.rmse, 4) }}</strong><small>原始量纲误差</small></div><div><span>测试 MAE</span><strong>{{ metric(testMetrics.mae, 4) }}</strong><small>绝对误差均值</small></div></div>
               <div class="report-highlight" :class="{ 'is-warning': !review.passed }"><span><AppIcon :name="review.passed ? 'check' : 'alert'" /></span><p><strong>泛化判断</strong>{{ conclusion }} {{ (review.blockers ?? []).join('；') }}</p></div>
             </template>
 
@@ -151,10 +186,10 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
             <template v-else>
               <h3>工程结论与附录</h3>
               <div class="report-highlight" :class="{ 'is-warning': !reviewPassed }"><span><AppIcon :name="reviewPassed ? 'check' : 'alert'" /></span><p><strong>最终评审结论</strong>{{ conclusion }}</p></div>
-              <h4>阻断项</h4><ul class="report-evidence-list"><li v-for="item in review.blockers ?? []" :key="item"><strong>{{ item }}</strong><span>需处理</span></li><li v-if="!review.blockers?.length"><strong>无阻断项</strong><span>通过</span></li></ul>
+              <h4>阻断项</h4><ul class="report-evidence-list"><li v-for="item in review.blockers ?? []" :key="item"><strong>{{ item }}</strong><span>需处理</span></li><li v-if="!review.blockers?.length"><strong>{{ review.passed ? '评审未发现阻断项' : '尚无通过评审证据' }}</strong><span>{{ review.passed ? '通过' : '待复核' }}</span></li></ul>
               <h4>交付附件</h4><ul class="report-evidence-list"><li v-for="artifact in artifacts" :key="artifact.key"><strong>{{ artifact.title }}</strong><span>{{ artifact.file }}</span></li></ul>
             </template>
-            <div class="report-footnote">注：本页面数据与可下载 Markdown 报告均来自当前流水线任务。</div>
+            <div class="report-footnote">注：本页面数据与可下载 HTML 图文报告均来自当前流水线任务。</div>
           </article>
         </div>
       </section>
@@ -178,19 +213,19 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
           <AppIcon name="chevron" />
           <article><span><AppIcon name="loop" /></span><div><small>寻优策略</small><strong>Round {{ optimization.best_round ?? '—' }}</strong><p>Score · {{ optimization.best_score ?? '—' }}</p></div></article>
           <AppIcon name="chevron" />
-          <article><span><AppIcon name="model" /></span><div><small>模型结果</small><strong>ARX</strong><p>R² · {{ Number(testMetrics.r2 ?? 0).toFixed(3) }}</p></div></article>
+          <article><span><AppIcon name="model" /></span><div><small>模型结果</small><strong>{{ modeling.config?.family ?? '尚未建模' }}</strong><p>R² · {{ metric(testMetrics.r2, 3) }}</p></div></article>
         </div>
       </section>
 
       <section class="panel coverage-summary-panel">
-        <div class="section-heading compact"><div><span class="section-kicker">赛题要求覆盖</span><h2>核心任务 7 / 7</h2></div><StatusPill tone="success">完整</StatusPill></div>
+        <div class="section-heading compact"><div><span class="section-kicker">赛题要求覆盖</span><h2>赛题任务覆盖说明</h2></div><StatusPill tone="success">以当前运行证据为准</StatusPill></div>
         <div class="compact-coverage-list"><div v-for="item in requirementCoverage" :key="item.label"><span><AppIcon name="check" :size="13" /></span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></div></div>
       </section>
     </div>
 
     <section class="delivery-ready-card">
       <div><span><AppIcon name="shield" :size="24" /></span><p><strong>{{ reviewPassed ? '当前任务产物已通过本地完整性校验' : '当前任务需要复核' }}</strong><small>{{ latestRun?.run_id ?? '—' }} · {{ latestRun?.updated_at ? new Date(latestRun.updated_at).toLocaleString('zh-CN') : '等待生成' }}</small></p></div>
-      <button class="btn btn-primary" type="button" :disabled="!latestRun" @click="exportArtifact(artifacts[1])"><AppIcon name="download" />下载分析报告</button>
+      <button class="btn btn-primary" type="button" :disabled="downloading || artifactState(artifacts[1].key) !== 'ready'" @click="exportArtifact(artifacts[1])"><AppIcon name="download" />下载分析报告</button>
     </section>
   </div>
 </template>

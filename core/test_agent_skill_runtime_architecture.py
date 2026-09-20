@@ -70,8 +70,8 @@ class AgentSkillRuntimeArchitectureTests(SimpleTestCase):
             "scenario_name": "热电锅炉长尾数据", "status": "confirmed", "confidence": .948,
         })
         with TemporaryDirectory() as directory, patch("core.services.agent_chat.get_run", return_value=snapshot), patch("core.skills.runtime.RUNS_DIR", Path(directory)):
-            scene = chat("这个数据是什么场景的工业数据")
-            snr = chat("它的噪声比是多少")
+            scene = chat("这个数据是什么场景的工业数据", run_id=self.snapshot()['run_id'])
+            snr = chat("它的噪声比是多少", run_id=self.snapshot()['run_id'])
         self.assertIn("当前上传数据识别为【热电锅炉长尾数据】", scene["answer"])
         self.assertEqual("识别当前数据的工业场景", scene["skill_plan"]["analysis"]["task_understanding"]["objective"])
         self.assertEqual("snr", snr["expert_topic"])
@@ -129,7 +129,7 @@ class AgentSkillRuntimeArchitectureTests(SimpleTestCase):
     def test_skill_runtime_chat_does_not_use_pipeline_rerun(self):
         snapshot = self.snapshot()
         with TemporaryDirectory() as directory, patch("core.services.agent_chat.get_run", return_value=snapshot), patch("core.services.agent_chat.rerun_pipeline") as rerun, patch("core.skills.runtime.RUNS_DIR", Path(directory)):
-            result = chat("执行异常检测")
+            result = chat("执行异常检测", run_id=self.snapshot()['run_id'])
         rerun.assert_not_called()
         self.assertGreater(result["skill_summary"]["executed"], 0)
         observability = result["runtime_observability"]

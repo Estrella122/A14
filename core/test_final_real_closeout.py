@@ -6,7 +6,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
-from tools.validate_local_real_sources import portable_path
+from core.testing_paths import portable_path
 from core.services.scene_skill_pipeline import run_scene_skill_pipeline
 ROOT=Path(settings.BASE_DIR)
 def read(p):return json.loads((ROOT/p).read_text())
@@ -14,26 +14,26 @@ def read(p):return json.loads((ROOT/p).read_text())
 class FinalRealCloseoutTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
-        super().setUpClass();cls.result=read('three_scene_final_real_runtime.json');cls.bf=cls.result['scenes'][0]['receipt']
+        super().setUpClass();cls.result=read('core/fixtures/regression/three_scene_final_real_runtime.json');cls.bf=cls.result['scenes'][0]['receipt']
         cls.temp=TemporaryDirectory();cls.addClassCleanup(cls.temp.cleanup)
         logs=patch('core.skills.runtime.RUNS_DIR',Path(cls.temp.name)/'runs')
         logs.start();cls.addClassCleanup(logs.stop)
         cls.fresh=run_scene_skill_pipeline(ROOT/'frontend/public/datasets/blast_furnace_real_720h.csv',output_root=Path(cls.temp.name)/'inputs')
     def test_final_debutanizer_real_contract(self):
-        r=read('datasets/real_validation/prechecks/dataset_04.json')
+        r=read('core/fixtures/regression/datasets__real_validation__prechecks__dataset_04.json')
         self.assertEqual(9,r['required_count']);self.assertLess(r['matched_required'],9);self.assertNotEqual('ELIGIBLE',r['final_eligibility'])
         self.assertTrue(r['reasons'])
     def test_final_debutanizer_real_pipeline(self):
         r=self.result['scenes'][1];self.assertEqual('UNAVAILABLE',r['pipeline']);self.assertIsNone(r['run_id']);self.assertEqual([],r['executions'])
     def test_final_dryer_real_contract(self):
         for file in ['dataset_10','tobacco_zenodo']:
-            r=read('datasets/real_validation/prechecks/'+file+'.json');self.assertEqual(7,r['required_count']);self.assertLess(r['matched_required'],7);self.assertNotEqual('ELIGIBLE',r['final_eligibility'])
+            r=read('core/fixtures/regression/datasets__real_validation__prechecks__'+file+'.json');self.assertEqual(7,r['required_count']);self.assertLess(r['matched_required'],7);self.assertNotEqual('ELIGIBLE',r['final_eligibility'])
     def test_final_dryer_real_pipeline(self):
         r=self.result['scenes'][2];self.assertEqual('UNAVAILABLE',r['pipeline']);self.assertIsNone(r['run_id']);self.assertEqual([],r['executions'])
     def test_recorded_source_manifest_integrity(self):
-        m=read('datasets/real_validation/tobacco_acquisition_manifest.json')
+        m=read('core/fixtures/regression/datasets__real_validation__tobacco_acquisition_manifest.json')
         self.assertTrue(m['source_archive_md5_verified']);self.assertEqual({},m['renames']);self.assertIsNone(m['inverse_transform'])
-        self.assertEqual(m['output_hash'],read('datasets/real_validation/prechecks/tobacco_zenodo.json')['source_hash'])
+        self.assertEqual(m['output_hash'],read('core/fixtures/regression/datasets__real_validation__prechecks__tobacco_zenodo.json')['source_hash'])
         self.assertRegex(m['output_hash'],r'^[0-9a-f]{64}$')
     def test_distributed_real_data_hash(self):
         path=ROOT/'frontend/public/datasets/blast_furnace_real_720h.csv'
@@ -47,7 +47,7 @@ class FinalRealCloseoutTests(SimpleTestCase):
             self.assertEqual(self.bf['run_id'],artifact['run_id'])
             self.assertIn(artifact.get('source_execution_id'),[self.bf['run_id'],self.bf['skill_run_id']])
     def test_no_fake_required_fields(self):
-        for scene,c in read('datasets/real_validation/closeout/contracts.json').items():
+        for scene,c in read('core/fixtures/regression/datasets__real_validation__closeout__contracts.json').items():
             for name,digest in c['hashes'].items():
                 self.assertEqual(digest,hashlib.sha256((ROOT/'integrations/standardization/standards/scenarios'/scene/name).read_bytes()).hexdigest())
     def test_md_mode_only(self):

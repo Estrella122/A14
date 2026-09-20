@@ -43,7 +43,7 @@ EXPERT_ROUTING_RULES = [
     (("阶次", "aic", "bic", "参数量", "结构选择"), ("arx_structure_order_selector", "multi_model_benchmark")),
     (("vif", "共线", "条件数", "冗余变量"), ("collinearity_detector_reducer",)),
     (("时滞", "纯滞后", "互相关估计", "负时滞", "延迟"), ("time_delay_estimator_compensator",)),
-    (("目标函数", "约束", "收敛", "停止条件", "局部最优", "寻优策略", "闭环寻优", "最佳候选", "最优候选", "最优模型", "各轮候选", "候选结果", "数据覆盖率", "综合得分", "目标权重", "权重敏感性", "敏感性分析"), ("closed_loop_preprocessing_optimizer",)),
+    (("寻优", "目标函数", "约束", "收敛", "停止条件", "局部最优", "寻优策略", "闭环寻优", "最佳候选", "最优候选", "最优模型", "各轮候选", "候选结果", "数据覆盖率", "综合得分", "目标权重", "权重敏感性", "敏感性分析"), ("closed_loop_preprocessing_optimizer",)),
     (("复现", "随机种子", "审计", "追溯", "版本"), ("experiment_tracker_comparator", "evidence_audit_reproducer")),
     (("上线", "投运", "生产使用", "安全边界", "联锁", "闭环控制", "验收", "可验收"), ("engineering_result_interpreter", "evidence_audit_reproducer")),
     (("迁移", "泛化到", "其他设备", "其他塔", "其他炉", "跨场景"), ("dataset_scenario_profiler", "semantic_field_unit_standardizer", "model_diagnostics_evaluator")),
@@ -183,7 +183,7 @@ def _with_dependencies(selected: set[str]) -> list[str]:
     return ordered
 
 
-def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
+def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None, task_spec: dict | None = None) -> dict[str, Any]:
     from .registry import get_registry, manifest_mode
     from .md_planning import plan_from_manifests
     text = str(message or "").strip()
@@ -194,8 +194,17 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
         if snapshot is None and run_id:
             from core.services.pipeline import get_run
             snapshot = get_run(run_id)
-        task = understand_task(text, conversation_context)
+        task = task_spec or understand_task(text, conversation_context)
         registry = get_registry()
+        llm_selected = task.get('constraints', {}).get('llm_skill_ids', [])
+        if any(not registry.get_prompt_content(key) for key in llm_selected):
+            plan = _legacy_plan_skills(message, run_id, snapshot, conversation_context, task_spec=task)
+            plan['analysis']['manifest_fallback'] = {'reason': 'validated_llm_selected_existing_legacy_capability'}
+            return plan
+        if task.get("execution_mode") == "execute" and "optimization" in task.get("response_intents", []):
+            plan = _legacy_plan_skills(message, run_id, snapshot, conversation_context, task_spec=task_spec)
+            plan["analysis"]["manifest_fallback"] = {"reason": "optimization_uses_existing_pipeline_orchestration"}
+            return plan
         plan = plan_from_manifests(text, task, snapshot, run_id, registry)
         if plan:
             # Existing clients consume topic labels; they do not select MD Skills.
@@ -220,22 +229,24 @@ def plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any
                     plan["analysis"]["legacy_recall_error"] = type(exc).__name__
                 remaining = [key for key in recalled["direct"] if not registry.get_prompt_content(key)]
                 if remaining:
-                    legacy_plan = _legacy_plan_skills(message, run_id, snapshot, conversation_context)
+                    legacy_plan = _legacy_plan_skills(message, run_id, snapshot, conversation_context, task_spec=task_spec)
                     # Preserve mixed requests (e.g. SNR + export/optimization)
                     # until their stage orchestration has migrated as a unit.
                     legacy_plan["analysis"]["manifest_fallback"] = {"reason": "mixed_workflow_contains_unmigrated_skills", "skill_ids": remaining}
                     legacy_plan["analysis"]["md_candidates"] = plan["candidates"]
                     return legacy_plan
             return plan
+        if mode == "md" and task.get("execution_mode") != "execute" and not task.get("requires_clarification"):
+            return _legacy_plan_skills(message, run_id, snapshot, conversation_context, task_spec=task_spec)
         if mode == "md":
             return {"plan_id": f"plan_{uuid4().hex[:12]}", "run_id": run_id, "objective": task["objective"],
                     "user_message": text, "mode": "analyze", "entities": {}, "parameters": {}, "constraints": {},
                     "steps": [], "selected_count": 0, "direct_skill_ids": [], "direct_count": 0, "candidates": registry.search(text),
                     "analysis": {"task_understanding": task, "routing_source": "md_registry", "needs_clarification": True}}
-    return _legacy_plan_skills(message, run_id, snapshot, conversation_context)
+    return _legacy_plan_skills(message, run_id, snapshot, conversation_context, task_spec=task_spec)
 
 
-def _legacy_plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None) -> dict[str, Any]:
+def _legacy_plan_skills(message: str, run_id: str | None = None, snapshot: dict[str, Any] | None = None, conversation_context: dict[str, Any] | None = None, task_spec: dict | None = None) -> dict[str, Any]:
     plan_started = perf_counter()
     timing_trace: dict[str, float] = {}
     checkpoint = plan_started
@@ -250,7 +261,7 @@ def _legacy_plan_skills(message: str, run_id: str | None = None, snapshot: dict[
         raise ValueError("规划指令不能为空。")
     analysis = _request_analysis(text)
     mark("request_analysis_ms")
-    task_understanding = understand_task(text, conversation_context)
+    task_understanding = task_spec or understand_task(text, conversation_context)
     mark("task_understanding_ms")
     try:
         route = select(text, analysis, EXPERT_ROUTING_RULES, ROUTING_TOPIC_KEYS)
@@ -293,6 +304,9 @@ def _legacy_plan_skills(message: str, run_id: str | None = None, snapshot: dict[
     routed_business_skills = set(recalled_skill_ids) if task_understanding["task_kind"] != "knowledge_explanation" else set()
     operational = set(recalled_skill_ids) if task_understanding["task_kind"] in {"execute_pipeline", "artifact_request"} else set()
     direct = capability_skill_ids | routed_business_skills | operational
+    direct.update(task_understanding.get('constraints', {}).get('llm_skill_ids', []))
+    if task_understanding.get('action_type') in {'EXECUTE_NUMERIC', 'CONTINUE_OPTIMIZATION'} and 'optimization' in task_understanding.get('response_intents', []) and not task_understanding.get('constraints', {}).get('use_existing_model'):
+        direct.add('closed_loop_preprocessing_optimizer')
     if task_understanding["task_kind"] == "execute_pipeline" and any(term in text for term in ("重规划", "失败后重试")):
         direct.add("execution_supervisor_replanner")
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
@@ -451,7 +465,8 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
                        *, skill_run_id: str | None = None, event_sink=None) -> dict[str, Any]:
     from .registry import get_registry
     registry = get_registry()
-    SKILLS = registry.list()
+    from .catalog import SKILLS as legacy_skills
+    SKILLS = registry.list() if plan.get("analysis", {}).get("routing_source") == "md_registry" else legacy_skills
     SKILL_MAP = {skill.id: skill for skill in SKILLS}
     started = datetime.now().astimezone().isoformat(timespec="seconds")
     skill_run_id = skill_run_id or f"skillrun_{uuid4().hex[:12]}"
@@ -459,6 +474,12 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     industrial_result = None
     core_results: list[dict[str, Any]] = []
     state: dict[str, Any] = {}
+    standard_gate = snapshot.get("results", {}).get("standardization", {})
+    mapping_gate = standard_gate.get("mapping", {})
+    if plan.get("mode") == "execute" and (standard_gate.get("data_decision", {}).get("status") == "reject"
+            or mapping_gate.get("missing_required") or mapping_gate.get("review_count")):
+        blocked_reason = blocked_reason or "场景字段/单位契约未通过，计算任务不可绕过物理门禁。"
+
     core_result_by_skill: dict[str, dict[str, Any]] = {}
     core_dispatch_by_skill: dict[str, dict[str, Any]] = {}
     capability_by_skill: dict[str, list[dict[str, Any]]] = {}
@@ -710,7 +731,7 @@ def execute_skill_plan(plan: dict[str, Any], snapshot: dict[str, Any], blocked_r
     pipeline_run_id = snapshot.get("run_id")
     for row in executions:
         if "audit" not in row:
-            skill = registry.get(row["skill_id"])
+            skill = SKILL_MAP[row["skill_id"]]
             manifest = skill if getattr(skill, "body", None) and plan.get("analysis", {}).get("routing_source") == "md_registry" else None
             row["audit"] = {"skill_id": skill.id, "skill_version": skill.version,
                 "manifest_path": str(manifest.path) if manifest else None,

@@ -10,7 +10,7 @@ import pandas as pd
 from django.conf import settings
 
 
-EXECUTOR_VERSION = "1.0.0"
+EXECUTOR_VERSION = "1.1.0"
 
 
 def _variable_spec(dictionary: list[dict[str, Any]], columns: list[str]) -> dict[str, dict[str, Any]]:
@@ -28,32 +28,48 @@ def _variable_spec(dictionary: list[dict[str, Any]], columns: list[str]) -> dict
     return spec
 
 
-def select_modeling_windows(segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
+def select_modeling_windows(segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True, policy=None) -> pd.DataFrame:
     if segments.empty:
         return segments
+    if policy and policy.get("sparse_output") and "output_observations" in segments:
+        segments = segments[segments["output_observations"] >= policy.get("minimum_output_observations", 1)]
     chosen = segments[segments["level"] == "优质动态段"].head(top_k) if strict_first else segments.iloc[0:0]
+    if chosen.empty and policy and policy.get("allow_usable_fallback"):
+        chosen = segments[segments["level"].isin(["优质动态段", "可用数据段"])].head(top_k)
     if chosen.empty:
         chosen = segments.head(min(top_k, len(segments)))
     return chosen
 
 
-def select_modeling_rows(train_data: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True) -> pd.DataFrame:
+def select_modeling_rows(train_data: pd.DataFrame, segments: pd.DataFrame, top_k: int = 5, strict_first: bool = True, policy=None) -> pd.DataFrame:
     if segments.empty:
-        return train_data
-    chosen = select_modeling_windows(segments, top_k, strict_first)
+        return train_data.iloc[0:0]
+    chosen = select_modeling_windows(segments, top_k, strict_first, policy)
     pieces = [train_data.loc[pd.Timestamp(row.start_time):pd.Timestamp(row.end_time)] for row in chosen.itertuples(index=False)]
-    return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index() if pieces else train_data
+    return pd.concat(pieces).loc[lambda frame: ~frame.index.duplicated()].sort_index() if pieces else train_data.iloc[0:0]
 
 
 def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict[str, Any]], output_dir: Path,
                            *, upstream_run_id: str = "", split_version: str = "chronological_60_20_20_v2",
-                           window_length: int = 30, step: int = 15, primary_output: str | None = None,
+                           window_length: int | None = None, step: int | None = None, primary_output: str | None = None,
                            policy: dict[str, Any] | None = None) -> dict[str, Any]:
     """Run selection on the frozen training partition only."""
+    from .algorithm_policy import resolve_algorithm_policy, PolicyError
+    request = {"selection": policy or {}}
+    if window_length is not None:
+        request["window_length"] = window_length
+    if step is not None:
+        request["step"] = step
+    try:
+        policy = resolve_algorithm_policy(requested=request)["effective_parameters"]["selection"]
+    except PolicyError as exc:
+        return {"status": "blocked", "missing": [], "warnings": [], "limitations": [str(exc)],
+                "ignored_or_rejected_parameters": exc.rejected, "evidence": []}
+    window_length, step = policy["window_samples"], policy["step_samples"]
     missing = []
     if train_data is None or train_data.empty:
         missing.append("cleaned_training_data")
-    if not isinstance(train_data.index, pd.DatetimeIndex):
+    if train_data is None or not isinstance(train_data.index, pd.DatetimeIndex):
         missing.append("valid_time_axis")
     numeric = list(train_data.select_dtypes(include="number").columns) if train_data is not None else []
     if len(numeric) < 2:
@@ -86,20 +102,23 @@ def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict
     active_policy = policy or {"strict_score": 80, "usable_score": 60, "snr_db": 10}
     strict_selected = segments[segments["level"] == "优质动态段"] if not segments.empty else segments
     usable_score = float(active_policy.get("usable_score", 60))
-    usable_selected = segments[segments["segment_score"] >= usable_score] if not segments.empty else segments
+    usable_selected = segments[segments["level"].isin(["优质动态段", "可用数据段"])] if not segments.empty else segments
     relaxed_acceptance = bool(active_policy.get("allow_usable_fallback")) and strict_selected.empty and not usable_selected.empty
     selected = usable_selected if relaxed_acceptance else strict_selected
     modeling_top_k = max(1, int(active_policy.get("modeling_top_k", 5)))
-    modeling = (
-        select_modeling_rows(train_data, selected, top_k=modeling_top_k, strict_first=False)
-        if relaxed_acceptance else select_modeling_rows(train_data, segments, top_k=modeling_top_k)
-    )
-    dynamic = usable_selected
+    eligible = segments
+    if active_policy.get("sparse_output") and not segments.empty:
+        eligible = segments[segments["output_observations"] >= active_policy["minimum_output_observations"]]
+    actual = select_modeling_windows(selected if not selected.empty else eligible, modeling_top_k, strict_first=False)
+    modeling = select_modeling_rows(train_data, actual, modeling_top_k, strict_first=False)
+    acceptance_mode = "engineering_usable" if relaxed_acceptance else "strict" if not strict_selected.empty else "highest_score_fallback" if not actual.empty else "insufficient_data"
+    selection_reason = {"strict": "严格评分与SNR门槛通过", "engineering_usable": "有效策略允许接纳可用候选", "highest_score_fallback": "沿用最高分候选兜底；不代表工程可用", "insufficient_data": "无满足目标观测条件的候选"}[acceptance_mode]
+    dynamic = strict_selected
     steady = segments[segments["segment_score"] < usable_score] if not segments.empty else segments
     selected_ids = [str(value) for value in modeling.index]
     provenance = {"upstream_cleaning_run": upstream_run_id, "split_version": split_version,
                   "segmentation_policy": active_policy,
-                  "acceptance_mode": "engineering_usable" if relaxed_acceptance else "strict",
+                  "acceptance_mode": acceptance_mode,
                   "modeling_top_k": modeling_top_k,
                   "window_length": window_length, "step": step, "source_columns": list(train_data.columns),
                   "executed_at": datetime.now().astimezone().isoformat(timespec="seconds"), "executor_version": EXECUTOR_VERSION,
@@ -112,18 +131,21 @@ def run_segmentation_stage(train_data: pd.DataFrame, field_dictionary: list[dict
     selected.to_csv(paths["segments_csv"], index=False, encoding="utf-8-sig")
     segments.to_csv(paths["segment_scores_csv"], index=False, encoding="utf-8-sig")
     modeling.reset_index().to_csv(paths["modeling_csv"], index=False, encoding="utf-8-sig")
-    warnings = []
+    warnings = [] if acceptance_mode == "strict" else [selection_reason]
     if relaxed_acceptance:
         warnings.append("小样本自适应策略已启用：严格优质段不足，工程可用段已进入后续辨识链。")
-    report = {"status": "success", "segments": segments.to_dict("records"), "steady_segments": steady.to_dict("records"),
-              "dynamic_segments": dynamic.to_dict("records"), "snr_metrics": {"method": "robust_second_difference_white_noise_proxy", "rows": len(snr_rows)},
+    report = {"status": "success" if not modeling.empty else "blocked", "segments": segments.to_dict("records"), "steady_segments": steady.to_dict("records"),
+              "dynamic_segments": dynamic.to_dict("records"), "usable_segments": usable_selected.to_dict("records"), "snr_metrics": {"method": "robust_second_difference_white_noise_proxy", "rows": len(snr_rows)},
               "segment_scores": segments.to_dict("records"), "selected_segments": selected.to_dict("records"),
-              "selected_row_ids": selected_ids, "metrics": {"candidate_count": len(segments), "dynamic_count": len(dynamic),
+              "actual_selected_segments": actual.to_dict("records"), "selected_row_ids": selected_ids, "metrics": {"candidate_count": len(segments), "dynamic_count": len(dynamic),
               "steady_count": len(steady), "strict_selected_count": len(strict_selected), "usable_count": len(usable_selected),
-              "selected_count": len(selected), "selected_row_count": len(modeling), "relaxed_acceptance": relaxed_acceptance,
-              "acceptance_mode": "engineering_usable" if relaxed_acceptance else "strict"},
-              "warnings": warnings, "limitations": ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。",
-              "工程可用段按分层阈值接纳，结论需结合独立测试和模型评审指标解释。"] if relaxed_acceptance else ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。"],
+              "selected_count": len(selected), "selected_row_count": len(modeling),
+              "actual_selected_window_count": len(actual), "effective_top_k": modeling_top_k,
+              "selection_reason": selection_reason,
+              "target_observation_count": int(modeling[primary_output].notna().sum()) if primary_output in modeling else None, "relaxed_acceptance": relaxed_acceptance,
+              "acceptance_mode": acceptance_mode},
+              "warnings": warnings, "limitations": ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。可用数据段是质量接纳，不等于动态激励已证实。",
+              "工程可用段按分层阈值接纳，结论需结合独立测试和模型评审指标解释。"] if relaxed_acceptance else ["SNR 是白噪声假设下的代理估计；重叠窗口不等于独立激励。可用数据段是质量接纳，不等于动态激励已证实。"],
               "evidence": [provenance], "provenance": provenance, "artifacts": {key: str(path) for key, path in paths.items()}}
     paths["segmentation_report_json"].write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     report["_segments_frame"] = segments

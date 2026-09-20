@@ -205,7 +205,7 @@ def evaluation(df, state, guard, split, detailed=True):
         'prediction_mode': 'one_step',
         'evaluation_target_hash': hashlib.sha256('\n'.join(timestamps).encode()).hexdigest(),
         'persistence': persistence,
-        'rmse_improvement_over_persistence_pct': 100 * (1 - metrics['rmse'] / max(persistence['rmse'], 1e-12)),
+        'rmse_improvement_over_persistence_pct': 100 * (1 - metrics['rmse'] / persistence['rmse']) if persistence['rmse'] > 0 else None,
         'evaluation_samples': len(indices),
         'partition_rows': len(df), 'guard_samples': guard, 'excluded_after_guard': int((age >= guard).sum()) - len(indices),
     }
@@ -338,19 +338,8 @@ def search_structure_orders(train, validation, output_col, input_cols, selected,
     return candidates, fitted
 
 
-def run_validated_modeling(input_csv, output_col, input_cols, output_dir, validation_csv, guard, seconds, max_lag, policy=None):
+def select_training_variables(aligned, aligned_cols, output_col, policy=None):
     policy = policy or {}
-    out = Path(output_dir)
-    for folder in ('01_time_delay', '02_collinearity', '03_system_identification'): (out/folder).mkdir(parents=True, exist_ok=True)
-    train, validation = pd.read_csv(input_csv), pd.read_csv(validation_csv)
-    requested_max_lag = max_lag
-    max_lag = max(0, min(max_lag, guard - 3))
-    delays = estimate_training_delays(train, output_col, input_cols, seconds, max_lag)
-    delay_map = dict(zip(delays.input, delays.delay_samples.astype(int)))
-    aligned = train.copy()
-    for col in input_cols: aligned[col+'_aligned'] = shifted(train, col, delay_map[col], seconds)
-    aligned_cols = [c+'_aligned' for c in input_cols]
-    # Drop incomplete rows before diagnostics; never interpolate across a gap.
     diagnostic_data = aligned.dropna(subset=aligned_cols+[output_col])
     if len(diagnostic_data) < 20: raise ValueError('时滞对齐后训练样本不足')
     corr = correlation_matrix(diagnostic_data, aligned_cols)
@@ -379,6 +368,25 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
         )
     final_vif = compute_vif(diagnostic_data, recommendation["keep"])
     recommendation["final_vif"] = final_vif.to_dict("records")
+    return corr, vif, final_vif, recommendation
+
+
+def run_validated_modeling(input_csv, output_col, input_cols, output_dir, validation_csv, guard, seconds, max_lag, policy=None):
+    policy = policy or {}
+    out = Path(output_dir)
+    for folder in ('01_time_delay', '02_collinearity', '03_system_identification'): (out/folder).mkdir(parents=True, exist_ok=True)
+    train, validation = pd.read_csv(input_csv), pd.read_csv(validation_csv)
+    requested_max_lag = max_lag
+    max_lag = max(0, min(max_lag, guard - 3))
+    delays = estimate_training_delays(train, output_col, input_cols, seconds, max_lag)
+    delay_map = dict(zip(delays.input, delays.delay_samples.astype(int)))
+    aligned = train.copy()
+    for col in input_cols: aligned[col+'_aligned'] = shifted(train, col, delay_map[col], seconds)
+    aligned_cols = [c+'_aligned' for c in input_cols]
+    # Drop incomplete rows before diagnostics; never interpolate across a gap.
+    corr_threshold = float(policy.get('correlation_threshold', .9))
+    vif_threshold = float(policy.get('vif_threshold', 10.))
+    corr, vif, final_vif, recommendation = select_training_variables(aligned, aligned_cols, output_col, policy)
     selected = [c.removesuffix('_aligned') for c in recommendation['keep']]
     coldir, modeldir, lagdir = out/'02_collinearity', out/'03_system_identification', out/'01_time_delay'
     corr.to_csv(coldir/'correlation_matrix.csv')

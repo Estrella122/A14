@@ -119,7 +119,7 @@ def _execute_agent_chat(job: RuntimeJob) -> None:
         result = chat(
             payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"),
             payload.get("previous_intents"), skill_run_id=skill_run_id, event_sink=store.emit,
-            llm_config=payload.get("llm"),
+            llm_config=payload.get("llm"), parameters=payload.get("parameters"),
         )
         store.finish("completed", result=result)
     except Exception as exc:
@@ -146,8 +146,9 @@ def _execute_mcp_pipeline(job: RuntimeJob) -> None:
     )
     snapshot = rerun_pipeline(
         payload["source_run_id"],
-        resample_rule=payload.get("resample_rule", "10s"),
-        max_lag=int(payload.get("max_lag", 60)),
+        resample_rule=payload.get("resample_rule"),
+        max_lag=payload.get("max_lag"),
+        parameters=payload.get("parameters"),
         stop_after=payload["stop_after"],
         scenario_id=payload.get("scene_id") or None,
         overrides=payload.get("overrides"),

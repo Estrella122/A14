@@ -23,12 +23,20 @@ function metric(value, kind) {
 </script>
 
 <template>
-  <section v-if="capabilities.length || nodes.length" class="panel observability-panel">
+  <section v-if="capabilities.length || nodes.length || runtime.llm || runtime.knowledge" class="panel observability-panel">
     <div class="section-heading">
       <div><span class="section-kicker">RUNTIME DECISION OBSERVABILITY</span><h2>能力选择与执行依据</h2><p>查看为什么选择能力、依赖由谁补齐，以及最终状态为何成立。</p></div>
       <div class="observation-stats"><span><strong>{{ capabilities.filter((item) => item.ui_status === 'selected').length }}</strong>已选择</span><span><strong>{{ nodes.length }}</strong>Executor</span><span><strong>{{ artifacts.length }}</strong>Artifact</span></div>
     </div>
 
+    <details v-if="runtime.llm || runtime.knowledge" class="readiness-block">
+      <summary>回答与知识证据状态</summary>
+      <p>{{ runtime.answer_mode || '未记录' }} · {{ runtime.llm?.provider || '未记录' }} / {{ runtime.llm?.model || '未记录' }}</p>
+      <p>模型已调用：{{ runtime.llm?.used ? '是' : '否' }}；失败回退：{{ runtime.llm?.fallback ? '是' : '否' }}</p>
+      <p v-if="runtime.llm?.error_reason">{{ runtime.llm.error_reason }}</p>
+      <p>检索：{{ runtime.knowledge?.status || '未记录' }}；传入知识片段：{{ runtime.context?.knowledge_passed_count ?? 0 }}</p>
+      <p v-if="runtime.context?.truncated_fields?.length">上下文截断：{{ runtime.context.truncated_fields.join('、') }}</p>
+    </details>
     <div class="capability-grid">
       <details v-for="capability in capabilities" :key="capability.id" class="capability-card" :class="`is-${capability.ui_status}`">
         <summary>

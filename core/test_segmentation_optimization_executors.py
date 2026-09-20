@@ -58,7 +58,7 @@ class SegmentationServiceTests(SimpleTestCase):
 
     def test_small_data_mode_accepts_usable_segments_when_strict_set_is_empty(self):
         report = self.run_service(policy={
-            "strict_score": 101,
+            "strict_score": 100,
             "usable_score": 0,
             "snr_db": 100,
             "min_valid_samples": 15,

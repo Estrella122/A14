@@ -1,6 +1,16 @@
 def execute(context, inputs, parameters):
     from integrations.data_cleaning.src.data_cleaning_agent import DataCleaningSelectionAgent
     from core.skills.md_adapter import output, persist
+    report = context["resolver"].load_json("SEGMENTATION_REPORT")
+    if report and report.get("artifacts", {}).get("snr_csv") and not parameters.get("columns"):
+        import pandas as pd
+        from statistics import median
+        rows = pd.read_csv(report["artifacts"]["snr_csv"]).where(lambda frame: frame.notna(), None).to_dict("records")
+        finite = [row["snr_db"] for row in rows if pd.notna(row.get("snr_db"))]
+        metrics = {"per_variable_snr": rows, "summary_snr": median(finite) if finite else None,
+                   "estimated_fields": len(finite), "scope": "training_windows", "recomputed": False}
+        ref = persist(context, "SNR_ESTIMATES", metrics, "snr_metrics.json")
+        return output(context, metrics, [{"method": "reuse segmentation SNR", "source": context["resolver"].resolve("SEGMENTATION_REPORT").public(), "recomputed": False}], artifacts=[ref], status="read")
     frame = context["resolver"].load_frame("CLEANED_TRAIN")
     if frame is None:
         return output(context, {}, [], status="unavailable", warnings=["缺少 CLEANED_TRAIN"])
@@ -10,7 +20,7 @@ def execute(context, inputs, parameters):
     columns = parameters.get("columns") or ([name for name in roles if name in numeric] if any(roles) else numeric)
     if not columns or any(column not in frame for column in columns):
         return output(context, {}, [], status="unavailable", warnings=["没有可估计的数值字段"])
-    rows = [{"field": column, **DataCleaningSelectionAgent.snr_details(frame[column])} for column in columns]
+    rows = [{"field": column, **DataCleaningSelectionAgent.snr_details(frame[column], parameters.get("min_valid_samples", 15))} for column in columns]
     valid = sum(row["snr_db"] is not None for row in rows)
     artifact = persist(context, "SNR_ESTIMATES", rows, "snr_metrics.json")
     from statistics import median

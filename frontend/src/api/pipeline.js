@@ -1,8 +1,10 @@
+import { selectRun } from '../utils/runBinding'
 import { apiBaseUrl, apiRequest, parseApiResponse, secureFetch } from './client'
 
 export async function uploadPipelineFile(file, options = {}) {
   const form = new FormData()
   form.append('file', file)
+  if (options.assetId) form.append('asset_id', options.assetId)
   form.append('scenario_id', options.scenarioId ?? 'auto')
   form.append('project_scene', options.projectSceneId ?? '')
   form.append('instruction', options.instruction ?? '')
@@ -65,6 +67,7 @@ export function artifactUrl(runId, key) {
 }
 
 export function announcePipelineUpdate(snapshot) {
+  if (snapshot?.run_id) selectRun(snapshot.run_id)
   try { window.localStorage.setItem('processpilot-latest-run', JSON.stringify({ snapshot, announced_at: Date.now() })) } catch { /* Cross-tab sync is optional. */ }
   window.dispatchEvent(new CustomEvent('processpilot:pipeline-updated', { detail: snapshot }))
 }

@@ -42,6 +42,10 @@ def _mapping_overrides(value) -> dict[str, str]:
 
 
 def _response(payload, status=200):
+    from .services.evidence_values import final_result_view
+    data = payload.get('data')
+    if isinstance(data, dict) and data.get('run_id') and 'results' in data:
+        payload = {**payload, 'data': final_result_view(data)}
     response = JsonResponse(
         _json_safe(payload),
         status=status,
@@ -73,6 +77,8 @@ def pipeline_collection(request):
             limit = 100
         scenario_id = request.GET.get("scenario_id", "").strip()
         runs = list_runs(limit, scenario_id=scenario_id) if scenario_id else list_runs(limit)
+        from .security import run_accessible
+        runs = [run for run in runs if run_accessible(request, run)]
         return _response({"ok": True, "data": runs})
     upload = request.FILES.get("file")
     if upload is None:
@@ -93,13 +99,23 @@ def pipeline_collection(request):
                 handle.write(chunk)
         upload_ms = round((perf_counter() - upload_started) * 1000, 3)
         upload_finished_at = datetime.now().astimezone().isoformat(timespec="milliseconds")
+        from .asset_api import register_asset, visible_assets, owner
+        import hashlib
+        if request.POST.get('asset_id'):
+            asset = visible_assets(request).filter(asset_id=request.POST['asset_id'], status='active').first()
+            if not asset or asset.content_hash != hashlib.sha256(temporary.read_bytes()).hexdigest():
+                raise ValueError('资产不存在、已归档或内容与所选资产不一致。')
+        else:
+            asset = register_asset(temporary, upload.name, request)
         options = dict(
+            asset_id=asset.asset_id, owner_id=owner(request),
             original_name=upload.name,
             scenario_id=request.POST.get("scenario_id", "auto"),
             project_scene=request.POST.get("project_scene", ""),
             instruction=request.POST.get("instruction", ""),
-            resample_rule=request.POST.get("resample_rule", "10s"),
-            max_lag=int(request.POST.get("max_lag", "60")),
+            resample_rule=request.POST.get("resample_rule"),
+            max_lag=int(request.POST["max_lag"]) if "max_lag" in request.POST else None,
+            parameters=json.loads(request.POST["parameters"]) if "parameters" in request.POST else None,
             overrides=_mapping_overrides(request.POST.get("overrides")),
             ingest_timing={"csv_upload_ms": upload_ms, "spans": {"csv_upload": {"start_time": upload_started_at, "end_time": upload_finished_at, "elapsed_ms": upload_ms}}},
         )
@@ -112,7 +128,7 @@ def pipeline_collection(request):
             temporary = None
             now = datetime.now().astimezone().isoformat(timespec="seconds")
             snapshot = {
-                "run_id": run_id, "status": "queued", "current_stage": "queued",
+                "run_id": run_id, "asset_id": asset.asset_id, "owner_id": owner(request), "project": "A14", "status": "queued", "current_stage": "queued",
                 "original_name": upload.name, "project_scene": options["project_scene"] or None,
                 "scenario_request": options["scenario_id"], "instruction": options["instruction"],
                 "mapping_overrides": options["overrides"], "created_at": now, "updated_at": now,
@@ -137,12 +153,13 @@ def pipeline_collection(request):
     except (PipelineError, ValueError) as exc:
         if temporary and temporary.exists():
             temporary.unlink()
-        return _response({"ok": False, "message": str(exc), "data": get_run()}, status=422)
+        return _response({"ok": False, "message": str(exc), "data": None}, status=422)
 
 
 @require_GET
 def pipeline_latest(request):
-    snapshot = get_run()
+    from .security import run_accessible
+    snapshot = next((run for run in list_runs(500) if run_accessible(request, run)), None) if settings.PROCESSPILOT_REQUIRE_AUTH else get_run()
     if not snapshot:
         return _response({"ok": True, "data": None})
     return _response({"ok": True, "data": snapshot})
@@ -162,14 +179,15 @@ def pipeline_rerun(request, run_id):
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
         snapshot = rerun_pipeline(
             run_id,
-            resample_rule=payload.get("resample_rule", "10s"),
-            max_lag=int(payload.get("max_lag", 60)),
+            resample_rule=payload.get("resample_rule"),
+            max_lag=payload.get("max_lag"),
+            parameters=payload.get("parameters"),
             scenario_id=payload.get("scenario_id"),
             overrides=_mapping_overrides(payload["overrides"]) if "overrides" in payload else None,
         )
         return _response({"ok": True, "data": snapshot}, status=201)
     except (PipelineError, ValueError, json.JSONDecodeError) as exc:
-        return _response({"ok": False, "message": str(exc), "data": get_run()}, status=422)
+        return _response({"ok": False, "message": str(exc), "data": None}, status=422)
 
 
 @require_POST

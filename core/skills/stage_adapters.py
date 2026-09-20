@@ -80,7 +80,8 @@ def segment(context, inputs, parameters):
     split = context["resolver"].load_json("FROZEN_SPLIT")
     result = run_segmentation_stage(train, dictionary, Path(context["output_dir"]),
         primary_output=context["scene_context"].get("target_column"),
-        window_length=parameters.get("window_length",30), step=parameters.get("step",15),
+        policy=context["policy_receipt"]["effective_parameters"]["selection"],
+        window_length=parameters["window_samples"], step=parameters["step_samples"],
         split_version=split["protocol"], upstream_run_id=context["scene_context"].get("dataset_ref", ""))
     if result["status"] != "success":
         return output(context, {}, result.get("evidence",[]), status="unavailable", warnings=result.get("limitations",[]))
@@ -102,13 +103,24 @@ def select_segments(context, inputs, parameters):
     strict = segments[segments.level == "优质动态段"]
     relaxed = bool(report.get("metrics", {}).get("relaxed_acceptance"))
     accepted = pd.DataFrame(report.get("selected_segments", [])) if relaxed else segments
-    chosen = select_modeling_rows(train, accepted, top_k=parameters.get("top_k",5), strict_first=not relaxed)
-    selected_windows = select_modeling_windows(accepted, parameters.get("top_k",5), strict_first=not relaxed)
-    refs = [_write_frame(context,"MODELING_DATASET",chosen), persist(context,"SELECTED_SEGMENTS",selected_windows.to_dict("records"),"selected_segments.json")]
-    return output(context, {"selected_rows":len(chosen),"strict_windows":len(strict),"accepted_windows":len(selected_windows),"relaxed_acceptance":relaxed,"degraded_candidate":strict.empty},
-        [{"method":"select_modeling_rows", "window_score_and_snr_reused":True}], artifacts=refs,
-        status="success" if (not strict.empty or relaxed) else "partial",
-        warnings=["小样本自适应分层筛选已接纳工程可用段，严格段数量单独保留用于结果分级"] if relaxed else (["无严格优质动态段，沿用现有最高分候选策略；不能当作高质量证据"] if strict.empty else []), algorithm="segmentation_service.select_modeling_rows")
+    # Consume this run's exact receipt. Do not reselect with another default.
+    expected = context["policy_receipt"]["effective_parameters"]["selection"]
+    if report["provenance"]["segmentation_policy"] != expected:
+        return output(context, {}, [], status="unavailable", warnings=["分段策略与当前任务不一致，必须重新分段"])
+    row_ids = pd.DatetimeIndex(report["selected_row_ids"], name=train.index.name)
+    if not row_ids.isin(train.index).all():
+        return output(context, {}, [], status="unavailable", warnings=["分段回执包含不属于当前训练数据的行"])
+    chosen = train.loc[row_ids].copy()
+    if chosen.empty:
+        return output(context, report["metrics"], [], status="unavailable", warnings=["没有满足后续计算条件的数据"])
+    refs = [_write_frame(context, "MODELING_DATASET", chosen),
+            persist(context, "SELECTED_SEGMENTS", report["actual_selected_segments"], "selected_segments.json")]
+    metrics = {**report["metrics"], "selected_rows": len(chosen),
+               "strict_windows": report["metrics"]["strict_selected_count"]}
+    return output(context, metrics, [{"method": "reuse bound segmentation receipt", "recomputed": False}],
+        artifacts=refs, status="partial" if metrics["acceptance_mode"] != "strict" else "read",
+        warnings=report["warnings"])
+
 
 
 def rank(context, inputs, parameters):
@@ -126,7 +138,8 @@ def assemble(context, inputs, parameters):
     if not target:
         # Compatibility input roles are explicit in the persisted delay result.
         target = _frame(context,"TIME_DELAY_ESTIMATES").iloc[0]["output"]
-    selected = frame[[*kept,target]].copy()
+    # Preserve original inputs for the shared, candidate-independent validation mask.
+    selected = frame.copy()
     ref = _write_frame(context,"MODEL_READY_DATASET",selected)
     return output(context,{"rows":len(selected),"inputs":kept,"target":target},
         [{"method":"reuse selected training rows and variable recommendation", "target_interpolated":False}],artifacts=[ref],status="read")

@@ -8,6 +8,7 @@ import { formatNumber } from '../data/projectData'
 import { announcePipelineUpdate, artifactUrl, rerunPipeline, uploadPipelineFile } from '../api/pipeline'
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildSceneState } from '../composables/useSceneBinding'
+import { apiRequest, parseApiResponse, secureFetch } from '../api/client'
 import { buildSimulationCsv } from '../utils/simulationCsv'
 
 const props = defineProps({ project: { type: Object, required: true } })
@@ -26,27 +27,25 @@ const chartRange = ref('6h')
 const mappingDraft = ref({})
 const reviewScenario = ref('')
 
-function buildFiles(project) {
-  if (project.scenarioId === 'blast_furnace') return [
-    { id: 1, name: '1_blast_furnace_data_first_dataset.xlsx', source: 'Mendeley Data · 原始过程数据', rows: 29602, variables: 27, size: '公开数据', period: '2013-01-01 — 2016-05-18', quality: 100, status: '原始只读' },
-    { id: 2, name: 'Si laboratory measurements', source: '同源实验室化验', rows: 16589, variables: 1, size: '非等间隔', period: '中位间隔约 99 min', quality: 100, status: '因果对齐' },
-    { id: 3, name: 'blast_furnace_real_720h.csv', source: '真实数据演示切片', rows: 720, variables: 32, size: '约 160 KB', period: '2013-01-01 — 2013-01-30', quality: 97.6, status: '可直接运行', downloadUrl: project.source?.demoUrl },
-  ]
-  if (project.scenarioId === 'debutanizer_column') return [
-    { id: 1, name: 'debutanizer_process_data.csv', source: 'Fortuna 等公开工业基准', rows: 2394, variables: 8, size: '授权后本地导入', period: '1 min 等间隔样本', quality: null, status: '待授权数据' },
-  ]
-  if (project.scenarioId === 'industrial_dryer') return [
-    { id: 1, name: '工业干燥器_10秒_867条_3输入3输出_合成验收数据.csv', source: '团队合成验收数据', rows: 867, variables: 6, size: '约 110 KB', period: '867 个连续采样点', quality: 96.8, status: '可直接运行' },
-  ]
-  return [
-    { id: 1, name: `${project.code}_historian.csv`, source: 'DCS Historian', rows: project.rows, variables: project.variables, size: '18.6 MB', period: project.timeRange, quality: 96.4, status: '已解析' },
-    { id: 2, name: `${project.code}_batch_context.csv`, source: 'MES', rows: 8640, variables: 8, size: '2.4 MB', period: project.timeRange, quality: 98.8, status: '已对齐' },
-    { id: 3, name: `${project.code}_lab_quality.csv`, source: 'LIMS', rows: 1260, variables: 6, size: '684 KB', period: project.timeRange, quality: 94.1, status: '已对齐' },
-  ]
+const assetPreview = ref(null)
+const files = ref([])
+async function refreshAssets() {
+  try {
+    const payload = await apiRequest('/assets/')
+    files.value = payload.data.map(asset => ({ ...asset, id: asset.asset_id, name: asset.display_name,
+      source: asset.source_type, variables: asset.columns, period: asset.created_at,
+      size: `${(asset.size / 1024).toFixed(1)} KB`, quality: null }))
+  } catch (error) { emit('notify', { tone: 'warning', title: '资产读取失败', message: error.message }) }
 }
-
-const files = ref(buildFiles(props.project))
-watch(() => props.project.id, () => { files.value = buildFiles(props.project) })
+async function persistAsset(file, sourceType = 'upload') {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('source_type', sourceType)
+  const payload = await parseApiResponse(await secureFetch('/assets/', { method: 'POST', body: form }))
+  await refreshAssets()
+  return files.value.find(item => item.id === payload.data.asset_id)
+}
+onMounted(refreshAssets)
 
 const totalRows = computed(() => files.value.reduce((sum, file) => sum + Number(file.rows || 0), 0))
 const liveStandard = computed(() => latestRun.value?.results?.standardization ?? null)
@@ -99,10 +98,10 @@ function createPendingFile(file, overrides = {}) {
 }
 
 async function runPipelineFile(file, pending = createPendingFile(file)) {
-  if (!files.value.some((item) => item.id === pending.id)) files.value.unshift(pending)
   uploading.value = true
   try {
-    latestRun.value = await uploadPipelineFile(file, { scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景并执行APC建模', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
+    if (!pending.asset_id) pending = await persistAsset(file)
+    latestRun.value = await uploadPipelineFile(file, { assetId: pending.asset_id, scenarioId: 'auto', projectSceneId: props.project.scenarioId, instruction: '请根据上传数据识别工业场景并执行APC建模', resampleRule: props.project.resampleRule, maxLag: props.project.maxLag })
     const standard = latestRun.value.results?.standardization
     const quality = latestRun.value.results?.cleaning?.overall_score
     pending.rows = latestRun.value.results?.cleaning?.cleaned_row_count ?? standard?.source_row_count ?? 0
@@ -170,9 +169,25 @@ async function handleDrop(event) {
   await runPipelineFile(file)
 }
 
-function removeFile(file) {
-  files.value = files.value.filter((item) => item.id !== file.id)
-  emit('notify', { tone: 'neutral', title: '文件已移出项目', message: `${file.name} 的演示记录已删除。` })
+async function previewAsset(file) {
+  try { assetPreview.value = (await apiRequest(`/assets/${file.id}/?preview=1`)).data }
+  catch (error) { emit('notify', { tone: 'warning', title: '预览失败', message: error.message }) }
+}
+async function runStoredAsset(file) {
+  try {
+    const response = await secureFetch(`/assets/${file.id}/?download=1`)
+    if (!response.ok) throw new Error('资产不可读取')
+    await runPipelineFile(new File([await response.blob()], file.name, { type: 'text/csv' }), file)
+  } catch (error) { emit('notify', { tone: 'warning', title: '运行失败', message: error.message }) }
+}
+async function removeFile(file) {
+  try {
+    await apiRequest(`/assets/${encodeURIComponent(file.id)}/`, { method: 'DELETE' })
+    const confirmed = await apiRequest(`/assets/${encodeURIComponent(file.id)}/`)
+    if (confirmed.data.status !== 'archived') throw new Error('后端未确认归档状态')
+    await refreshAssets()
+    emit('notify', { tone: 'neutral', title: '资产已归档', message: `${file.name} 已归档；已有运行证据保留。` })
+  } catch (error) { emit('notify', { tone: 'warning', title: '归档失败', message: error.message }) }
 }
 
 function downloadSimulation(file) {
@@ -191,14 +206,7 @@ async function generateSimulation(action = 'download') {
     await new Promise((resolve) => window.setTimeout(resolve, 80))
     const result = buildSimulationCsv(props.project, simulation.value)
     const file = new File([result.csv], result.name, { type: 'text/csv;charset=utf-8' })
-    const pending = createPendingFile(file, {
-      source: '仿真生成器',
-      rows: result.rowCount,
-      variables: result.variableCount,
-      period: result.period,
-      status: action === 'run' ? '执行中' : '已生成',
-    })
-    files.value.unshift(pending)
+    const pending = await persistAsset(file, 'simulation')
     generatedDataset.value = { file, ...result }
 
     if (action === 'run') {
@@ -274,6 +282,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       <article class="metric-card"><span class="metric-label">字段统一结果</span><div class="metric-value metric-value-text">{{ liveStandard?.mapping?.review_count ?? 0 }} 待确认</div><p>{{ liveStandard?.mapping?.unmapped_count ?? 0 }} 未映射 · {{ liveStandard?.mapping?.unit_risk_count ?? 0 }} 单位风险</p><span class="metric-trend positive">数据字典已生成</span></article>
     </section>
 
+    <section v-if="assetPreview" class="panel"><button type="button" @click="assetPreview = null">关闭预览</button><pre>{{ assetPreview }}</pre></section>
     <div class="content-grid content-grid-8-4">
       <section class="panel files-panel">
         <div class="section-heading compact">
@@ -296,7 +305,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
                 <td class="period-cell">{{ file.period }}</td>
                 <td><span v-if="file.quality" class="quality-score"><i :style="{ '--score': `${file.quality}%` }"></i>{{ file.quality }}</span><span v-else>—</span></td>
                 <td><StatusPill :tone="file.status === '待解析' ? 'warning' : 'success'" dot>{{ file.status }}</StatusPill></td>
-                <td><button class="icon-button danger-on-hover" type="button" :aria-label="`删除 ${file.name}`" @click="removeFile(file)"><AppIcon name="trash" /></button></td>
+                <td><button class="btn btn-secondary" type="button" @click="previewAsset(file)">查看</button><button class="btn btn-secondary" type="button" :disabled="uploading" @click="runStoredAsset(file)">运行</button><button class="icon-button danger-on-hover" type="button" :aria-label="`删除 ${file.name}`" @click="removeFile(file)"><AppIcon name="trash" /></button></td>
               </tr>
             </tbody>
           </table>

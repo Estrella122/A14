@@ -1,0 +1,28 @@
+{
+  "source_hash": "15897d2b086cf5e9ffcdb9e879bffcc6e6f9c96d4688f30503f8091893a5de7f",
+  "required_count": 9,
+  "matched_required": 0,
+  "final_eligibility": "UNUSABLE",
+  "reasons": [
+    "LICENSE_BLOCKED: permitted analysis not established",
+    "MISSING_REQUIRED_SENSORS_OR_MAPPING: bottom_butane_content, bottom_temperature_a, bottom_temperature_b, next_process_flow, reflux_flow, timestamp, top_pressure, top_temperature, tray6_temperature",
+    "MISSING_METADATA: canonical physical units not independently documented",
+    "MISSING_METADATA: timestamp or sampling not verified",
+    "NORMALIZATION_BLOCKED: physical scale/restoration not verified",
+    "INSUFFICIENT_DATA: less than existing 150-row minimum or no target observations"
+  ],
+  "rows": 2394,
+  "columns": [
+    "u1",
+    "u2",
+    "u3",
+    "u4",
+    "u5",
+    "u6",
+    "u7",
+    "y"
+  ],
+  "missing_fields": [
+    "timestamp"
+  ]
+}

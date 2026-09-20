@@ -12,13 +12,13 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.record=json.loads((ROOT/'three_scene_real_runtime.json').read_text())
+        cls.record=json.loads((ROOT/'core/fixtures/regression/three_scene_real_runtime.json').read_text())
         cls.scenes={s['scene']:s for s in cls.record['scenes']}
         cls.bf=cls.scenes['blast_furnace']['receipt']
 
     def test_recorded_debutanizer_contract(self):
         # Recorded evidence only. Raw-source revalidation is an explicit local command.
-        result=json.loads((ROOT/'datasets/real_validation/prechecks/dataset_23.json').read_text())
+        result=json.loads((ROOT/'core/fixtures/regression/datasets__real_validation__prechecks__dataset_23.json').read_text())
         self.assertEqual((2394,8),(result['rows'],len(result['columns'])))
         self.assertEqual(0,result['matched_required'])
         self.assertIn('timestamp',result['missing_fields'])
@@ -33,7 +33,7 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
         self.assertFalse(any(c['usable'] for c in self.record['candidates'] if c['scene']==scene['scene']))
 
     def test_recorded_dryer_contract(self):
-        result=json.loads((ROOT/'datasets/real_validation/prechecks/dataset_10.json').read_text())
+        result=json.loads((ROOT/'core/fixtures/regression/datasets__real_validation__prechecks__dataset_10.json').read_text())
         self.assertEqual((867,7),(result['rows'],len(result['columns'])))
         self.assertIn('raw_material_moisture',result['columns'])
         self.assertNotIn('product_moisture',result['columns'])
@@ -90,7 +90,7 @@ class RealDatasetAcceptanceTests(SimpleTestCase):
 
     def test_recorded_source_hashes_and_distributed_fixture(self):
         # Cross-check independent checked-in manifests, not nonexistent private files.
-        candidates=json.loads((ROOT/'datasets/real_validation/closeout/candidates.json').read_text())
+        candidates=json.loads((ROOT/'core/fixtures/regression/datasets__real_validation__closeout__candidates.json').read_text())
         known={c['sha256'] for c in candidates if c.get('sha256')}
         for c in self.record['candidates']:
             if c.get('sha256'):

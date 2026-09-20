@@ -567,3 +567,23 @@ class RoutingFeedback(models.Model):
     class Meta:
         db_table = 'routing_feedback'
         ordering = ('-created_at',)
+
+
+class FileAsset(models.Model):
+    """A14-owned immutable source file; archive preserves reproduction copies."""
+    asset_id = models.CharField(max_length=64, primary_key=True)
+    owner_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
+    project = models.CharField(max_length=32, default='A14')
+    display_name = models.CharField(max_length=255)
+    storage_ref = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=32, default='upload')
+    content_hash = models.CharField(max_length=64, db_index=True)
+    size = models.PositiveBigIntegerField()
+    rows = models.PositiveIntegerField(null=True)
+    columns = models.PositiveIntegerField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=32, default='active')
+    related_runs = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ['-created_at']

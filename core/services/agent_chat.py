@@ -7,6 +7,7 @@ from typing import Any
 from core.skills import execute_skill_plan, plan_skills
 
 from .expert_qa import answer_expert_question
+from .evidence_values import number, display, final_result_view
 from .pipeline import PipelineError, get_run, rerun_pipeline
 from .llm_gateway import LLMGatewayError, generate_grounded_answer
 from core.mcp.client import MCPInvocationError, invoke_and_wait as invoke_mcp_and_wait
@@ -60,11 +61,11 @@ def _explicit_execution_authorized(message: str) -> bool:
     normalized = str(message or "").strip().lower()
     return bool(re.search(
         r"^(?:(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想|现在|立即|开始|继续|先|再|把|将|对)\s*)*"
-        r"(?:重新执行|重新运行|重跑|运行一遍|执行|运行|训练|清洗|生成|提取|找出|筛选|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
+        r"(?:重新执行|重新运行|重跑|运行一遍|执行|运行|训练|清洗|生成|提取|找出|筛选|计算|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
         normalized,
     ) or re.search(
         r"^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想).{0,50}"
-        r"(?:重新执行|重新运行|重跑|执行|运行|训练|清洗|生成|提取|找出|筛选|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
+        r"(?:重新执行|重新运行|重跑|执行|运行|训练|清洗|生成|提取|找出|筛选|计算|估计|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取)",
         normalized,
     ))
 
@@ -125,7 +126,7 @@ def _compound_result(snapshot: dict[str, Any], degraded: bool) -> tuple[str, lis
     config = modeling.get("config", {})
     review = result.get("review", {})
     def fmt(value):
-        return f"{float(value):.4f}" if value is not None else "未保存/无法判断"
+        return display(value, 4)
     quality_note = ("已估计窗口SNR（白噪声假设下的代理值，非仪表标定结果）。" if snr.get("status") == "estimated"
                     else "当前没有可核验的SNR估计，不能确认高信噪比。")
     answer = (
@@ -157,10 +158,11 @@ def _compound_result(snapshot: dict[str, Any], degraded: bool) -> tuple[str, lis
 def _deliverables(snapshot: dict[str, Any]) -> list[dict[str, str]]:
     labels = {
         "segments_csv": "动态段CSV", "modeling_csv": "选中候选训练数据CSV", "delays_csv": "时滞结果CSV",
-        "snr_csv": "SNR估计明细", "split_json": "时间分区清单", "test_predictions_csv": "独立测试预测", "metrics_json": "分区模型指标", "diagnostics_json": "基线与多步诊断", "order_search_json": "结构比较", "audit_json": "复现清单", "optimization_json": "寻优记录", "analysis_report_md": "分析报告",
+        "snr_csv": "SNR估计明细", "split_json": "时间分区清单", "test_predictions_csv": "独立测试预测", "metrics_json": "分区模型指标", "diagnostics_json": "基线与多步诊断", "order_search_json": "结构比较", "audit_json": "复现清单", "optimization_json": "寻优记录", "analysis_report_md": "分析报告", "analysis_report_html": "自包含图文报告", "report_package_zip": "报告与图片包",
     }
-    artifacts = snapshot.get("artifacts", {})
-    return [{"key": key, "label": label} for key, label in labels.items() if key in artifacts]
+    from .delivery_report import artifact_manifest
+    artifacts = artifact_manifest(snapshot) if snapshot.get('run_id') else {}
+    return [{"key": key, "label": label} for key, label in labels.items() if artifacts.get(key, {}).get('state') == 'ready']
 
 
 def _number(message: str, patterns: tuple[str, ...], default: int) -> int:
@@ -184,7 +186,7 @@ def _stage_plan(snapshot: dict[str, Any], focus: str, executed: bool) -> list[di
         {"key": "standardization", "name": "字段标准化", "tool": "task2_standardizer", "output": standard.get("scenario", {}).get("scenario_name", "等待数据"), "status": "completed" if standard else "pending"},
         {"key": "cleaning", "name": "数据清洗", "tool": "cleaning_agent", "output": f"质量 {cleaning.get('overall_score', '—')}", "status": "completed" if cleaning else "pending"},
         {"key": "selection", "name": "动态优选", "tool": "dynamic_segmenter", "output": f"建模 {cleaning.get('modeling_row_count', '—')} 行", "status": "completed" if cleaning else "pending"},
-        {"key": "modeling", "name": "系统辨识", "tool": "arx_identifier", "output": f"R² {float(modeling.get('metrics', {}).get('test', {}).get('r2') or 0):.3f}", "status": "completed" if modeling else "pending"},
+        {"key": "modeling", "name": "系统辨识", "tool": "arx_identifier", "output": f"测试 R² {_metric(modeling.get('metrics', {}).get('test', {}).get('r2'))}", "status": "completed" if modeling else "pending"},
         {"key": "optimization", "name": "闭环寻优", "tool": "real_data_optimizer", "output": f"第 {optimization.get('best_round', '—')} 轮最优 · 得分 {optimization.get('best_score', '—')}", "status": "completed" if optimization else "pending"},
         {"key": "review", "name": "Agent评审", "tool": "evidence_reviewer", "output": review.get("conclusion", "等待评审"), "status": "completed" if review else "pending"},
         {"key": "report", "name": "分析报告", "tool": "report_agent", "output": report.get("title", "等待生成"), "status": "completed" if report else "pending"},
@@ -194,6 +196,10 @@ def _stage_plan(snapshot: dict[str, Any], focus: str, executed: bool) -> list[di
             if node["key"] not in {"intent", focus} and not (focus in {"lag", "collinearity"} and node["key"] == "modeling"):
                 node["status"] = "context"
     return nodes
+
+
+def _metric(value):
+    return f"{float(value):.3f}" if value is not None else "未计算"
 
 
 def _overview(snapshot: dict[str, Any]) -> str:
@@ -207,7 +213,7 @@ def _overview(snapshot: dict[str, Any]) -> str:
     return (
         f"当前任务 {snapshot['run_id']} 已识别为{standard.get('scenario', {}).get('scenario_name', '未知场景')}。"
         f"字段决策为 {standard.get('data_decision', {}).get('status', '—')}，数据质量评分 {cleaning.get('overall_score', '—')}，"
-        f"建模数据 {cleaning.get('modeling_row_count', '—')} 行，测试集 R² {float(test.get('r2') or 0):.3f}、RMSE {float(test.get('rmse') or 0):.3f}。"
+        f"建模数据 {cleaning.get('modeling_row_count', '—')} 行，测试集 R² {_metric(test.get('r2'))}、RMSE {_metric(test.get('rmse'))}。"
         f"闭环寻优选择第 {optimization.get('best_round', '—')} 轮策略，综合得分 {optimization.get('best_score', '—')}。"
         f"Agent评审结论：{review.get('conclusion', '尚未评审')}。"
     )
@@ -249,26 +255,26 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         missing = cleaning.get("missing_rate", {})
         worst_field = max(missing, key=missing.get) if missing else "无"
         worst_rate = float(missing.get(worst_field, 0))
-        r2 = float(test.get("r2") or 0)
+        r2 = number(test.get("r2"))
         segment_count = int(cleaning.get("selected_segment_count") or 0)
         strict_segment_count = int(cleaning.get("strict_selected_segment_count", segment_count) or 0)
         relaxed = bool(cleaning.get("relaxed_acceptance"))
         findings = []
         if worst_rate >= 0.2:
             findings.append((worst_rate, f"重采样后 `{worst_field}` 的空档率达到 {worst_rate:.1%}"))
-        if segment_count == 0:
+        if cleaning.get("selection_metrics") and segment_count == 0:
             findings.append((0.9, "没有窗口达到严格优质动态段阈值，当前建模数据来自候选窗口兜底"))
         elif relaxed:
             findings.append((0.6, f"严格优质段为 {strict_segment_count} 个，已按小数据模式接纳 {segment_count} 个可用候选段"))
-        if r2 < 0.5:
+        if r2 is not None and r2 < 0.5:
             findings.append((0.8, f"最优模型测试集 R² 只有 {r2:.3f}，解释能力仍偏弱"))
-        if float(cleaning.get("overall_score") or 0) < 70:
+        if number(cleaning.get("overall_score")) is not None and number(cleaning["overall_score"]) < 70:
             findings.append((0.7, f"总体数据质量评分为 {cleaning.get('overall_score')}，尚未达到70分"))
         findings.sort(reverse=True)
-        diagnosis = "；".join(item[1] for item in findings[:3]) or "当前自动规则没有发现明显阻断项，但仍建议用独立工况做外部验证"
+        diagnosis = "；".join(item[1] for item in findings[:3]) or ("当前没有可核验的模型评价指标，尚不能评价模型；请先检查输入与执行状态" if r2 is None else "当前自动规则未发现上述问题，仍需独立工况验证")
         return (
-            f"这批数据最值得先处理的问题是：{diagnosis}。当前结果已完成工程分析流程，模型适用范围应结合独立测试与评审指标确定。",
-            [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "接纳动态段", "value": segment_count}, {"label": "测试 R²", "value": f"{r2:.3f}"}],
+            f"这批数据最值得先处理的问题是：{diagnosis}。仅对当前已保存的证据作上述判断；未计算或缺失的阶段不能视为完成。",
+            [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "接纳动态段", "value": segment_count}, {"label": "测试 R²", "value": display(r2)}],
             ["为什么严格动态段为0", f"{worst_field}为什么缺失这么高", "应该先改哪个参数"],
         )
 
@@ -277,14 +283,14 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
             f"我按你提到的内容一起回答。字段方面，当前场景是{standard.get('scenario', {}).get('scenario_name', '未知场景')}，"
             f"必需字段覆盖率 {float(mapping.get('required_coverage') or 0):.1%}；数据方面，质量评分 {cleaning.get('overall_score', '—')}，"
             f"规整后 {cleaning.get('cleaned_row_count', '—')} 行、建模使用 {cleaning.get('modeling_row_count', '—')} 行；"
-            f"模型方面，测试集 R²={float(test.get('r2') or 0):.3f}、RMSE={float(test.get('rmse') or 0):.3f}；"
+            f"模型方面，测试集 R²={_metric(test.get('r2'))}、RMSE={_metric(test.get('rmse'))}；"
             f"寻优方面，第 {optimization.get('best_round', '—')} 轮得分最高（{optimization.get('best_score', '—')}）；"
             f"最终评审为“{review.get('conclusion', '尚未评审')}”，报告已经随任务产物生成。"
         )
         cards = [
             {"label": "字段覆盖", "value": f"{float(mapping.get('required_coverage') or 0):.1%}"},
             {"label": "质量评分", "value": cleaning.get("overall_score")},
-            {"label": "测试 R²", "value": f"{float(test.get('r2') or 0):.3f}"},
+            {"label": "测试 R²", "value": f"{_metric(test.get('r2'))}"},
             {"label": "评审", "value": "通过" if review.get("passed") else "待复核"},
         ]
         return answer, cards, ["这批数据最大的问题是什么", "为什么选择当前寻优策略", "报告里有哪些内容"]
@@ -330,7 +336,7 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         strict_count = cleaning.get("strict_selected_segment_count", count)
         relaxed = bool(cleaning.get("relaxed_acceptance"))
         answer = (
-            f"动态优选采用30点滑动窗口，从输入变化、输出响应、完整性、异常率和平滑度五个角度评分。"
+            f"动态优选采用{snapshot.get('policy_receipt', {}).get('effective_parameters', {}).get('selection', {}).get('window_samples', '未记录')}点滑动窗口，从输入变化、输出响应、完整性、异常率和平滑度五个角度评分。"
             f"严格优质段为 {strict_count} 个，当前接纳动态段为 {count} 个，用于辨识的数据为 {cleaning.get('modeling_row_count', '—')} 行。"
             + ("当前启用小样本自适应分层筛选，工程可用段已进入后续辨识与寻优，严格段数量仍保留用于结果分级。" if relaxed else "优质窗口已直接进入系统辨识。")
         )
@@ -358,14 +364,16 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         suggestions = ["为什么剔除高共线变量", "列出最终保留变量", "重新执行共线性分析"]
     elif intent == "modeling":
         answer = (
-            f"当前ARX模型输出为 {modeling.get('output_col', '—')}，输入 {len(modeling.get('selected_inputs', []))} 个。"
-            f"测试集 R²={float(test.get('r2') or 0):.3f}，RMSE={float(test.get('rmse') or 0):.3f}，MAE={float(test.get('mae') or 0):.3f}。"
-            + ("当前解释能力偏弱，建议增加真实动态工况并重新筛选，而不是仅继续调参。" if float(test.get("r2") or 0) < 0.5 else "当前模型具备初步解释能力，但仍应使用独立工况做外部验证。")
+            f"当前{modeling.get('config', {}).get('family', '未记录模型族')}模型输出为 {modeling.get('output_col', '—')}，输入 {len(modeling.get('selected_inputs', []))} 个。"
+            f"测试集 R²={_metric(test.get('r2'))}，RMSE={_metric(test.get('rmse'))}，MAE={_metric(test.get('mae'))}。"
+            + ("当前解释能力偏弱，建议增加真实动态工况并重新筛选，而不是仅继续调参。" if number(test.get("r2")) is not None and number(test.get("r2")) < 0.5 else "当前模型具备初步解释能力，但仍应使用独立工况做外部验证。" if number(test.get("r2")) is not None else "缺少有效测试指标，不能评价模型能力。")
         )
-        cards = [{"label": "测试 R²", "value": f"{float(test.get('r2') or 0):.3f}"}, {"label": "RMSE", "value": f"{float(test.get('rmse') or 0):.3f}"}, {"label": "MAE", "value": f"{float(test.get('mae') or 0):.3f}"}]
+        cards = [{"label": "测试 R²", "value": f"{_metric(test.get('r2'))}"}, {"label": "RMSE", "value": f"{_metric(test.get('rmse'))}"}, {"label": "MAE", "value": f"{_metric(test.get('mae'))}"}]
         suggestions = ["这个模型是否可靠", "为什么R²不高", "重新运行模型"]
     elif intent == "optimization":
         rounds = [item for item in optimization.get("iterations", []) if item.get("status") == "completed"]
+        if not rounds:
+            return "当前任务未保存已完成的寻优候选，无法判断是否改善；需要对应搜索的候选、验证指标及停止记录。本次未启动新搜索。", [], ["查看当前运行证据"]
         best = optimization.get("best_metrics", {})
         params = optimization.get("best_parameters", {})
         best_round = optimization.get("best_round")
@@ -376,7 +384,7 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
             f"{optimization.get('search_strategy', '')}。"
             f"第 {best_round or '—'} 轮“{optimization.get('best_label', '—')}”最优{comparison}，"
             f"top_k={params.get('top_k', '—')}、max_lag={params.get('max_lag', '—')}，综合得分 {optimization.get('best_score', '—')}。"
-            f"最优模型测试集 R²={float(best.get('r2') or 0):.3f}、RMSE={float(best.get('rmse') or 0):.3f}，数据覆盖率 {float(best.get('coverage') or 0):.1%}。"
+            f"胜者验证集 R²={_metric(best.get('r2'))}、RMSE={_metric(best.get('rmse'))}，数据覆盖率 {float(best.get('coverage') or 0):.1%}。"
         )
         cards = [{"label": "候选轮次", "value": len(rounds)}, {"label": "最优轮次", "value": optimization.get("best_round")}, {"label": "综合得分", "value": optimization.get("best_score")}]
         suggestions = ["为什么这一轮最好", "最优模型是否可靠", "以稳健性优先重新执行闭环寻优"]
@@ -390,24 +398,85 @@ def _answer(snapshot: dict[str, Any], intent: str, message: str = "", matched_in
         suggestions = ["当前还有哪些风险", "生成交付结论", "模型能否直接上线"]
     else:
         answer = _overview(snapshot)
-        cards = [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "测试 R²", "value": f"{float(test.get('r2') or 0):.3f}"}, {"label": "评审", "value": "通过" if review.get("passed") else "待复核"}]
+        cards = [{"label": "质量评分", "value": cleaning.get("overall_score")}, {"label": "测试 R²", "value": f"{_metric(test.get('r2'))}"}, {"label": "评审", "value": "通过" if review.get("passed") else "待复核"}]
         suggestions = ["解释字段统一结果", "分析数据质量", "这个模型是否可靠"]
     return answer, cards, suggestions
 
 
 def chat(message: str, run_id: str | None = None, previous_intent: str | None = None,
          previous_intents: list[str] | None = None, *, skill_run_id: str | None = None,
-         event_sink=None, llm_config: dict[str, Any] | None = None) -> dict[str, Any]:
+         event_sink=None, llm_config: dict[str, Any] | None = None, parameters: dict | None = None) -> dict[str, Any]:
     message = str(message or "").strip()
     if not message:
         raise ValueError("聊天内容不能为空。")
     if len(message) > 2000:
         raise ValueError("单条指令不能超过2000字。")
-    if re.search(r"\btop[_ ]?k\s*[=:：]?\s*\d+", message, re.I):
-        raise PipelineError("当前接口不支持强制 top_k；窗口数量由共同验证集候选搜索决定，已停止执行。")
-    snapshot = get_run(run_id)
-    if not snapshot:
-        raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
+    from core.skills.task_understanding import understand_task
+    from .task_admission import capability_availability, basic_data_profile
+    from .algorithm_policy import snapshot_policy
+    task = understand_task(message)
+    snapshot = get_run(run_id) if run_id else None
+    if run_id and not snapshot:
+        raise PipelineError("指定运行不存在，不能使用其他运行代替。")
+    snapshot = final_result_view(snapshot or {"run_id": None, "results": {}, "artifacts": {}})
+    from .llm_gateway import propose_task_spec
+    task, understanding_audit = propose_task_spec(message, snapshot, llm_config, {'previous_task_spec': {'response_intent': previous_intent, 'response_intents': previous_intents or ([previous_intent] if previous_intent else [])}})
+    understanding_audit.pop('final_task_spec', None)
+    task['constraints']['understanding_audit'] = understanding_audit
+    if event_sink:
+        event_sink('task_understanding_validated', stage='task_understanding', status='completed', message='已校验任务理解与执行边界', metadata=understanding_audit)
+    knowledge_only = task.get("task_kind") == "knowledge_explanation"
+    basic = bool(set(task.get("semantic_intents", [])) & {"data_profiling", "missing_data_analysis"}) and task.get("execution_mode") != "execute"
+    capability_query = bool(re.search(r"还能做什么|可以做什么|可做哪些|能做哪些", message))
+    availability = capability_availability(snapshot, "basic_data_exploration" if basic else "knowledge")
+    if knowledge_only or basic or capability_query or not snapshot.get("run_id"):
+        profile = None
+        expert = answer_expert_question(message, snapshot, answer_intent=task.get("answer_intent"))
+        answer = expert["answer"] if expert else "以下为方法解释；是否适用于当前数据，仍需相应运行证据。" if knowledge_only else "当前没有对应的运行证据；可以解释方法与缺口，不能编造当前指标。"
+        if basic and "basic_data_exploration" in availability["available_tasks"]:
+            profile = basic_data_profile(snapshot)
+            ranked = sorted(profile['fields'], key=lambda row: -(row['missing_rate'] or 0))
+            answer = f"原始数据共{profile['row_count']}行、{profile['column_count']}列，重复行{profile['duplicate_rows']}。"
+            answer += "缺失统计：" + "；".join(f"{row['raw_name']}={row['missing_rate']:.2%}" for row in ranked[:12]) + "。"
+            answer += "本次仅做原始数据统计，未填补数据、未训练；字段的物理身份与单位仍需复核。"
+            cleaning_logs = snapshot.get("results", {}).get("cleaning", {}).get("logs", [])
+            if cleaning_logs:
+                target = snapshot.get("results", {}).get("standardization", {}).get("scenario", {}).get("primary_output")
+                relevant_logs = [row for row in cleaning_logs if target and target in str(row)]
+                relevant_logs += [row for row in cleaning_logs if row not in relevant_logs]
+                answer += "已有清洗记录：" + "；".join(str(row) for row in relevant_logs[:6])
+            elif snapshot.get("results", {}).get("cleaning"):
+                answer += "具体处理方式见当前清洗产物；不能由缺失率推断填补方式。"
+        if capability_query:
+            answer = "当前可用任务：" + '、'.join(availability['available_tasks']) + "。缺少：" + '、'.join(availability['missing_requirements']) + "。建模、寻优与控制仍须各自通过字段、分区、验证和生产安全门禁。"
+        availability["requested_task_status"] = "executed" if profile else "evidence_only"
+        response = {'answer': answer, 'run_id': snapshot.get('run_id'), 'executed': bool(profile), 'blocked': False,
+                    'execution_scope': 'basic_data_exploration' if profile else 'evidence_only',
+                    'execution_mode': 'analysis', 'needs_clarification': False,
+                    'intent': {'key': task.get('response_intent'), 'label': '基础数据检查' if profile else '知识与证据问答'},
+                    'answer_intent': task.get('answer_intent'), 'cards': expert.get('cards', []) if expert else [],
+                    'suggestions': availability['next_actions'], 'skill_executions': [], 'logs': [],
+                    'capability_availability': availability, 'basic_data_profile': profile,
+                    'runtime_observability': {}, 'skill_plan': {'steps': [], 'analysis': {'task_understanding': task}}}
+        return _finish_answer(message, snapshot, response, llm_config, event_sink)
+    if task.get('action_type') in {'GENERATE_REPORT', 'EXPORT_ARTIFACT'}:
+        from .delivery_report import artifact_manifest, generate_report
+        if task['action_type'] == 'GENERATE_REPORT':
+            # Reload the persisted baseline, not the projected winner view.
+            snapshot = generate_report(get_run(snapshot['run_id']))
+        manifest = artifact_manifest(snapshot)
+        available = [{'key': key, 'label': {'analysis_report_html': '图文报告 HTML', 'report_package_zip': '报告与图片 ZIP', 'modeling_csv': '胜者建模数据 CSV'}.get(key, key), 'url': f"/api/pipeline/runs/{snapshot['run_id']}/artifacts/{key}/", **item}
+                     for key, item in manifest.items() if item['state'] == 'ready']
+        answer = ('已基于本次已保存证据生成图文报告；未重新清洗、训练或寻优。' if task['action_type'] == 'GENERATE_REPORT' else '当前任务真实可下载的产物：')
+        answer += '\n' + ('\n'.join(f"{item['key']}: {item['url']}" for item in available) or '暂无可下载产物；需要先完成对应任务。')
+        response = {'answer': answer, 'run_id': snapshot['run_id'], 'snapshot': snapshot,
+                    'executed': task['action_type'] == 'GENERATE_REPORT', 'numeric_executions': 0,
+                    'execution_scope': 'report' if task['action_type'] == 'GENERATE_REPORT' else 'evidence_only',
+                    'execution_mode': 'analysis', 'cards': [], 'suggestions': [], 'skill_executions': [], 'logs': [],
+                    'deliverables': available, 'intent': {'key': 'review', 'label': '当前产物'},
+                    'skill_plan': {'steps': [], 'analysis': {'task_understanding': task}}, 'runtime_observability': {}}
+        return _finish_answer(message, snapshot, response, llm_config, event_sink)
+    requested = dict(parameters or {})
 
     if event_sink:
         event_sink("task_understanding_started", stage="task_understanding", status="executing", message="正在理解任务目标与执行边界")
@@ -415,7 +484,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     previous_semantic = [name for name, chat_intent in TASK_INTENT_TO_CHAT_INTENT.items() if chat_intent in set(previous_intents or ([previous_intent] if previous_intent else []))]
     previous_response_intents = list(previous_intents or ([previous_intent] if previous_intent else []))
     conversation_context = {"previous_task_spec": {"semantic_intents": previous_semantic, "response_intent": previous_intent, "response_intents": previous_response_intents}} if previous_semantic or previous_response_intents else None
-    skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, conversation_context=conversation_context)
+    skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, conversation_context=conversation_context, task_spec=task)
     if event_sink:
         analysis = skill_plan.get("analysis", {})
         task = analysis.get("task_understanding", {})
@@ -447,6 +516,11 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         skill_plan["objective"] = message
         skill_plan["mode"] = skill_plan["analysis"]["mode"] = "analyze"
         skill_plan["analysis"]["context_intent"] = intent
+    parsed_parameters = dict(skill_plan.get("parameters", {}))
+    parsed_parameters.update({row['name']: row['value'] for row in task.get('parameters', []) if row.get('source') == 'llm_validated'})
+    parsed_parameters.update(requested)
+    skill_plan["parameters"] = parsed_parameters
+    policy_receipt = snapshot_policy(snapshot, parsed_parameters)
     requested_family = _scenario_family(skill_plan.get("entities", {}).get("scenario"))
     current_scenario = snapshot.get("results", {}).get("standardization", {}).get("scenario", {}).get("scenario_name")
     current_family = _scenario_family(current_scenario)
@@ -472,6 +546,8 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         stop_after = "cleaning"
     elif "semantic_field_unit_standardizer" in direct or "dataset_scenario_profiler" in direct:
         stop_after = "standardization"
+    if task.get("execution_mode") != "execute" and answer_expert_question(message, snapshot):
+        needs_clarification = False
     if needs_clarification and not mismatch:
         blocked_reason = "未能确定完整执行目标，请明确需要的技能；没有启动算法。"
     runtime_mode = getattr(settings, "AGENT_RUNTIME_MODE", "hybrid")
@@ -479,13 +555,21 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     mcp_tool = None
     if skill_plan.get("analysis", {}).get("full_pipeline_requested") or "closed_loop_preprocessing_optimizer" in direct:
         mcp_tool = "run_closed_loop_optimization"
-    elif direct.intersection({"system_identification_trainer", "time_delay_estimator_compensator", "collinearity_detector_reducer"}):
+    elif direct.intersection({"system_identification_trainer", "arx_structure_order_selector", "time_delay_estimator_compensator", "collinearity_detector_reducer"}):
         mcp_tool = "run_decoupling_identification"
     elif "high_snr_dynamic_segment_extractor" in direct:
         mcp_tool = "run_dynamic_selection"
     mcp_url = getattr(settings, "PROCESSPILOT_MCP_URL", "")
-    execution_authorized = _explicit_execution_authorized(message)
-    if mcp_url and mcp_tool and skill_plan.get("mode") == "execute" and execution_authorized and not mismatch and not needs_clarification:
+    execution_authorized = task.get('execution_mode') == 'execute' and task.get('action_type') in {'EXECUTE_NUMERIC', 'CONTINUE_OPTIMIZATION'}
+    if task.get("requested_outputs") == ["charts"]:
+        execution_authorized = True
+    if not execution_authorized:
+        skill_plan["mode"] = skill_plan["analysis"]["mode"] = "analyze"
+        skill_plan["analysis"].get("execution_plan", {}).get("core", {})["steps"] = []
+    if execution_authorized and availability["missing_requirements"]:
+        blocked_reason = "建模输入契约不满足：" + '、'.join(availability["missing_requirements"])
+
+    if mcp_url and mcp_tool and skill_plan.get("mode") == "execute" and execution_authorized and not blocked_reason and not needs_clarification:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
         def publish_mcp_progress(payload):
@@ -528,8 +612,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
                 mcp_url,
                 mcp_tool,
                 snapshot["run_id"],
-                resample_rule=f"{max(1, min(resample_seconds, 300))}s",
-                max_lag=max(1, min(max_lag, 600)),
+                parameters=parsed_parameters,
                 request_key=skill_run_id,
                 timeout_seconds=float(getattr(settings, "PROCESSPILOT_MCP_TIMEOUT_SECONDS", 180)),
                 on_progress=publish_mcp_progress,
@@ -540,6 +623,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         result_snapshot = get_run(result_run_id) if result_run_id else None
         if result_snapshot:
             snapshot = result_snapshot
+            policy_receipt = snapshot.get("policy_receipt") or snapshot_policy(snapshot, parsed_parameters)
         if mcp_execution.get("status") in {"completed", "partial"} and result_snapshot:
             executed = True
             execution_scope = {
@@ -547,7 +631,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
                 "run_decoupling_identification": "modeling",
                 "run_closed_loop_optimization": "optimization",
             }[mcp_tool]
-            skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
+            skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, task_spec=task)
             # The algorithms already ran through MCP. The local Skill runtime now
             # reads and renders their evidence instead of executing a second copy.
             skill_plan["mode"] = "analyze"
@@ -562,21 +646,30 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         else:
             error = mcp_execution.get("error") or {}
             raise PipelineError(error.get("message") or f"MCP 任务状态异常：{mcp_execution.get('status')}")
-    if use_pipeline_fallback and not mcp_execution and skill_plan.get("mode") == "execute" and execution_authorized and not mismatch and not needs_clarification and stop_after:
+    from core.skills.artifacts import RuntimeArtifactResolver
+    has_source = bool(RuntimeArtifactResolver(snapshot).resolve("SOURCE_DATA"))
+    if (use_pipeline_fallback or mcp_tool == "run_closed_loop_optimization" and has_source) and not mcp_execution and skill_plan.get("mode") == "execute" and execution_authorized and not blocked_reason and not needs_clarification and stop_after:
         resample_seconds = _number(message, (r"(?:按|改为|使用)\s*(\d+)\s*(?:秒|s)",), 10)
         max_lag = _number(message, (r"时滞(?:范围)?\s*(?:改为|为|=)?\s*(\d+)", r"max[_ ]?lag\s*[=:]?\s*(\d+)"), 60)
-        rerun_kwargs = {"resample_rule": f"{max(1, min(resample_seconds, 300))}s", "max_lag": max(1, min(max_lag, 600))}
+        rerun_kwargs = {"parameters": parsed_parameters}
         if stop_after != "report":
             rerun_kwargs["stop_after"] = stop_after
         snapshot = rerun_pipeline(snapshot["run_id"], **rerun_kwargs)
         execution_scope = stop_after
         executed = True
-        skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot)
+        skill_plan = plan_skills(message, snapshot["run_id"], snapshot=snapshot, task_spec=task)
+        skill_plan["mode"] = skill_plan["analysis"]["mode"] = "analyze"
+        policy_receipt = snapshot.get("policy_receipt") or snapshot_policy(snapshot, parsed_parameters)
         skill_plan["analysis"]["execution_plan"]["fallback"] = {
             "used": runtime_mode == "hybrid",
             "reason": "selected capability has no migrated executor" if runtime_mode == "hybrid" else "legacy runtime mode",
         }
 
+    if executed and 'GENERATE_REPORT' in task.get('constraints', {}).get('requested_actions', []) and not blocked_reason:
+        from .delivery_report import generate_report
+        snapshot = final_result_view(generate_report(get_run(snapshot['run_id'])))
+        execution_scope = 'report'
+    snapshot = final_result_view(snapshot)
     answer, cards, suggestions = _answer(snapshot, intent, message, matched_intents)
     # A broad multi-topic summary should retain its complete overview.  A single
     # expert keyword such as “评审结论” must not replace the other requested areas.
@@ -651,7 +744,7 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             answer = action_note + answer
     if skill_result and not core_results and not executed and not blocked_reason and not expert_answer and intent != "standardization":
         answer = DeterministicResponseRenderer().render(skill_plan["analysis"]["task_understanding"], skill_result)
-    if skill_plan.get("analysis", {}).get("routing_source") == "md_registry" and not blocked_reason and (core_results or not expert_answer):
+    if skill_plan.get("mode") == "execute" and skill_plan.get("analysis", {}).get("routing_source") == "md_registry" and not blocked_reason and (core_results and execution_authorized or not expert_answer and execution_authorized):
         from core.skills.md_response import render_manifest_response
         answer, cards, suggestions = render_manifest_response(skill_plan, core_results)
         action_note = ""
@@ -663,7 +756,11 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
     if event_sink:
         event_sink("answer_generation_started", stage="answer", status="executing", message="正在整理执行证据与回答")
     from core.skills.chart_artifacts import public_charts
+    availability["requested_task_status"] = "blocked" if blocked_reason else "executed" if executed else "evidence_only"
+    availability["executed_scope"] = execution_scope
     response = {
+        "policy_receipt": policy_receipt,
+        "capability_availability": availability,
         "charts": public_charts(skill_run["skill_run_id"], skill_run),
         "answer": answer,
         "run_id": snapshot["run_id"],
@@ -696,6 +793,14 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
         "logs": logs,
         "snapshot": snapshot if executed else None,
     }
+    return _finish_answer(message, snapshot, response, llm_config, event_sink)
+
+
+def _finish_answer(message, snapshot, response, llm_config, event_sink=None):
+    from .answer_context import ground_response
+    response = ground_response(message, snapshot, response)
+    logs = response.setdefault("logs", [])
+    now = datetime.now().astimezone().isoformat(timespec="seconds")
     if llm_config and llm_config.get("provider") not in {None, "", "evidence"}:
         deterministic_answer = response["answer"]
         if event_sink:
@@ -721,20 +826,27 @@ def chat(message: str, run_id: str | None = None, previous_intent: str | None = 
             generated = generate_grounded_answer(
                 message=message, snapshot=snapshot, response=response, config=llm_config, on_delta=emit_delta,
             )
+            if generated.get('fallback_reason'):
+                raise LLMGatewayError(generated['fallback_reason'])
             flush_delta()
             response["answer"] = generated["answer"]
             response["deterministic_answer"] = deterministic_answer
-            response["llm"] = {**{key: value for key, value in generated.items() if key != "answer"}, "used": True, "fallback": False}
+            response["llm"] = {**{key: value for key, value in generated.items() if key != "answer"}, "used": True, "fallback": False, "error_reason": None}
+            response["answer_mode"] = "llm_grounded"
+            cited = set(generated.get("used_source_ids", []))
+            response["used_run_evidence"] = [key for key in response["used_run_evidence"] if key in cited]
+            response["used_knowledge_chunks"] = [row['chunk_id'] for row in response['answer_sources'] if row['id'] in cited and row.get('chunk_id')]
+            response['citation_coverage'] = generated.get('citation_coverage', 'not_cited')
             logs.append({"time": now, "level": "LLM", "text": f"{generated.get('label', generated['provider'])} · {generated['model']} · 证据约束生成完成"})
             if event_sink:
                 event_sink("llm_generation_completed", stage="answer", status="completed", message=f"{generated.get('label', generated['provider'])} 回答生成完成", metadata={"provider": generated["provider"], "model": generated["model"]})
         except LLMGatewayError as exc:
-            response["llm"] = {"provider": llm_config.get("provider"), "model": llm_config.get("model"), "used": False, "fallback": True, "error": str(exc)}
+            response["llm"] = {"provider": llm_config.get("provider"), "model": llm_config.get("model"), "used": False, "fallback": True, "error": str(exc), "error_reason": str(exc)}
             logs.append({"time": now, "level": "WARN", "text": f"大模型不可用，已回退 Evidence Agent：{exc}"})
             if event_sink:
                 event_sink("llm_generation_failed", stage="answer", status="partial", message=f"大模型不可用，已安全回退到证据回答：{exc}")
     else:
-        response["llm"] = {"provider": "evidence", "model": "deterministic-evidence-v1", "used": False, "fallback": False}
+        response["llm"] = {"provider": "evidence", "model": "deterministic-evidence-v1", "used": False, "fallback": False, "error_reason": None}
         if event_sink:
             for offset in range(0, len(response["answer"]), 20):
                 delta = response["answer"][offset:offset + 20]

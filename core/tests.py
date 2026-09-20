@@ -77,8 +77,8 @@ class AgentChatTests(SimpleTestCase):
 
     def test_different_questions_change_answer_intent_cards_and_plan(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            selection = chat('为什么动态段这么少')
-            modeling = chat('这个模型的R2和RMSE怎么样')
+            selection = chat('为什么动态段这么少', run_id=self.snapshot()['run_id'])
+            modeling = chat('这个模型的R2和RMSE怎么样', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(selection['intent']['key'], 'selection')
         self.assertEqual(modeling['intent']['key'], 'modeling')
@@ -88,7 +88,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_optimization_question_reports_real_candidate_evidence(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('闭环寻优哪一轮是最佳策略')
+            result = chat('闭环寻优哪一轮是最佳策略', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['intent']['key'], 'optimization')
         self.assertIn('3 组候选策略', result['answer'])
@@ -97,7 +97,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_multi_topic_summary_answers_all_requested_evidence(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('总结数据质量、模型效果、寻优结果和评审结论')
+            result = chat('总结数据质量、模型效果、寻优结果和评审结论', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['intent']['key'], 'overview')
         self.assertIn('质量评分 82.5', result['answer'])
@@ -108,21 +108,21 @@ class AgentChatTests(SimpleTestCase):
 
     def test_follow_up_without_domain_keyword_keeps_previous_context(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('那为什么会这样呢', previous_intent='optimization')
+            result = chat('那为什么会这样呢', run_id=self.snapshot()['run_id'], previous_intent='optimization')
 
         self.assertEqual(result['intent']['key'], 'optimization')
         self.assertIn('第 2 轮', result['answer'])
 
     def test_ambiguous_follow_up_after_multi_topic_answer_asks_for_clarification(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('那为什么会这样呢', previous_intent='overview', previous_intents=['cleaning', 'modeling', 'optimization', 'review'])
+            result = chat('那为什么会这样呢', run_id=self.snapshot()['run_id'], previous_intent='overview', previous_intents=['cleaning', 'modeling', 'optimization', 'review'])
 
         self.assertEqual(result['intent']['key'], 'clarification')
         self.assertIn('具体是指哪一项', result['answer'])
 
     def test_greeting_gets_conversational_answer(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('你好，在吗')
+            result = chat('你好，在吗', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['intent']['key'], 'conversation')
         self.assertIn('你好，我在', result['answer'])
@@ -132,7 +132,7 @@ class AgentChatTests(SimpleTestCase):
         snapshot['results']['cleaning']['selected_segment_count'] = 0
         snapshot['results']['cleaning']['missing_rate'] = {'gas_flow': 0.42}
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat('这批数据最大的问题是什么')
+            result = chat('这批数据最大的问题是什么', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['intent']['key'], 'diagnosis')
         self.assertIn('最值得先处理的问题', result['answer'])
@@ -175,7 +175,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_expert_residual_question_states_evidence_boundary(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('你们怎么证明残差是白噪声，做过自相关检验吗')
+            result = chat('你们怎么证明残差是白噪声，做过自相关检验吗', run_id=self.snapshot()['run_id'])
         self.assertEqual(result['expert_topic'], 'residual')
         self.assertEqual(result['intent']['key'], 'modeling')
         self.assertIn('不能声称残差已经是白噪声', result['answer'])
@@ -185,7 +185,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_expert_deployment_question_does_not_overclaim(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('这个模型现在可以直接上线投运吗，安全边界是什么')
+            result = chat('这个模型现在可以直接上线投运吗，安全边界是什么', run_id=self.snapshot()['run_id'])
         self.assertEqual(result['expert_topic'], 'deployment')
         self.assertIn('不等于可以直接投运', result['answer'])
         self.assertIn('联锁', result['answer'])
@@ -203,7 +203,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_equipment_mismatch_blocks_compound_execution(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline') as rerun:
-            result = chat('提取1号塔高信噪比动态数据，处理共线性后进行闭环寻优')
+            result = chat('提取1号塔高信噪比动态数据，处理共线性后进行闭环寻优', run_id=self.snapshot()['run_id'])
         rerun.assert_not_called()
         self.assertTrue(result['blocked'])
         self.assertIn('设备场景不一致', result['answer'])
@@ -217,7 +217,7 @@ class AgentChatTests(SimpleTestCase):
         snapshot['results']['modeling']['selected_inputs'] = ['gas_flow_aligned']
         snapshot['artifacts'] = {'segments_csv': 'segments.csv', 'modeling_csv': 'modeling.csv', 'optimization_json': 'optimization.json'}
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=snapshot) as rerun:
-            result = chat('提取高炉高信噪比动态数据，处理共线性后进行闭环寻优')
+            result = chat('提取高炉高信噪比动态数据，处理共线性后进行闭环寻优', run_id=self.snapshot()['run_id'])
         rerun.assert_not_called()
         self.assertFalse(result['blocked'])
         optimization = next(item for item in result['skill_executions'] if item['skill_id'] == 'closed_loop_preprocessing_optimizer')
@@ -321,7 +321,7 @@ class AgentChatTests(SimpleTestCase):
     def test_compound_expert_answer_covers_every_requested_dimension(self):
         question = '当前模型测试集R²不错，如何证明没有时序数据泄漏和过拟合？请结合残差自相关、模型阶次和独立工况验证说明，不要直接给出可上线结论。'
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
         self.assertGreaterEqual(len(result['expert_topics']), 5)
         for heading in ('时序数据泄漏', '残差诊断', '过拟合与泛化', '模型结构与阶次', '上线安全边界'):
             self.assertIn(heading, result['answer'])
@@ -352,7 +352,7 @@ class AgentChatTests(SimpleTestCase):
         })
         question = '互相关时滞是否有物理意义？严重共线性时如何避免误判因果？请结合时滞、相关系数、VIF和保留变量说明。'
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['expert_topics'], ['lag', 'collinearity', 'causality'])
         for evidence in ('时滞 8 个采样点', '相关系数 +0.720', '最大 VIF 为 18.42', '保留变量：air_flow', '剔除变量：gas_flow', '相关系数 +0.971'):
@@ -378,7 +378,7 @@ class AgentChatTests(SimpleTestCase):
         })
         question = '当前最优模型测试集R²为0.639，但闭环寻优仍将它选为最佳候选。请结合训练集与测试集指标差异、RMSE、数据覆盖率、残差自相关、ARX阶次和各轮候选结果解释，并判断是否过拟合以及能否投运。'
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         self.assertTrue({'residual', 'generalization', 'order', 'optimization', 'deployment'}.issubset(result['expert_topics']))
         skill_ids = {item['skill_id'] for item in result['skill_executions']}
@@ -403,7 +403,7 @@ class AgentChatTests(SimpleTestCase):
     def test_hypothetical_reidentification_question_never_executes_pipeline(self):
         question = '如果迁移到另一座炉，哪些参数必须重新辨识，如何监测模型漂移？'
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline') as rerun:
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         rerun.assert_not_called()
         self.assertEqual(result['execution_mode'], 'analysis')
@@ -412,7 +412,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_residual_input_cross_correlation_does_not_trigger_lag_topic(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('残差是否为白噪声，请结合残差自相关和残差与输入互相关说明')
+            result = chat('残差是否为白噪声，请结合残差自相关和残差与输入互相关说明', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['expert_topics'], ['residual'])
         self.assertNotIn('time_delay_estimator_compensator', {item['skill_id'] for item in result['skill_executions']})
@@ -423,7 +423,7 @@ class AgentChatTests(SimpleTestCase):
         snapshot['results']['optimization'] = {}
         question = '请说明当前时滞、VIF、残差、训练测试差异、ARX阶次和闭环寻优最佳候选'
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         self.assertNotIn('VIF 为 0.00', result['answer'])
         self.assertNotIn('R²=0.000', result['answer'])
@@ -450,7 +450,7 @@ class AgentChatTests(SimpleTestCase):
         })
         question = '当前系统筛选出了0个严格优质动态段，却仍然使用120行候选数据完成了ARX辨识。请结合动态性评分、信噪比、持续激励、候选段降级策略、训练测试指标和数据覆盖率，判断降级建模是否合理，说明参数可信度风险和还需什么实验才能升级为可验收模型。'
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['expert_topics'], ['degraded_modeling', 'optimization', 'deployment'])
         for evidence in ('动态性得分 66.91', '降级建模使用 120 行', '最佳候选覆盖率 6.94%', '训练/测试 R² 为 0.853/0.639'):
@@ -468,7 +468,7 @@ class AgentChatTests(SimpleTestCase):
         })
         question = 'gas_flow和air_flow单位不同或字段语义映射错误时，共线性和时滞结果是否可信？'
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat(question)
+            result = chat(question, run_id=self.snapshot()['run_id'])
 
         self.assertIn('standardization', result['expert_topics'])
         self.assertIn('字段名匹配并不自动证明量纲正确', result['answer'])
@@ -478,7 +478,7 @@ class AgentChatTests(SimpleTestCase):
         snapshot = self.snapshot()
         snapshot['results']['cleaning']['logs'] = ['gas_flow 检测到 40 个异常点，已标记并插值修复。', 'air_flow 检测到 34 个异常点，已标记并插值修复。']
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat('异常点经过线性插值会不会制造平滑动态并抬高R²？请结合残差说明。')
+            result = chat('异常点经过线性插值会不会制造平滑动态并抬高R²？请结合残差说明。', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['expert_topics'], ['cleaning', 'residual'])
         self.assertIn('共标记 74 个变量级异常点', result['answer'])
@@ -486,7 +486,7 @@ class AgentChatTests(SimpleTestCase):
 
     def test_weight_sensitivity_question_routes_to_optimizer(self):
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()):
-            result = chat('改变目标权重后最优轮次是否稳定，如何做权重敏感性分析？')
+            result = chat('改变目标权重后最优轮次是否稳定，如何做权重敏感性分析？', run_id=self.snapshot()['run_id'])
 
         self.assertEqual(result['expert_topics'], ['optimization'])
         self.assertIn('closed_loop_preprocessing_optimizer', {item['skill_id'] for item in result['skill_executions']})
@@ -494,7 +494,7 @@ class AgentChatTests(SimpleTestCase):
     def test_execution_phrase_triggers_real_rerun_hook(self):
         rerun = {**self.snapshot(), 'run_id': 'run_rerun'}
         with patch('core.services.agent_chat.get_run', return_value=self.snapshot()), patch('core.services.agent_chat.rerun_pipeline', return_value=rerun) as mocked:
-            result = chat('按5秒重新执行数据清洗')
+            result = chat('按5秒重新执行数据清洗', run_id=self.snapshot()['run_id'])
 
         mocked.assert_not_called()
         self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'], ['missing_anomaly_cleaner'])
@@ -568,7 +568,7 @@ class AgentChatTests(SimpleTestCase):
         snapshot = self.snapshot()
         snapshot['stages'] = [{'key': 'standardization', 'status': 'completed'}]
         with patch('core.services.agent_chat.get_run', return_value=snapshot):
-            result = chat('分析当前任务的数据质量')
+            result = chat('分析当前任务的数据质量', run_id=self.snapshot()['run_id'])
 
         audit = next(item for item in result['skill_executions'] if item['skill_id'] == 'evidence_audit_reproducer')
         self.assertEqual(audit['status'], 'success')
@@ -614,7 +614,9 @@ class LivePipelineApiTests(SimpleTestCase):
         mocked_run.side_effect = complete
         mocked_get.return_value = {'run_id': 'run_async', 'status': 'running', 'current_stage': 'standardization'}
         upload = SimpleUploadedFile('data.csv', b'timestamp,x\n2026-01-01,1\n', content_type='text/csv')
-        response = self.client.post('/api/pipeline/runs/', {'file': upload, 'async_analysis': 'true'})
+        from types import SimpleNamespace
+        with patch('core.asset_api.register_asset', return_value=SimpleNamespace(asset_id='unit_fixture_asset')):
+            response = self.client.post('/api/pipeline/runs/', {'file': upload, 'async_analysis': 'true'})
         self.assertEqual(202, response.status_code, response.content)
         self.assertEqual('run_async', response.json()['data']['run_id'])
 

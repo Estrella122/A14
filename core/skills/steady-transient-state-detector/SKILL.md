@@ -51,7 +51,7 @@ intent_terms:
 CLEANED_TRAIN, FIELD_DICTIONARY, FROZEN_SPLIT；timestamp、inputs、target、units、constraints 来自既有 ScenarioRepository。
 
 # 参数说明
-Skill 默认值 → SceneContext.default_parameters → 显式用户参数。实际值写入 audit。
+共用 algorithm_policy resolver：算法默认 → 兼容场景默认 → 数据场景 algorithm_profile → 校验后的显式请求。effective_parameters、来源和 policy hash 写入 audit。
 
 # 执行逻辑
 executor.py 适配现有 segment 计算或产物读取；没有场景分支。模式为 execute，复用与计算必须区别记录。

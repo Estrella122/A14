@@ -24,6 +24,11 @@ def plan_from_manifests(message, task, snapshot, run_id, registry):
     denied = {row["skill_id"] for clause in task.get("negations", [])
               for row in registry.search(clause) if row["score"] >= .45}
     selected = [row["skill_id"] for row in candidates if row["score"] >= .45 and row["skill_id"] not in denied]
+    for skill_id in task.get('constraints', {}).get('llm_skill_ids', []):
+        if registry.get(skill_id) and skill_id not in denied and skill_id not in selected:
+            selected.append(skill_id)
+            if not any(row['skill_id'] == skill_id for row in candidates):
+                candidates.append({'skill_id': skill_id, 'score': 1.0, 'lexical_recall': 0, 'source': 'validated_llm'})
     boundary = bool(re.search(r"如果|假如|假设|按钮|原话|原文|引用|这句话|提示|(?:不要|禁止|无需).{0,8}(?:执行|运行|计算)|会不会|能不能|可不可以", message))
     if chart_request:
         boundary = False

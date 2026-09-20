@@ -1,106 +1,146 @@
 # ProcessPilot A14
 
-面向工业时序数据的场景识别、字段与单位标准化、因果清洗、动态段筛选、AR/ARX 系统辨识、离线寻优和工程评审系统。
+A14 用于工业时序数据的场景识别、字段与单位标准化、清洗、动态段筛选、系统辨识、离线预处理寻优，以及基于运行证据的问答、图文报告和数据导出。所有控制建议仅供离线评估，不向 PLC/DCS 下发指令。
 
-当前正式保留三套比赛场景：钢铁高炉铁水质量预测、炼油脱丁烷精馏塔和工业干燥器。高炉场景提供带 CC BY 4.0 来源说明的 Mendeley 真实过程数据演示切片，并对非等间隔铁水化验采用只向后匹配的因果对齐；脱丁烷塔保留30–75分钟测量滞后和物理量字段规则；工业干燥器支持10秒采样、3输入3输出及共享输入的多输出ARX模型组。离线指标通过不代表已经具备生产投运条件。
+## 功能与架构
 
-## 环境
+- 数据资产：上传 CSV、检查字段与质量、复核映射、生成仿真数据、持久化资产及归档。
+- 数值流程：时间对齐、缺失异常处理、SNR 估计、稳态/动态段筛选、时滞补偿、共线性处理、AR/ARX/FIRX 建模与诊断。具体模型及有效输入以运行证据为准。
+- 离线寻优：冻结时间分区后选择候选，保留约束、失败和未改善原因；缺目标或质量不足不视为建模成功。
+- Agent：理解任务、选择能力、编排执行、读取既有证据并解释结果；报告和导出请求可以复用现有任务，不必重新训练。
+- 工程交付：运行追踪、CSV、含图 HTML、报告包和资产管理；缺失产物按实际状态显示。
 
-- Python 3.12+
-- Node.js 20.19+ 或 22.12+
+Agent 的任务约束经校验后进入 Planner，MD Registry 从 `core/skills/**/SKILL.md` 加载能力、参数和依赖，Python Executor 调用 `integrations/` 中的实际算法。MCP 为动态筛选、解耦辨识、闭环寻优提供业务工具，以及状态、取消和产物摘要工具。知识检索辅助路由；模型回答不能替代算法证据、字段身份或安全门禁。
 
-## 安装与运行
+数据库保存任务、资产、知识和事件；运行目录保存输入副本、冻结分区、模型、指标与导出产物。只读解释与数值执行分别记录。场景统一定义在 `frontend/src/data/scenes.json`，点位字典 `integrations/standardization/knowledge/point_semantics.csv` 保留原公开论文来源；字段、单位、约束和算法 profile 在 `integrations/standardization/standards/scenarios/`。支持六个场景配置；三维模型目前仅覆盖高炉、脱丁烷塔、工业干燥器，其他场景会明确显示资源不可用。
 
-```bash
+## 目录
+
+```text
+core/                         API、服务、任务、迁移、MD Skill、正式测试
+core/fixtures/regression/     正式测试所需的最小历史证据投影；不是本轮运行结果
+frontend/                     Vue 前端、测试、场景配置与静态资源
+heating_furnace_apc/           Django 配置与入口
+integrations/                 标准化、清洗、辨识算法及功能资源
+scripts/                      安装、开发启动、Python/MCP 启动器
+examples/                     固定合成示例
+acceptance/                   正式测试引用的路由评估工具
+training/skill_router/         冻结路由模型的测试数据与质量门禁
+datasets/                    数据来源元信息、合法获取/转换工具
+tools/                       数据预检工具
+deploy/                      反向代理配置
+.github/workflows/            质量检查与既有标签发布工作流
+```
+
+项目总说明集中于本 README。Skill 的能力正文、引用、工作流以及第三方资源声明是功能或许可文件，需要随源码保留。
+
+## 环境与安装
+
+需要 Python 3.12+、Node.js 20.19+ 或 22.12+ 与 npm，首次安装需要网络。已在 macOS 26.0.1、Python 3.12.14、Node 24.18.0、npm 11.16.0、SQLite 的本机开发环境验证。Python 依赖使用 `requirements.txt` 中的版本范围；前端使用 `frontend/package-lock.json`，重新解析 Python 依赖可能获得不同版本。
+
+在新 clone 的仓库根目录执行：
+
+```sh
 npm run setup
 npm run dev
 ```
 
-`npm run setup` 会在下载后的本地工程中创建 `.venv`、安装 Python 和前端依赖，执行数据库迁移并幂等初始化知识库。浏览器入口为：
+`setup` 会重建本目录 `.venv`、安装 Python 依赖、执行前端 `npm ci`、Django 检查、迁移和幂等知识初始化。不要在需要保留现有虚拟环境的目录直接重跑。找不到 Python 时，可通过 `PROCESSPILOT_BOOTSTRAP_PYTHON` 指定 Python 3.12+ 的可执行文件。
 
-- Agent 中枢：<http://127.0.0.1:5176/agent-review/>
-- 项目驾驶舱：<http://127.0.0.1:5176/overview/>
-- 工业知识库：<http://127.0.0.1:5176/knowledge-base/>
-- 后端 API：<http://127.0.0.1:8000/api/>
+`dev` 统一启动 Django、后台 Worker、MCP Server 和 Vite，并执行迁移与知识初始化。默认入口：
 
-## Agent 大模型
+- 驾驶舱：<http://127.0.0.1:5176/overview/>
+- Agent：<http://127.0.0.1:5176/agent-review/>
+- 数据资产：<http://127.0.0.1:5176/scenario-data/>
+- 知识库：<http://127.0.0.1:5176/knowledge-base/>
+- 后端健康检查：<http://127.0.0.1:8000/api/health/>
+- MCP Streamable HTTP：`http://127.0.0.1:8010/mcp`
 
-复制 `.env.example` 为 `.env` 后，可在服务端配置 DeepSeek；真实密钥不得提交：
+使用 Ctrl+C 停止开发启动器。仅初始化数据库时：
 
-```bash
-DEEPSEEK_API_KEY=your-server-side-key
-DEEPSEEK_MODEL=deepseek-flash
+```sh
+node scripts/python.mjs manage.py migrate --noinput
+node scripts/python.mjs manage.py seed_knowledge_base
 ```
 
-Agent 中枢允许用户选择 Evidence Agent、DeepSeek 或本地 OpenAI 兼容模型。用户版 `/user/` 与工作人员版 `/agent-review/` 共用模型设置：选择 DeepSeek 后可填写自己的 API Key、官方 API 地址和具体模型，并通过“测试并应用”发起一次最小真实请求。Key 不写入 Git、`localStorage` 或聊天记录；测试成功后只在当前页面内存中保留 8 小时有效的加密短时凭据。服务端已配置 `DEEPSEEK_API_KEY` 时，页面 Key 可留空。
+知识种子来自场景配置、Skill 契约和 `core/services/implementation_knowledge.py` 中的实现说明，不加载历史验收报告。仅 `approved` 知识参与检索；反馈不会自动改写生产规则。检索接口为 `GET /api/knowledge/search/?q=...`。
 
-本地模式默认连接 `http://127.0.0.1:11434/v1`，可在页面中修改模型名与回环地址，适用于 Ollama、LM Studio 等服务。浏览器不会读取或保存服务端密钥。运行时先完成场景识别、Capability/Skill 解析和 Executor 执行，再把有限的结构化证据交给模型生成回答；界面展示的是可审计判断摘要，不是模型隐藏思维链。
+## 配置与 LLM
 
-上传数据成功且无需人工映射复核时，前端会按后端识别出的 `scenario_id` 切换项目上下文并打开对应三维场景。后续仓库组织者提供完整算法时，应继续通过现有 Skill catalog、Executor 和 artifact registry 注册；未安装模块保持 `waiting`/`unavailable`，不得用模拟结果冒充执行成功。
+`.env.example` 仅含占位配置。在本地创建 `.env` 或通过环境注入真实值，不提交密钥、数据库或上传文件。例如：
 
-## 验证
+```dotenv
+APC_DB_ENGINE=sqlite
+APC_SQLITE_NAME=apc_agent.db
+PROCESSPILOT_RUNTIME_ROOT=runtime
+DEEPSEEK_API_KEY=<your-own-key>
+DEEPSEEK_MODEL=deepseek-flash
+PROCESSPILOT_CSRF_TRUSTED_ORIGINS=http://127.0.0.1:5176,http://localhost:5176
+```
 
-```bash
-npm run test:backend
-npm run test:frontend
-npm run build
+在线模型可选择 DeepSeek；本地 OpenAI 兼容服务默认使用回环地址 `http://127.0.0.1:11434/v1`，模型名由实际服务决定。页面可测试配置；服务端已有密钥时页面无需再次填写。LLM 负责受约束任务理解、编排建议和基于证据的说明，数值结果由 Python 算法计算。在线失败或引用校验不通过时存在显式回退；Evidence 模式不调用在线模型，不能作为真实 LLM 验证。
+
+端口必须通过终端环境传给 Node 启动器；仅写 `.env` 不保证改变 Node 端口。自定义前端端口时同时配置 CSRF Origin：
+
+```sh
+PROCESSPILOT_BACKEND_PORT=8050 \
+PROCESSPILOT_MCP_PORT=8051 \
+PROCESSPILOT_FRONTEND_PORT=5181 \
+PROCESSPILOT_CSRF_TRUSTED_ORIGINS=http://127.0.0.1:5181,http://localhost:5181 \
+npm run dev
+```
+
+独立启动命令有 `npm run backend`、`npm run worker`、`npm run dev:frontend`。MCP STDIO 使用 `npm run mcp`；HTTP 调试使用 `npm run mcp:http`。不要直接把开发服务或未经认证的 MCP 暴露到公网。
+
+## 使用流程与数据
+
+1. 在数据资产页上传 CSV，或使用页面的仿真生成器。
+2. 检查实际识别场景、字段单位与目标观测；需要人工复核时先处理缺口。
+3. 运行清洗、筛选和建模，查看严格优质段、工程可用段、模型、验证/测试指标及失败原因。
+4. 在 Agent 中绑定对应任务，查询结果，或明确请求离线寻优。
+5. 请求“生成这次图文报告”“导出这次结果”，在交付页下载实际已生成的产物。
+
+`examples/synthetic_debutanizer.csv` 是稳定交付包中的固定合成示例，不代表真实装置验证。仿真生成实现位于 `frontend/src/utils/simulationCsv.js`；页面可生成高炉、脱丁烷塔和工业干燥器输入，也可在根目录执行：
+
+```sh
+node --input-type=module -e "import {writeFileSync} from 'node:fs'; import {buildDebutanizerSimulationCsv} from './frontend/src/utils/simulationCsv.js'; writeFileSync('synthetic.csv', buildDebutanizerSimulationCsv().csv);"
+```
+
+正式测试还保留既有合成干燥器夹具和归一化字段拒绝夹具；它们不是新工厂数据。`core/fixtures/regression/` 是既有记录中被断言使用的字段投影，保留来源关系、拒绝状态和哈希，不证明本次重新取得或运行了私有源文件。冻结路由模型的质量门禁也不代表生产准确率。
+
+高炉示例 `frontend/public/datasets/blast_furnace_real_720h.csv` 来自 Vladimir Trofimov 的 [Mendeley 数据集](https://data.mendeley.com/datasets/6d7jbc7tb5/1)，DOI `10.17632/6d7jbc7tb5.1`，按 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) 保留归属。它是 720 小时衍生切片：字段重命名，化验值仅向后对齐，容差 3 小时，保留缺目标行；原始工作簿未随本次发布。转换元信息及脚本位于 `datasets/real_candidates/blast_furnace_mendeley/`，需要重建时先从原来源取得对应工作簿，再运行转换脚本的 `--help` 查看参数。
+
+Fortuna 脱丁烷塔公开镜像没有明确数据再分发许可，本仓库不发布该原始基准。来源为 [工业脱丁烷塔软测量镜像](https://github.com/Ujjwal-1267/industrial-debutanizer-soft-sensor)，参考 DOI `10.1016/j.conengprac.2004.04.013`。合法获取后可使用 `datasets/public/debutanizer/prepare_dataset.py`；派生时间轴只保存样本顺序，归一化数据缺少可信逆缩放元信息时不能当物理量输入，原说明中的 8 样本目标平移也必须保留。DAISY、LostRunes 等候选的字段/许可不足不会因测试夹具存在而变成完整数据验收；未随发布分发其私人原始文件。
+
+## 测试与构建
+
+```sh
+npm test
+```
+
+根命令依次执行全部 `core` 后端测试、前端单元测试、lint 和构建；无需再把这些子步骤重复计作另一轮验证。单独调试可使用 `npm run test:backend`、`npm run test:frontend`、`npm --prefix frontend run lint`、`npm run build`。额外浏览器测试：
+
+```sh
+npm --prefix frontend exec playwright install chromium
 npm --prefix frontend run test:e2e
 ```
 
-运行产物清理默认只预览；确认清单后再执行：
+数据库迁移一致性检查：`node scripts/python.mjs manage.py makemigrations --check --dry-run`。测试中因合法真实数据或可信物理元数据不足而跳过的项目，不算作通过。测试数据库与运行输出应使用独立路径，避免连接业务实例。
 
-```bash
+## 资产保留与部署边界
+
+资产“删除”是归档：列表隐藏，按资产 ID 查询仍能看到 archived；既有任务引用的源副本保留，不等于物理抹除。运行数据清理默认只预览：
+
+```sh
 npm run runtime:prune -- --keep 100 --days 30
-npm run runtime:prune -- --keep 100 --days 30 --apply
 ```
 
-高炉演示可直接上传 `frontend/public/datasets/blast_furnace_real_720h.csv`；工业干燥器可上传 `演示数据/工业干燥器_10秒_867条_3输入3输出_合成验收数据.csv`。后者是合成验收数据，不代表真实工厂数据。
+确认候选后才添加 `--apply`。先备份数据库及需要保留的运行产物，最新流水线结果按工具规则保留。
 
-脱丁烷塔数据的上游公开副本没有明确再分发许可证，因此仓库仅保留适配代码和来源说明，不重新发布数据文件。取得合法数据副本后，按 `datasets/public/debutanizer/README.md` 操作。
+仓库保留 Docker、Nginx 和 CI 基线。生产部署需同源 HTTPS、独立认证与权限、持久数据库和运行目录、独立 Worker、备份和限流。相关环境变量包括 `PROCESSPILOT_DEBUG=0`、`PROCESSPILOT_REQUIRE_AUTH=1`、`PROCESSPILOT_SECRET_KEY=<random-secret>`、`PROCESSPILOT_ALLOWED_HOSTS`、`PROCESSPILOT_SECURE_SSL_REDIRECT=1`、`PROCESSPILOT_INLINE_WORKER=0`。MySQL 使用 `APC_DB_ENGINE=mysql` 及 `APC_DB_NAME/USER/PASSWORD/HOST/PORT`；Compose 还需 `APC_DB_ROOT_PASSWORD`。凭据由部署环境注入。可用 `manage.py check --deploy` 辅助检查，但它不构成生产准入。既有 `v*` 标签工作流会发布容器镜像；普通 main 推送只触发质量检查。
 
-更完整的说明见 [使用说明.md](使用说明.md)，知识库设计见 [docs/knowledge_base.md](docs/knowledge_base.md)，三个正式场景的算法配置见 [docs/scenario_algorithm_profiles.md](docs/scenario_algorithm_profiles.md)，上线评审要求见 [docs/deployment_acceptance.md](docs/deployment_acceptance.md)，生产安全配置见 [docs/production_deployment.md](docs/production_deployment.md)。
+## 已知限制与许可
 
-## MCP 工业建模服务
+工程可安装、可交接不等于模型质量全面达标。筛选与寻优尚未证明存在普遍收益，真实工业场景验证范围有限，部分固定案例模型质量仍不足；在线 LLM 存在显式回退。当前没有现场控制投运或生产控制准入证明。Linux、Windows、容器部署和多租户环境不属于本机验证结论。
 
-项目提供一个 `processpilot-modeling` MCP Server，将现有真实算法统一暴露为三项业务工具：
-
-- `run_dynamic_selection`：高信噪比动态段筛选与质量评分；
-- `run_decoupling_identification`：时滞补偿、共线性处理和 AR/ARX 辨识验证；
-- `run_closed_loop_optimization`：离线预处理—建模—验证反馈寻优。
-
-另提供任务状态、取消和产物摘要工具。所有工具固定为 `advisory_only`，不会向 PLC/DCS 下发控制参数。
-
-初始化数据库后，通过 STDIO 启动：
-
-```bash
-npm run setup
-npm run mcp
-```
-
-日常开发只需执行 `npm run dev`，启动器会自动完成迁移与知识库初始化，并统一管理 Django、Runtime Worker、MCP Server 和 Web 前端。Agent 的动态优选、解耦辨识与闭环寻优执行请求会由 Django 通过 MCP 调用；只读解释仍直接读取已有证据。
-
-本机 Streamable HTTP 调试：
-
-```bash
-npm run mcp:http
-```
-
-默认地址为 `http://127.0.0.1:8010/mcp`。远程部署前必须补充认证、权限和限流，不应直接设置公网监听。客户端配置与调用流程见 [docs/mcp_usage.md](docs/mcp_usage.md)，完整架构、工具契约和验收门槛见 [docs/mcp_industrial_modeling_design.md](docs/mcp_industrial_modeling_design.md)。
-
-场景清单统一维护在 `frontend/src/data/scenes.json`；新增场景先登记 ID、别名和三维资产状态，再添加标准化模板。生产后台任务使用数据库队列，开发模式会自动唤醒内置 Worker，生产模式应运行独立的 `npm run worker`。
-
-## 文档导航
-
-数据需求、当前验收与架构说明统一见[项目文档入口](docs/README.md)。
-
-### CI 与本地真实来源复验
-
-`python manage.py test core` 在干净 checkout 中运行：高炉使用仓库内可分发数据实际执行；非公开候选验证已提交的来源记录和拒绝状态，不冒充重新读取原始数据。
-
-取得合法原文件并按记录放入本地 `runtime/data_validation/` 后，运行严格来源复验：
-
-```bash
-python tools/validate_local_real_sources.py
-```
-
-该命令核验原文件哈希、烟草提取及脱丁烷/DAISY字段拒绝条件；缺文件或哈希不符直接失败。公共 CI 不获取或发布许可未核实的原始数据。两场景真实 Pipeline 仍是 UNAVAILABLE。
+仓库未声明统一的项目开源许可证，本次发布不新增或改变授权。第三方数据、依赖和模型各自适用原许可。高炉数据归属与变更见上文；3D 资源归属、干燥器衍生模型许可及语义节点约束保留在 [3D 资源声明](frontend/public/models/README.md)。Draco 解码器的 [Apache-2.0 许可](frontend/public/draco/LICENSE) 随资源保留。项目自有冻结字段/路由模型仅用于辅助识别，不能替代测点物理身份校验。不得把公开可访问的工业数据自动视为可再分发数据。

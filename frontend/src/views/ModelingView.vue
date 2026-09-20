@@ -1,4 +1,6 @@
 <script setup>
+import { selectedRunId } from '../utils/runBinding'
+import { evidenceMetric } from '../utils/evidenceMetric'
 import { computed, nextTick, ref } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -61,7 +63,7 @@ const variableActions = computed(() => {
 })
 
 const testDiagnostic = computed(() => liveModel.value?.diagnostics?.test ?? {})
-function formatMetric(value) { return value == null ? '—' : Number(value).toFixed(4) }
+function formatMetric(value) { return evidenceMetric(value, 4) }
 const plot = computed(() => {
   const rows = (liveModel.value?.prediction_preview ?? []).filter(row => Number.isFinite(row.y_true) && Number.isFinite(row.y_pred))
   if (!rows.length) return { points: 0 }
@@ -80,10 +82,11 @@ async function trainModel() {
     const latest = latestRun.value
     if (!latest) throw new Error('当前场景尚无运行数据，请先在“数据资产”页面上传CSV。')
     const snapshot = await rerunPipeline(latest.run_id, { maxLag: 60 })
+    if (selectedRunId() !== latest.run_id) return
     latestRun.value = snapshot
     announcePipelineUpdate(snapshot)
     const metrics = snapshot.results?.modeling?.metrics?.test ?? {}
-    emit('notify', { tone: snapshot.results?.review?.passed ? 'success' : 'warning', title: `${snapshot.results?.modeling?.config?.family ?? '候选'} 训练完成`, message: `独立测试 R² ${Number(metrics.r2 ?? 0).toFixed(3)}，RMSE ${Number(metrics.rmse ?? 0).toFixed(3)}。` })
+    emit('notify', { tone: snapshot.results?.review?.passed ? 'success' : 'warning', title: `${snapshot.results?.modeling?.config?.family ?? '候选'} 训练完成`, message: `独立测试 R² ${evidenceMetric(metrics.r2, 3)}，RMSE ${evidenceMetric(metrics.rmse, 3)}。` })
   } catch (error) {
     emit('notify', { tone: 'warning', title: '模型训练失败', message: error.message })
   } finally {
@@ -129,7 +132,7 @@ async function showFrequencyAnalysis() {
       <div class="section-heading compact"><div><span class="section-kicker">当前任务真实产物</span><h2>模型版本与候选轮次对比</h2></div><StatusPill :tone="modelComparisons.length ? 'success' : 'neutral'">{{ modelComparisons.length }} 个记录</StatusPill></div>
       <div v-if="modelComparisons.length" class="table-wrap compact-table-wrap">
         <table class="data-table"><thead><tr><th>轮次/版本</th><th>验证 R²</th><th>验证 RMSE</th><th>验证 MAE</th><th>结论</th></tr></thead><tbody>
-          <tr v-for="(row, index) in modelComparisons" :key="row.round ?? row.iteration ?? index"><td><strong>{{ row.round ?? row.iteration ?? index + 1 }}</strong></td><td>{{ Number(row.r2 ?? row.score ?? 0).toFixed(3) }}</td><td>{{ Number(row.rmse ?? 0).toFixed(3) }}</td><td>{{ Number(row.mae ?? 0).toFixed(3) }}</td><td><StatusPill :tone="row.selected ? 'success' : 'neutral'">{{ row.selected ? '验证选中' : '候选' }}</StatusPill></td></tr>
+          <tr v-for="(row, index) in modelComparisons" :key="row.round ?? row.iteration ?? index"><td><strong>{{ row.round ?? row.iteration ?? index + 1 }}</strong></td><td>{{ evidenceMetric(row.r2, 3) }}</td><td>{{ evidenceMetric(row.rmse, 3) }}</td><td>{{ evidenceMetric(row.mae, 3) }}</td><td><StatusPill :tone="row.selected ? 'success' : 'neutral'">{{ row.selected ? '验证选中' : '候选' }}</StatusPill></td></tr>
         </tbody></table>
       </div>
       <p v-else class="empty-state">尚无真实模型记录，请先上传 CSV 并运行辨识流水线。</p>
@@ -138,8 +141,8 @@ async function showFrequencyAnalysis() {
     <section class="metric-grid five-col">
       <article class="metric-card compact-card"><span class="metric-label">输入变量</span><div class="metric-value">{{ liveModel?.input_cols?.length ?? '—' }} → {{ liveModel?.selected_inputs?.length ?? '—' }}</div><p>共线性筛选结果</p></article>
       <article class="metric-card compact-card"><span class="metric-label">最大辨识时滞</span><div class="metric-value">{{ liveModel?.config?.max_lag ?? '—' }} <small>点</small></div><p>真实任务搜索范围</p></article>
-      <article class="metric-card compact-card accent-blue"><span class="metric-label">独立测试 R²</span><div class="metric-value">{{ liveMetrics ? Number(liveMetrics.r2).toFixed(3) : '—' }}</div><p>测试集真实指标</p></article>
-      <article class="metric-card compact-card"><span class="metric-label">RMSE / MAE</span><div class="metric-value metric-value-text">{{ liveMetrics ? `${Number(liveMetrics.rmse).toFixed(3)} / ${Number(liveMetrics.mae).toFixed(3)}` : '—' }}</div><p>测试集误差</p></article>
+      <article class="metric-card compact-card accent-blue"><span class="metric-label">独立测试 R²</span><div class="metric-value">{{ liveMetrics ? evidenceMetric(liveMetrics.r2, 3) : '—' }}</div><p>测试集真实指标</p></article>
+      <article class="metric-card compact-card"><span class="metric-label">RMSE / MAE</span><div class="metric-value metric-value-text">{{ liveMetrics ? `${evidenceMetric(liveMetrics.rmse, 3)} / ${evidenceMetric(liveMetrics.mae, 3)}` : '—' }}</div><p>测试集误差</p></article>
       <article class="metric-card compact-card"><span class="metric-label">候选模型</span><div class="metric-value metric-value-text">{{ modelType }}</div><p>{{ liveModel?.output_col ?? '等待运行' }}</p></article>
     </section>
 
@@ -218,17 +221,17 @@ async function showFrequencyAnalysis() {
           <div><span>自由仿真 R²</span><strong>{{ formatMetric(testDiagnostic.free_simulation?.metrics?.r2) }}</strong></div>
         </div>
         <div class="model-result-row">
-          <div><span>训练 R²</span><strong>{{ liveModel ? Number(liveModel.metrics?.train?.r2 ?? 0).toFixed(3) : '—' }}</strong><small>训练集</small></div>
-          <div><span>测试 R²</span><strong>{{ liveMetrics ? Number(liveMetrics.r2).toFixed(3) : '—' }}</strong><small>独立测试集</small></div>
-          <div><span>RMSE</span><strong>{{ liveMetrics ? Number(liveMetrics.rmse).toFixed(3) : '—' }}</strong><small>真实输出单位</small></div>
-          <div><span>MAE</span><strong>{{ liveMetrics ? Number(liveMetrics.mae).toFixed(3) : '—' }}</strong><small>真实输出单位</small></div>
+          <div><span>训练 R²</span><strong>{{ liveModel ? evidenceMetric(liveModel.metrics?.train?.r2, 3) : '—' }}</strong><small>训练集</small></div>
+          <div><span>测试 R²</span><strong>{{ liveMetrics ? evidenceMetric(liveMetrics.r2, 3) : '—' }}</strong><small>独立测试集</small></div>
+          <div><span>RMSE</span><strong>{{ liveMetrics ? evidenceMetric(liveMetrics.rmse, 3) : '—' }}</strong><small>真实输出单位</small></div>
+          <div><span>MAE</span><strong>{{ liveMetrics ? evidenceMetric(liveMetrics.mae, 3) : '—' }}</strong><small>真实输出单位</small></div>
           <StatusPill :tone="latestRun?.results?.review?.passed ? 'success' : 'warning'"><AppIcon :name="latestRun?.results?.review?.passed ? 'check' : 'alert'" :size="14" /> {{ latestRun?.results?.review?.conclusion ?? '等待Agent评审' }}</StatusPill>
         </div>
       </section>
     </div>
 
     <div class="model-footer-card">
-      <div><span class="model-ready-icon"><AppIcon name="check" /></span><p><strong>任务 {{ latestRun?.run_id ?? '—' }} 的 {{ modelType }} 候选已完成评估</strong><small>测试 R² {{ liveMetrics ? Number(liveMetrics.r2).toFixed(3) : '—' }}，评审结论：{{ latestRun?.results?.review?.conclusion ?? '等待评审' }}。</small></p></div>
+      <div><span class="model-ready-icon"><AppIcon name="check" /></span><p><strong>任务 {{ latestRun?.run_id ?? '—' }} 的 {{ modelType }} 候选{{ liveMetrics ? '已完成评估' : '尚未完成评估' }}</strong><small>测试 R² {{ liveMetrics ? evidenceMetric(liveMetrics.r2, 3) : '—' }}，评审结论：{{ latestRun?.results?.review?.conclusion ?? '等待评审' }}。</small></p></div>
       <button class="btn btn-primary" type="button" @click="emit('navigate', '/closed-loop-optimization/')">进入闭环寻优 <AppIcon name="arrow" /></button>
     </div>
     </div>

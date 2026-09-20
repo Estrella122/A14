@@ -1,0 +1,241 @@
+{
+  "trained_router": {
+    "case_count": 100,
+    "exact_skill_set_accuracy": 0.97,
+    "top1_accuracy": 0.99,
+    "micro_precision": 0.9696969696969697,
+    "micro_recall": 1.0,
+    "micro_f1": 0.9846153846153847,
+    "macro_f1": 0.987037037037037,
+    "in_scope_coverage": 1.0,
+    "accepted_exact_accuracy": 0.96875,
+    "out_of_scope_rejection": 1.0,
+    "mean_direct_skill_count": 0.99,
+    "mean_latency_ms": 0.3174824931193143,
+    "per_skill": [
+      {
+        "skill_id": "csv_asset_manager",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "industrial_simulation_generator",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "dataset_scenario_profiler",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "semantic_field_unit_standardizer",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "time_axis_alignment_resampler",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "missing_anomaly_cleaner",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "steady_transient_state_detector",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "signal_noise_ratio_estimator",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "high_snr_dynamic_segment_extractor",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "segment_quality_scorer_ranker",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "time_delay_estimator_compensator",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "collinearity_detector_reducer",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "modeling_dataset_assembler",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "arx_structure_order_selector",
+        "support": 4,
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.8888888888888888,
+        "false_positives": 1,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "system_identification_trainer",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "multi_model_benchmark",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "model_diagnostics_evaluator",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "closed_loop_preprocessing_optimizer",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "engineering_result_interpreter",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "engineering_visualization_builder",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "expert_report_writer",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "final_artifact_exporter",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "experiment_tracker_comparator",
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      {
+        "skill_id": "evidence_audit_reproducer",
+        "support": 4,
+        "precision": 0.6666666666666666,
+        "recall": 1.0,
+        "f1": 0.8,
+        "false_positives": 2,
+        "false_negatives": 0
+      }
+    ]
+  },
+  "model_sha256": "8eee4bd11c52ee3ad3004f223e54a435eb27e0a7623ce1dbb587ed99750b1987",
+  "test_sha256": "c3210ed4e9dcadc406203f121cb5dd4fabd3d26d6411499d4a371ad566f32b54",
+  "limitations": [
+    "Small authored test set; no independent human labeling or real traffic.",
+    "Hybrid router includes explicit-action guards and existing expert evidence contracts.",
+    "Do not tune on this test set; add a fresh held-out set after future changes."
+  ]
+}

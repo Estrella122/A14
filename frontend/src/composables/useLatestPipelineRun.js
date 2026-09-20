@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, toValue } from 'vue'
-import { getLatestPipelineRun } from '../api/pipeline'
+import { getLatestPipelineRun, getPipelineRun } from '../api/pipeline'
+import { selectedRunId, selectRun, createRunResponseGuard } from '../utils/runBinding'
 
 export function getRunScenarioId(run) {
   const trace = run?.runtime_trace ?? {}
@@ -10,66 +11,58 @@ export function getRunScenarioId(run) {
 export function useLatestPipelineRun(expectedScenarioId = null) {
   const rawLatestRun = ref(null)
   const pipelineError = ref('')
+  const guard = createRunResponseGuard()
   let refreshTimer
-
+  let disposed = false
   const latestRun = computed({
     get() {
       const run = rawLatestRun.value
-      if (!toValue(expectedScenarioId)) return run
-      const expected = toValue(expectedScenarioId)
-      if (!run) return null
+      if (selectedRunId() || !toValue(expectedScenarioId)) return run
       const actual = getRunScenarioId(run)
-      return !actual || actual === 'auto' || actual === expected ? run : null
+      return !actual || actual === 'auto' || actual === toValue(expectedScenarioId) ? run : null
     },
     set(run) { rawLatestRun.value = run },
   })
-
   async function refreshPipeline() {
+    const id = selectedRunId()
+    const token = guard.next()
     try {
-      rawLatestRun.value = await getLatestPipelineRun()
+      const run = id ? await getPipelineRun(id) : await getLatestPipelineRun()
+      if (disposed || !guard.current(token) || selectedRunId() !== id) return
+      if (id && run?.run_id !== id) throw new Error('返回任务与所选任务不一致')
+      rawLatestRun.value = run
       pipelineError.value = ''
+      if (!id && run) selectRun(run.run_id, { replace: true })
     } catch (error) {
-      pipelineError.value = error.message
+      if (!guard.current(token) || disposed) return
+      rawLatestRun.value = null
+      pipelineError.value = `所选任务不可用：${error.message}。未切换到其他任务。`
     }
   }
-
   function scheduleRefresh() {
     window.clearTimeout(refreshTimer)
-    const running = ['queued', 'running'].includes(rawLatestRun.value?.status)
-    const delay = document.hidden ? 30_000 : running ? 2_000 : 15_000
-    refreshTimer = window.setTimeout(async () => {
-      await refreshPipeline()
-      scheduleRefresh()
-    }, delay)
+    if (disposed) return
+    const delay = document.hidden ? 30000 : ['queued', 'running'].includes(rawLatestRun.value?.status) ? 2000 : 15000
+    refreshTimer = window.setTimeout(async () => { await refreshPipeline(); scheduleRefresh() }, delay)
   }
-
-  function handleVisibility() {
-    if (!document.hidden) refreshPipeline()
-    scheduleRefresh()
+  function handleSelection() { guard.invalidate(); rawLatestRun.value = null; refreshPipeline() }
+  function handleUpdate(event) {
+    if (event.detail?.run_id === selectedRunId()) { guard.invalidate(); rawLatestRun.value = event.detail }
   }
-
-  function handleUpdate(event) { rawLatestRun.value = event.detail }
-  function handleStorage(event) {
-    if (event.key !== 'processpilot-latest-run' || !event.newValue) return
-    try { rawLatestRun.value = JSON.parse(event.newValue).snapshot } catch { refreshPipeline() }
-  }
-
+  function handleVisibility() { if (!document.hidden) refreshPipeline(); scheduleRefresh() }
   onMounted(() => {
-    try {
-      const cached = JSON.parse(window.localStorage.getItem('processpilot-latest-run') || 'null')
-      if (cached?.snapshot) rawLatestRun.value = cached.snapshot
-    } catch { /* The API refresh below remains authoritative. */ }
     refreshPipeline().finally(scheduleRefresh)
     window.addEventListener('processpilot:pipeline-updated', handleUpdate)
-    window.addEventListener('storage', handleStorage)
+    window.addEventListener('processpilot:run-selected', handleSelection)
+    window.addEventListener('popstate', handleSelection)
     document.addEventListener('visibilitychange', handleVisibility)
   })
   onBeforeUnmount(() => {
+    disposed = true; guard.invalidate(); window.clearTimeout(refreshTimer)
     window.removeEventListener('processpilot:pipeline-updated', handleUpdate)
-    window.removeEventListener('storage', handleStorage)
+    window.removeEventListener('processpilot:run-selected', handleSelection)
+    window.removeEventListener('popstate', handleSelection)
     document.removeEventListener('visibilitychange', handleVisibility)
-    window.clearTimeout(refreshTimer)
   })
-
   return { latestRun, rawLatestRun, pipelineError, refreshPipeline }
 }

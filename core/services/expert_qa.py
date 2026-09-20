@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import re
 from statistics import median
+from .evidence_values import number, final_result_view
 from typing import Any
 
 from core.skills.answer_intent import resolve_answer_intent
@@ -21,8 +22,8 @@ EXPERT_TOPICS = [
     {"key": "collinearity", "name": "共线性与变量保留", "terms": ("共线", "vif", "条件数", "冗余变量", "保留变量")},
     {"key": "causality", "name": "相关性与因果边界", "terms": ("因果", "相关不等于因果", "外生变量", "动态关系")},
     {"key": "generalization", "name": "过拟合与泛化", "terms": ("过拟合", "泛化", "交叉验证", "验证集", "训练集", "测试集", "训练测试", "训练/测试", "验证基线", "持续值基线", "基线对比")},
-    {"key": "order", "name": "模型结构与阶次", "terms": ("阶次", "aic", "bic", "参数量", "结构选择", "模型族", "arx", "自回归模型", "外部输入", "拟合输入")},
-    {"key": "optimization", "name": "寻优目标与候选比较", "terms": ("目标函数", "约束", "收敛", "停止条件", "局部最优", "寻优策略", "闭环寻优", "最佳候选", "最优候选", "最优模型", "各轮候选", "候选结果", "数据覆盖率", "综合得分", "目标权重", "权重敏感性", "敏感性分析")},
+    {"key": "order", "name": "模型结构与阶次", "terms": ("阶次", "aic", "bic", "参数量", "结构选择", "模型族", "arx", "firx", "自回归模型", "外部输入", "拟合输入")},
+    {"key": "optimization", "name": "寻优目标与候选比较", "terms": ("寻优", "目标函数", "约束", "收敛", "停止条件", "局部最优", "寻优策略", "闭环寻优", "最佳参数", "最优参数", "最佳候选", "最优候选", "最优模型", "各轮候选", "候选结果", "数据覆盖率", "综合得分", "目标权重", "权重敏感性", "敏感性分析")},
     {"key": "reproducibility", "name": "实验复现与审计", "terms": ("复现", "随机种子", "审计", "追溯", "版本", "Skill执行证据", "skill执行证据", "Skill证据", "skill证据")},
     {"key": "deployment", "name": "上线安全边界", "terms": ("上线", "投运", "生产使用", "安全边界", "联锁", "验收", "可验收", "评审", "评审结论", "离线候选", "是否可靠", "可靠")},
     {"key": "transfer", "name": "跨设备与跨场景迁移", "terms": ("迁移", "泛化到", "其他设备", "其他塔", "其他炉", "跨场景")},
@@ -94,12 +95,14 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message
     values = [row["snr_db"] for row in rows]
     best = ranked[0] if ranked else {}
     kind = answer_intent.get("kind", "INTERPRETATION_QUERY")
-    threshold = float(snr_meta.get("threshold_db") or 10)
+    threshold = float(snr_meta.get("threshold_db", 10))
     method = snr_meta.get("method") or "robust_second_difference_white_noise_proxy"
     method_cn = "稳健二阶差分白噪声代理估计"
     window = f"{best.get('start_time', '—')} 至 {best.get('end_time', '—')}"
     field = best.get("variable") or "—"
-    if kind == "VALUE_QUERY":
+    if re.search(r"是什么|什么意思|基本概念", message):
+        answer = "信噪比（SNR）是信号功率与噪声功率的比值，通常表示为10 log10(P信号/P噪声)，单位dB。较高值表示信号相对噪声更强；具体估计取决于方法和假设，不能据此推断当前数据的数值或模型质量。"
+    elif kind == "VALUE_QUERY":
         if values:
             answer = (f"当前任务保存了 {len(values)} 个有效窗口—字段 SNR："
                       f"中位数 {median(values):.2f} dB，范围 {min(values):.2f}–{max(values):.2f} dB。"
@@ -115,6 +118,8 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message
             "噪声功率 = σ̂²，信号功率 = max(Var(x) − σ̂², 10⁻¹²)，"
             "SNR = 10 log₁₀(信号功率 / 噪声功率)。"
             "这是本工程的实际实现，不是从教科书套用的通用说法。")
+    elif kind == "CAUSE_QUERY" and re.search(r"动态段|动态优选", message):
+        answer = "严格段与实际训练窗口是不同的接纳口径，是否允许回退由本次有效策略决定。"
     elif kind == "CAUSE_QUERY":
         answer = (f"之所以用{method_cn}，是因为二阶差分能在局部平滑前提下压低慢趋势，"
                   "MAD 又比普通标准差更不容被少量尖峰拉偏。"
@@ -135,15 +140,21 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message
         answer = (f"建议保留高于 {threshold:g} dB 的窗口作为候选，再用完整性、异常率、输出响应和重叠去重共同复核。"
                   "下一步应做阈值敏感性对比，并用空载或稳态段估计仪表噪声基线。")
     else:
-        answer = (f"SNR 高表示在当前{method_cn}口径下，估计的有效动态方差相对局部噪声更大。"
-                  f"本任务用 {threshold:g} dB 作为窗口筛选阈值。"
+        answer = (f"SNR 高表示在当前{method_cn}口径下，估计的有效动态方差相对局部噪声更大。" +
+                  (f"本任务用 {threshold:g} dB 作为窗口筛选阈值。" if snr_meta else "当前未保存已执行的SNR阈值。") +
                   "它不直接说明设备健康、模型可靠或工况正常，这些还要结合语义、时滞、残差和工艺证据。")
 
-    if "动态段" in message or "动态优选" in message:
+    if ("动态段" in message or "动态优选" in message) and not cleaning.get("selection_metrics") and not results.get("selection") and 'selected_segment_count' not in cleaning:
+        answer += " 尚未计算分段或缺少本次分段产物，不能把缺失证据写成严格段为0。"
+    elif "动态段" in message or "动态优选" in message:
         strict = int(cleaning.get("strict_selected_segment_count", cleaning.get("selected_segment_count")) or 0)
         accepted = int(cleaning.get("selected_segment_count") or 0)
         rows_used = int(cleaning.get("modeling_row_count") or 0)
-        answer += f" 当前严格达标动态段 {strict} 个、工程接纳段 {accepted} 个，最终建模数据 {rows_used} 行。"
+        metrics = cleaning.get("selection_metrics", {})
+        answer += (f" 当前严格达标动态段 {strict} 个、策略接纳段 {accepted} 个，最终建模数据 {rows_used} 行。"
+                   f"接纳模式：{metrics.get('acceptance_mode', cleaning.get('selection_acceptance_mode', '未记录'))}；"
+                   f"实际窗口数：{metrics.get('actual_selected_window_count', '未记录')}；"
+                   f"原因：{metrics.get('selection_reason', '缺少本次回执')}。可用候选不等于生产准入。")
     if re.search(r"仪表健康|设备健康|健康", message):
         answer += " 该代理值不能直接证明仪表或设备健康；健康判断还需仪表标定、漂移、故障码和工艺状态证据。"
 
@@ -153,7 +164,7 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message
         "cards": [
             {"label": "回答方式", "value": kind},
             {"label": "有效估计", "value": len(values)},
-            {"label": "阈值", "value": f"{threshold:g} dB"},
+            {"label": "阈值", "value": f"{threshold:g} dB" if snr_meta else "未记录"},
             {"label": "证据", "value": provenance or "未找到"},
         ],
         "suggestions": {
@@ -166,7 +177,32 @@ def _snr_answer(snapshot: dict[str, Any], answer_intent: dict[str, Any], message
 
 def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_intent: dict[str, Any] | None = None,
                            topic_hints: list[str] | None = None) -> dict[str, Any] | None:
+    snapshot = final_result_view(snapshot)
     topics = _matches(message)
+    if re.search(r'firx|最终.*(?:输入|变量)|实际.*(?:输入|变量)|(?:输入|变量).*实际.*最终', message, re.I):
+        modeling = snapshot.get('results', {}).get('modeling', {})
+        state = modeling.get('fitted_state') or {}
+        if not state and snapshot.get('artifacts', {}).get('fitted_state_json'):
+            try:
+                import json
+                from .pipeline import resolve_artifact
+                path, _ = resolve_artifact(snapshot['run_id'], 'fitted_state_json')
+                state = json.loads(path.read_text())
+            except (OSError, ValueError):
+                state = {}
+        if state:
+            answer = f"实际 fitted_state 模型族为 {state['family']}，输入为：{'、'.join(state.get('inputs', [])) or '无外部输入'}。"
+        else:
+            from .algorithm_policy import snapshot_policy
+            planned = snapshot_policy(snapshot)['effective_parameters']['decoupling']['model_families']
+            answer = f"当前没有可核验的 fitted_state；当前配置计划使用 {planned}，不能声称本次已经拟合。"
+        observations = snapshot.get('results', {}).get('cleaning', {}).get('selection_metrics', {}).get('target_observation_count')
+        if observations is not None:
+            answer += f'当前建模数据保留真实 target 观测 {observations} 个；缺失 target 不作为标签补齐。'
+        return {'topic': 'order', 'topics': ['order'], 'topic_name': '实际模型与输入',
+                'answer_intent': answer_intent or resolve_answer_intent(message), 'answer': answer,
+                'cards': [], 'suggestions': ['查看当前模型产物及目标观测数']}
+
     if "snr" in (topic_hints or []) and topics in ([], ["deployment"]):
         topics = ["snr"]
     topics = list(dict.fromkeys(topics + list(topic_hints or [])))
@@ -272,6 +308,7 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         if model_config and test.get("aic") is not None and test.get("bic") is not None else "当前任务未保存完整的 ARX 阶次配置或 AIC/BIC，无法证明当前结构优于相邻阶次；需要补充候选阶次表、验证误差和残差白度。"
     )
     optimization_answer = (
+        f"胜者实际参数：{optimization.get('best_parameters', '未记录')}。"
         f"闭环寻优实际完成 {len(completed_rounds)} 轮候选搜索（{len(completed_rounds)} 组候选策略），目标为“{optimization.get('objective') or 'R²、误差和数据覆盖率的加权综合得分'}”。"
         f"第 {best_round or '—'} 轮得分 {float(optimization.get('best_score') or 0):.3f}、R²={float(best_iteration.get('r2') or optimization.get('best_metrics', {}).get('r2') or 0):.3f}、RMSE={float(best_iteration.get('rmse') or optimization.get('best_metrics', {}).get('rmse') or 0):.3f}、覆盖率 {best_coverage:.2%}，因此按当前目标被选为最佳候选。"
         f"前三名为：{comparison}。" + (f"它仅比次优候选高 {score_margin:.3f} 分；" if score_margin is not None else "当前快照未保存可比较的逐轮得分；")
@@ -332,7 +369,7 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
     delivery_answer = (
         f"当前任务状态为 {snapshot.get('status', '未记录')}；已完成 {len(completed_stages)}/{len(stage_states)} 个阶段："
         f"{'、'.join(completed_stages) or '无'}。"
-        + (f"未完成项：{'、'.join(unfinished_stages)}。" if unfinished_stages else "所有记录阶段均已跑通。")
+        + (f"未完成项：{'、'.join(unfinished_stages)}。" if unfinished_stages else "所有记录阶段均已跑通。" if stage_states else "没有预期阶段清单，不能判定流程完成。")
         + f"当前保存 {len(snapshot.get('artifacts') or {})} 类流水线产物，分析报告状态为“{results.get('report', {}).get('summary') or results.get('review', {}).get('conclusion') or '未记录'}”。"
         + "阶段执行完成不等于模型通过工程评审；正式交付还应绑定输入与产物校验和、代码/依赖版本及审批记录。"
     )
@@ -369,7 +406,7 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
         snr = cleaning.get("snr", {})
         answers["snr"] = (
             f"当前训练分区达标窗口 {selected_segments} 个，候选训练数据 {selected_rows} 行。"
-            "窗口SNR是稳健二阶差分估计的白噪声代理值，阈值10 dB；信号功率和噪声功率保存在snr_estimates.csv。"
+            f"窗口SNR是稳健二阶差分估计的白噪声代理值，实际阈值{snr.get('threshold_db', '未记录')} dB；信号功率和噪声功率保存在snr_estimates.csv。"
             "该方法假设局部信号平滑且噪声近似白噪声，未做仪表标定，不提供伪造置信等级。"
             "窗口重叠，不能把达标窗口数当作独立激励次数。")
         final_vif = recommendations.get("final_vif") or []
@@ -415,6 +452,14 @@ def answer_expert_question(message: str, snapshot: dict[str, Any], *, answer_int
             f" 当前评审：{results.get('review', {}).get('conclusion')}；"
             f"阻断原因：{results.get('review', {}).get('blockers')}。"
         )
+    if not completed_rounds:
+        answers["optimization"] = "当前任务未保存闭环寻优候选轮次，没有已完成的搜索证据，不能判断上次是否改善或为什么没有改善。需要该次搜索的候选参数、验证指标、失败原因与停止记录；本次解释没有启动新搜索。"
+    if not cleaning.get('selection_metrics') and not results.get('selection') and 'selected_segment_count' not in cleaning:
+        for key in ('snr', 'excitation', 'degraded_modeling'):
+            answers[key] = '尚未计算分段或缺少本次分段产物，不能推断严格段为0或已使用候选兜底。动态辨识需要可信的输入激励与输出响应。'
+    if number(test.get('r2')) is None:
+        for key in ('generalization', 'residual'):
+            answers[key] = '当前未保存测试集指标或残差统计量，或已有值不可定义；可能尚未计算或执行失败；不能给出R²、泛化改善或残差通过结论。'
     names = {item["key"]: item["name"] for item in EXPERT_TOPICS}
     selected_topics = topics
     if "degraded_modeling" in selected_topics:

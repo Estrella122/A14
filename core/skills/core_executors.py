@@ -6,6 +6,7 @@ import math
 import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from core.services.algorithm_policy import snapshot_policy, parameter_view
 from time import perf_counter
 from typing import Any
 
@@ -139,12 +140,13 @@ class CleaningExecutor:
             if not dictionary: missing.append(ArtifactType.FIELD_DICTIONARY)
             return _result(skill_id, started, status="blocked", limitations=["缺少标准化数据或字段字典。"], missing_artifacts=missing)
         run_dir = Path(runtime_context["output_dir"]) / "cleaning"
-        params = inputs.get("parameters", {})
+        policy_receipt = snapshot_policy(snapshot, inputs.get("parameters"))
+        params = parameter_view(policy_receipt)
         modeling, segments, report = run_cleaning_stage(
             standardized, dictionary, run_dir, params.get("resample_rule", "10s"), params.get("max_lag", 60),
             primary_output=standard.get("scenario", {}).get("primary_output"),
-            selection_window=standard.get("scenario", {}).get("selection_window_samples", 30),
-            selection_step=standard.get("scenario", {}).get("selection_step_samples", 15),
+            selection_window=params["window_samples"], selection_step=params["step_samples"],
+            selection_policy=policy_receipt["effective_parameters"]["selection"],
             include_segmentation=False,
         )
         partitions = report.pop("_partitions", {"train": modeling})
@@ -200,12 +202,10 @@ class SegmentationExecutor:
             return _result(skill_id, started, status="blocked", limitations=["分段缺少前置条件：" + "、".join(missing)],
                            missing_artifacts=missing_artifacts,
                            evidence=[{"dependency": "cleaning", "status": "missing"}])
-        params = inputs.get("parameters", {})
-        scene_selection = standard.get("scenario", {}).get("algorithm_profile", {}).get("selection", {})
-        selection_policy = {**scene_selection, **{
-            key: value for key, value in params.items()
-            if key in {"strict_score", "usable_score", "snr_db", "min_valid_samples", "allow_usable_fallback"}
-        }}
+        policy_receipt = snapshot_policy(snapshot, inputs.get("parameters"))
+        params = parameter_view(policy_receipt)
+        selection_policy = policy_receipt["effective_parameters"]["selection"]
+        scene_selection = selection_policy
         output = Path(runtime_context["output_dir"]) / "segmentation"
         result = run_segmentation_stage(
             train, dictionary, output, upstream_run_id=str(snapshot.get("run_id") or "skill-runtime"),
@@ -248,9 +248,11 @@ class ModelingExecutor:
         run_dir = resolver.compatibility_workspace(Path(runtime_context["output_dir"]) / "modeling",
             (ArtifactType.MODELING_DATASET, ArtifactType.CLEANED_VALIDATION, ArtifactType.CLEANED_TEST, ArtifactType.FROZEN_SPLIT),
             fallback_frames={ArtifactType.MODELING_DATASET: modeling})
-        params = inputs.get("parameters", {})
+        policy_receipt = snapshot_policy(snapshot, inputs.get("parameters"))
+        params = parameter_view(policy_receipt)
         report = run_modeling_stage(modeling, dictionary, run_dir, params.get("max_lag", 60),
-                        primary_output=standard.get("scenario", {}).get("primary_output"))
+                        primary_output=standard.get("scenario", {}).get("primary_output"),
+                        modeling_policy=policy_receipt["effective_parameters"]["decoupling"])
         state["modeling"] = report
         execution_id = str(runtime_context.get("execution_id", "modeling"))
         refs = _register_report_artifacts(resolver, report.get("artifacts", {}), skill_id, execution_id, run_dir)
@@ -322,13 +324,21 @@ class TimeDelayCapabilityExecutor:
             working = working.rename(columns={working.columns[0]: "timestamp"})
         split = resolver.load_json("FROZEN_SPLIT") or {}
         seconds = float(split.get("seconds") or standard.get("scenario", {}).get("sampling_seconds") or data_context.get("sampling_seconds") or 10)
-        max_lag = int(inputs.get("parameters", {}).get("max_lag", 60))
-        max_lag = max(1, min(max_lag, max(1, len(working) // 3)))
+        from core.services.algorithm_policy import snapshot_policy
+        receipt = runtime_context.get("policy_receipt") or snapshot_policy(snapshot, inputs.get("parameters"))
+        max_lag = receipt["effective_parameters"]["decoupling"]["max_lag_samples"]
+        max_lag = max(0, min(max_lag, int(split.get("guard_samples", max_lag + 3)) - 3))
+        feature_names = [name for name in feature_names if working[name].notna().sum() >= 20
+                         and working[name].nunique(dropna=True) >= 4 and working[name].std(skipna=True) > 1e-12]
+        if not feature_names:
+            return _result(plan_node_id, started, status="blocked", limitations=["无满足观测数与变化条件的可信输入"])
+
         with _module_path(INTEGRATIONS_DIR / "identification"):
-            from validated_modeling import estimate_training_delays
-            from time_delay import compensate_delays
+            from validated_modeling import estimate_training_delays, shifted
             delays = estimate_training_delays(working, output, feature_names, seconds, max_lag)
-            compensated = compensate_delays(working, delays)
+            compensated = working.copy()
+            for row in delays.itertuples():
+                compensated[row.input + "_aligned"] = shifted(working, row.input, int(row.delay_samples), seconds)
         output_dir = Path(runtime_context["output_dir"]) / "time_delay"
         output_dir.mkdir(parents=True, exist_ok=True)
         delays_path = output_dir / "delay_estimates.csv"
@@ -465,12 +475,15 @@ class OptimizationExecutor:
             fallback_frames={ArtifactType.CLEANED_TRAIN: training, ArtifactType.CLEANED_VALIDATION: validation, ArtifactType.CLEANED_TEST: test},
             fallback_json={ArtifactType.FROZEN_SPLIT: request["frozen_split"]})
         standard = runtime_context.get("state", {}).get("standardization") or inputs.get("snapshot", {}).get("results", {}).get("standardization", {})
+        receipt = snapshot_policy(inputs["snapshot"], inputs.get("parameters"))
+        effective = receipt["effective_parameters"]
         report, best_model = run_optimization_stage(
             training, segments, request["field_dictionary"], model, run_dir,
-            int(request.get("max_lag", 60)), primary_output=request.get("primary_output") or standard.get("scenario", {}).get("primary_output"),
+            effective["decoupling"]["max_lag_samples"], primary_output=request.get("primary_output") or standard.get("scenario", {}).get("primary_output"),
             model_outputs=[request.get("primary_output") or standard.get("scenario", {}).get("primary_output")],
             objective=request["objective"], bounds=request["bounds"], constraints=request["constraints"],
-            search_space=request["search_space"], optimization_policy=request["optimization_policy"],
+            search_space=request["search_space"], optimization_policy={**effective["optimization"], **request["optimization_policy"]},
+            modeling_policy=effective["decoupling"], selection_policy=effective["selection"],
         )
         feasible = any(item.get("status") == "completed" and item.get("feasible") for item in report["iterations"])
         status = "success" if feasible else "partial"

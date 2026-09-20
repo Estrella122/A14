@@ -1,0 +1,31 @@
+{
+  "source_hash": "0000546d78f737a8a33bf91ae62235fa8848a730b660ef1a25a4fda12d3b064f",
+  "required_count": 7,
+  "matched_required": 0,
+  "final_eligibility": "UNUSABLE",
+  "reasons": [
+    "LICENSE_BLOCKED: permitted analysis not established",
+    "MISSING_REQUIRED_SENSORS_OR_MAPPING: drying_air_flow, exhaust_humidity, hot_air_temperature, product_moisture, product_temperature, timestamp, wet_feed_rate",
+    "MISSING_METADATA: canonical physical units not independently documented",
+    "MISSING_METADATA: timestamp or sampling not verified",
+    "NORMALIZATION_BLOCKED: physical scale/restoration not verified",
+    "INSUFFICIENT_DATA: less than existing 150-row minimum or no target observations"
+  ],
+  "rows": 867,
+  "columns": [
+    "sample_index",
+    "fuel_flow",
+    "exhaust_fan_speed",
+    "raw_material_flow",
+    "dry_bulb_temperature",
+    "wet_bulb_temperature",
+    "raw_material_moisture"
+  ],
+  "missing_fields": [
+    "drying_air_flow",
+    "exhaust_humidity",
+    "product_moisture",
+    "timestamp",
+    "wet_feed_rate"
+  ]
+}

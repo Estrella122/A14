@@ -30,8 +30,15 @@ class TrainedRoutingTests(SimpleTestCase):
         self.assertFalse(p['analysis']['needs_clarification'])
         self.assertNotIn('system_identification_trainer',{s['skill_id'] for s in p['steps']})
         snapshot=self.snapshot();snapshot['artifacts']={'analysis_report_md':'report.md'}
-        with patch('core.services.agent_chat.get_run',return_value=snapshot),patch('core.services.agent_chat.rerun_pipeline') as rerun:
-            result=chat('不要训练模型，只导出已有报告')
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        with TemporaryDirectory() as directory, patch('core.services.pipeline.RUNS_DIR', Path(directory)), patch('core.services.agent_chat.get_run',return_value=snapshot),patch('core.services.agent_chat.rerun_pipeline') as rerun:
+            path = Path(directory) / snapshot['run_id'] / 'report.md'
+            path.parent.mkdir(); path.write_text('frozen existing report')
+            result=chat('不要训练模型，只导出已有报告', run_id=self.snapshot()['run_id'])
+            path.unlink()
+            missing=chat('不要训练模型，只导出已有报告', run_id=self.snapshot()['run_id'])
+            self.assertEqual(missing['deliverables'], [])
         rerun.assert_not_called()
         self.assertFalse(result['executed'])
         self.assertEqual(result['deliverables'][0]['key'],'analysis_report_md')
@@ -54,7 +61,7 @@ class TrainedRoutingTests(SimpleTestCase):
         messages=['不要重新执行，只解释残差','如果重新运行会发生什么','假如重新执行全流程，结果会改变吗','按钮写着“重新执行”，这句话是什么意思','这次请先不要重新执行','模型不能重新运行','重新运行会不会变差','系统提示重新执行','请重新执行吗']
         for message in messages:
             with self.subTest(message=message),patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline') as rerun:
-                result=chat(message)
+                result=chat(message, run_id=self.snapshot()['run_id'])
                 rerun.assert_not_called()
                 self.assertFalse(result['executed'])
 
@@ -92,7 +99,7 @@ class TrainedRoutingTests(SimpleTestCase):
 
     def test_pure_lag_request_does_not_trigger_model_training(self):
         with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline') as rerun:
-            result=chat('估计输入输出时滞')
+            result=chat('估计输入输出时滞', run_id=self.snapshot()['run_id'])
         rerun.assert_not_called()
         lag=next(item for item in result['skill_executions'] if item['skill_id']=='time_delay_estimator_compensator')
         self.assertEqual(lag['executor'],'time_delay_estimator_compensator')
@@ -113,7 +120,7 @@ class TrainedRoutingTests(SimpleTestCase):
 
     def test_model_training_does_not_trigger_optimizer(self):
         with patch('core.services.agent_chat.get_run',return_value=self.snapshot()),patch('core.services.agent_chat.rerun_pipeline',return_value=self.snapshot()) as rerun:
-            result=chat('训练系统辨识模型')
+            result=chat('训练系统辨识模型', run_id=self.snapshot()['run_id'])
         rerun.assert_not_called()
         self.assertEqual(result['skill_plan']['analysis']['execution_plan']['core']['target_groups'],['standardization','cleaning','modeling','review'])
         self.assertNotIn('optimization',result['execution_scope'])

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import agent_api, api, integration_api, knowledge_api, mcp_api, optimization_api, pipeline_api, runtime_api
+from . import asset_api, agent_api, api, integration_api, knowledge_api, mcp_api, optimization_api, pipeline_api, runtime_api
 
 
 urlpatterns = [
@@ -28,6 +28,8 @@ urlpatterns = [
     path('agent/skill-runs/<slug:skill_run_id>/events/', agent_api.agent_skill_run_events, name='agent-skill-run-events'),
     path('agent/skill-runs/<slug:skill_run_id>/stream/', agent_api.agent_skill_run_stream, name='agent-skill-run-stream'),
     path('agent/runs/<slug:run_id>/trace/', agent_api.agent_trace, name='agent-trace'),
+    path('assets/', asset_api.assets, name='file-assets'),
+    path('assets/<slug:asset_id>/', asset_api.asset_detail, name='file-asset-detail'),
     path('pipeline/runs/', pipeline_api.pipeline_collection, name='pipeline-run-collection'),
     path('pipeline/runs/latest/', pipeline_api.pipeline_latest, name='pipeline-run-latest'),
     path('pipeline/runs/<slug:run_id>/', pipeline_api.pipeline_detail, name='pipeline-run-detail'),

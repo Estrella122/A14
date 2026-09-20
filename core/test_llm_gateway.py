@@ -115,7 +115,10 @@ class LLMGatewayTests(SimpleTestCase):
             },
         }
         generated = {"answer": "这是大模型基于证据生成的回答。", "provider": "deepseek", "label": "DeepSeek API", "model": "deepseek-flash", "usage": None}
-        with TemporaryDirectory() as directory, patch("core.services.agent_chat.get_run", return_value=snapshot), patch("core.skills.runtime.RUNS_DIR", Path(directory)), patch("core.services.agent_chat.generate_grounded_answer", return_value=generated):
+        # This test isolates answer fallback; TaskSpec proposal has its own tests.
+        from core.skills.task_understanding import understand_task
+        proposal = (understand_task("总结当前任务"), {"fallback": True, "fallback_reason": "unit_test_fixture"})
+        with patch("core.services.llm_gateway.propose_task_spec", return_value=proposal), TemporaryDirectory() as directory, patch("core.services.agent_chat.get_run", return_value=snapshot), patch("core.skills.runtime.RUNS_DIR", Path(directory)), patch("core.services.agent_chat.generate_grounded_answer", return_value=generated):
             result = chat("总结当前任务", run_id="run_llm", llm_config={"provider": "deepseek"})
         self.assertEqual(result["answer"], generated["answer"])
         self.assertTrue(result["deterministic_answer"])

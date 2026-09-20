@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pandas as pd
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from integrations.standardization.standard_agent import StandardizationAgent
 
@@ -20,7 +20,7 @@ class StandardizationDatetimeTests(SimpleTestCase):
         self.assertEqual(converted.dt.month.tolist(), [1, 12])
 
 
-class RejectedUploadTests(SimpleTestCase):
+class RejectedUploadTests(TestCase):
     def test_rejected_standardization_returns_review_snapshot_without_running_downstream(self):
         rows = ["date,value"]
         rows.extend(f"2026-01-01 00:{index % 60:02d}:00,{index}" for index in range(200))
@@ -33,6 +33,7 @@ class RejectedUploadTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as folder:
             runtime = Path(folder)
             with (
+                override_settings(PROCESSPILOT_RUNTIME_ROOT=folder),
                 patch("core.services.pipeline.RUNS_DIR", runtime),
                 patch("core.services.pipeline.LATEST_PATH", runtime / "latest.json"),
             ):

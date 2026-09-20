@@ -29,7 +29,7 @@ def agent_chat(request):
     try:
         payload = json.loads(request.body.decode("utf-8")) if request.body else {}
         llm_config = _safe_llm_config(payload.get("llm"))
-        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"), payload.get("previous_intents"), llm_config=llm_config)
+        result = chat(payload.get("message", ""), payload.get("run_id"), payload.get("previous_intent"), payload.get("previous_intents"), llm_config=llm_config, parameters=payload.get("parameters"))
         return JsonResponse({"ok": True, "data": result}, json_dumps_params={"ensure_ascii": False})
     except (ValueError, PipelineError, LLMGatewayError, json.JSONDecodeError) as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=422, json_dumps_params={"ensure_ascii": False})
@@ -69,7 +69,7 @@ def agent_live_chat(request):
         message = str(payload.get("message", "")).strip()
         if not message:
             raise ValueError("聊天内容不能为空。")
-        if not get_run(payload.get("run_id")):
+        if payload.get("run_id") and not get_run(payload.get("run_id")):
             raise PipelineError("尚无可分析的流水线任务，请先上传CSV。")
         payload["llm"] = _safe_llm_config(payload.get("llm"))
         skill_run_id = f"skillrun_{uuid4().hex[:12]}"
@@ -196,6 +196,8 @@ def agent_trace(request, run_id):
     snapshot = get_run(run_id)
     if not snapshot:
         return JsonResponse({"ok": False, "message": "Agent 运行任务不存在。"}, status=404, json_dumps_params={"ensure_ascii": False})
+    from .services.evidence_values import final_result_view
+    snapshot = final_result_view(snapshot)
     results = snapshot.get("results", {})
     standard = results.get("standardization", {})
     cleaning = results.get("cleaning", {})

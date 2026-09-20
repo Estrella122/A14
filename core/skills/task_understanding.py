@@ -14,6 +14,7 @@ from .visualization_request import requests_chart
 class TaskSpec:
     objective: str
     task_kind: str
+    action_type: str = "QUERY_EXISTING"
     semantic_intents: list[str] = field(default_factory=list)
     requested_capabilities: list[str] = field(default_factory=list)
     requested_outputs: list[str] = field(default_factory=list)
@@ -54,7 +55,7 @@ INTENT_PATTERNS = {
     "equipment_health": r"设备健康|故障|劣化|振动",
     "bottleneck_analysis": r"瓶颈|产能|卡点",
     "root_cause_analysis": r"根因|为什么|原因",
-    "data_profiling": r"数据概况|数据画像|概览这批数据",
+    "data_profiling": r"数据概况|数据画像|概览这批数据|列名|行数|列数|数据类型|重复行|常量列|时间.*可解析",
 }
 
 INTENT_CAPABILITIES = {
@@ -92,7 +93,7 @@ RESPONSE_INTENT_PATTERNS = (
 
 REQUEST_PREFIX_ACTION = re.compile(
     r"^(?:请|麻烦|劳驾|帮我|帮忙|给我|替我|我需要|我想)"
-    r".{0,40}?(?:执行|运行|训练|清洗|生成|提取|找出|筛选|估计|导出|下载|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取|尝试)",
+    r".{0,40}?(?:执行|运行|训练|清洗|生成|提取|找出|筛选|计算|估计|导出|下载|优化|寻优|建立|建模|剔除|补偿|冻结|选择|选取|尝试)",
 )
 OPERATIONAL_ACTION = re.compile(
     r"(?:自动尝试|重新执行|重新运行|重跑|开始执行|立即执行|"
@@ -113,13 +114,14 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         if re.search(r"你是谁|你能做什么|怎么用|有什么功能|能干什么", normalized):
             return TaskSpec("说明 Agent 能力和使用方式", "knowledge_explanation", requested_outputs=["explanation"], execution_mode="explain", confidence=.98, response_intent="capability", response_intents=["capability"], answer_intent=answer_intent)
         knowledge = bool(re.search(r"(?:解释|介绍|说明).{0,20}(?:是什么|什么意思|概念|区别)|^(?:解释|介绍|说明)(?:一下)?(?:异常检测|趋势分析|相关性|因果)|(?:异常检测|趋势分析|相关性|因果).{0,12}(?:是什么|什么意思|有什么区别)[？?]?$", normalized))
+        knowledge = knowledge or bool(re.search(r'(?:信噪比|snr|firx|自回归|共线性|时滞|vif)(?:到底|究竟)?(?:是什么|什么意思)|基本概念|原理|a14.*(?:怎么算|方法)|请解释为什么需要重新训练', normalized))
         artifact = bool(re.search(r"导出|下载|打包|产物|生成.{0,8}报告", normalized))
         question = bool(re.search(r"为什么|为何|怎么|如何|是否|能否|什么|哪些|[？?吗呢]$", normalized))
         positive_text = re.sub(r"(?:不要|不必|无需|禁止|别)\s*[^，。；]+", "", normalized)
-        action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|找|找出|筛选|估计|导出|下载|优化|建立|建模|建一个)", positive_text.strip(" ，,。")))
+        action = bool(re.search(r"^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|把|将|对|用|直接)\s*|按\s*\d+\s*(?:秒|s)\s*)*(?:执行|重新执行|重跑|重新运行|运行|训练|清洗|生成|提取|找|找出|筛选|计算|估计|导出|下载|优化|建立|建模|建一个)", positive_text.strip(" ，,。")))
         action = action or bool(re.search(r"(?:通过|调用|使用|用)\s*mcp.{0,24}(?:执行|重新执行|重跑|运行|提取|筛选|训练|辨识|优化|寻优)", positive_text, re.I))
-        action = action or bool(re.search(r"^用.{0,30}(?:优化|训练|建模)", positive_text.strip(" ，,。")))
-        action = action or bool(re.search(r"^(?:请|帮我|给我|用这份数据|把|将).{0,30}(?:清洗|训练|建立|建一个|生成|优化|导出|下载)", positive_text.strip(" ，,。")))
+        action = action or bool(re.search(r"^用.{0,30}(?:优化|寻优|训练|建模)", positive_text.strip(" ，,。")))
+        action = action or bool(re.search(r"^(?:请|帮我|给我|用这份数据|把|将).{0,30}(?:清洗|训练|建立|建一个|生成|优化|寻优|导出|下载)", positive_text.strip(" ，,。")))
         # Natural user requests commonly place the data object between the
         # polite request and the operation: “帮我从当前数据中筛选……”.  Treat
         # that as execution without requiring users to know or mention MCP.
@@ -129,7 +131,7 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
         # “请说明当前……闭环寻优结果” asks to read evidence; a later
         # capability noun must not turn the leading explanation verb into an
         # execution command.
-        if re.search(r"^(?:请)?(?:说明|解释|解读|分析|介绍|告诉我)", normalized) and not OPERATIONAL_ACTION.search(normalized) and not re.search(
+        if re.search(r"^(?:请)?(?:说明|解释|解读|分析|介绍|告诉我)", normalized) and not re.search(
             r"(?:并|然后|再)(?:请)?(?:执行|运行|重跑|训练|提取|筛选|优化|寻优)", normalized
         ):
             action = False
@@ -190,6 +192,9 @@ class LegacyRuleTaskUnderstandingProvider(TaskUnderstandingProvider):
             match = re.search(pattern, normalized)
             if match:
                 parameter_rows.append({"name": name, "value": int(match.group(1)), "unit": unit})
+        top_k_match = re.search(r'\b(?:top[_ ]?k|modeling_top_k)\s*[=:：]?\s*(\d+)', normalized)
+        if top_k_match:
+            parameter_rows.append({'name': 'top_k', 'value': int(top_k_match[1]), 'unit': 'windows'})
         return TaskSpec(
             objective=objective, task_kind=task_kind, semantic_intents=intents,
             requested_capabilities=list(dict.fromkeys(capabilities)), requested_outputs=outputs or ["findings"], entities=entity_rows, parameters=parameter_rows,
@@ -231,4 +236,49 @@ class LLMTaskUnderstandingProvider(TaskUnderstandingProvider):
 
 
 def understand_task(message: str, conversation_context: dict[str, Any] | None = None, provider: TaskUnderstandingProvider | None = None) -> dict[str, Any]:
-    return (provider or LegacyRuleTaskUnderstandingProvider()).understand(message, conversation_context).public()
+    task = (provider or LegacyRuleTaskUnderstandingProvider()).understand(message, conversation_context).public()
+    boundary = action_boundary(message)
+    if boundary['action_type'] == 'QUERY_EXISTING' and task['execution_mode'] == 'execute':
+        boundary['action_type'] = 'EXECUTE_NUMERIC'
+    task['action_type'] = boundary['action_type']
+    task['constraints']['requested_actions'] = boundary['requested_actions']
+    if boundary['action_type'] in {'GENERATE_REPORT', 'EXPORT_ARTIFACT'}:
+        task.update(task_kind='artifact_request', execution_mode='execute', requires_clarification=False)
+    elif boundary['action_type'] in {'QUERY_EXISTING', 'GENERAL_EXPLANATION'}:
+        task['execution_mode'] = 'explain' if boundary['action_type'] == 'GENERAL_EXPLANATION' else 'analyze'
+    elif boundary['optimization']:
+        task.update(task_kind='execute_pipeline', execution_mode='execute', requires_clarification=False,
+                    response_intent='optimization', response_intents=list(dict.fromkeys([*task['response_intents'], 'optimization'])))
+    if requests_chart(message):
+        task.update(task_kind='artifact_request', execution_mode='execute', requested_outputs=['charts'])
+        task['action_type'] = 'QUERY_EXISTING'
+    if re.search(r'(?:最佳|最优).{0,6}参数', message):
+        task.update(response_intent='optimization', response_intents=list(dict.fromkeys([*task['response_intents'], 'optimization'])))
+    return task
+
+
+def action_boundary(message):
+    """Execution authority comes from the request, never capability nouns in a report."""
+    text = str(message or '').strip()
+    positive = re.sub(r'(?:不要|不必|无需|禁止|别)\s*[^，。；,;]+', '', text)
+    explanation = bool(re.search(r'^(?:请|帮我|只|仅|\s)*(?:解释|说明|介绍|解读|告诉我)', positive.strip(' ，,。')))
+    numeric = bool(re.search(r'(?:重新|继续|开始|执行|运行|重跑).{0,8}(?:全流程|全部流程|寻优|优化|训练|建模|清洗|筛选)|循环(?:比较|评估)|闭环寻优|提取.{0,30}动态|筛选.{0,30}动态|训练模型|建立模型', positive))
+    question = bool(re.search(r'为什么|为何|是多少|怎么样|是否|能否|[？?]$', positive))
+    compound = bool(re.search(r'(?:并|然后|完成后|再).{0,8}(?:执行|运行|重新|训练|提取|筛选|优化|寻优)', positive))
+    if (explanation or question) and not compound:
+        numeric = False
+    report = bool(re.search(r'(?:生成|制作|整理|输出).{0,16}(?:图文|工程|分析)?报告', positive))
+    export = bool(re.search(r'导出|下载|打包', positive)) and not explanation and not question
+    # Report requirements list methods as nouns. Only an independent numeric
+    # imperative before the report clause authorizes running those methods.
+    if report:
+        prefix = re.split(r'(?:生成|制作|整理|输出).{0,16}(?:图文|工程|分析)?报告', positive, maxsplit=1)[0]
+        numeric = numeric and bool(re.search(r'重新寻优|继续寻优|训练|重跑|循环比较|执行|运行|提取|筛选', prefix))
+    optimization = numeric and bool(re.search(r'寻优|优化|闭环|循环(?:比较|评估)|选出(?:最好|最佳)', positive))
+    action = 'CONTINUE_OPTIMIZATION' if optimization and '继续' in positive else 'EXECUTE_NUMERIC' if numeric else 'GENERATE_REPORT' if report else 'EXPORT_ARTIFACT' if export else 'GENERAL_EXPLANATION' if explanation else 'QUERY_EXISTING'
+    # Preserve existing explicit commands outside the compound patterns.
+    if action == 'QUERY_EXISTING' and not question and not explanation and not report and not export:
+        if re.search(r'^(?:(?:请|帮我|给我|立即|重新|开始|继续|先|再|只|仅|直接)\s*)*(?:执行|运行|训练|清洗|提取|筛选|计算|估计|优化|寻优|建模)', positive.strip(' ，,。')):
+            action = 'EXECUTE_NUMERIC'
+    actions = ([action] if action in {'EXECUTE_NUMERIC', 'CONTINUE_OPTIMIZATION'} else []) + (['GENERATE_REPORT'] if report else []) + (['EXPORT_ARTIFACT'] if export else [])
+    return {'action_type': action, 'requested_actions': actions or [action], 'optimization': optimization}
