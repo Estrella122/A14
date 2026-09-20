@@ -1,4 +1,5 @@
 import tempfile
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -179,9 +180,9 @@ class OptimizationExecutorTests(SimpleTestCase):
         self.fake_report["iterations"][0]["feasible"] = False
         self.assertEqual(self.execute()[0]["status"], "partial")
 
-    def test_out_of_bounds_candidate_is_recorded_infeasible(self):
+    def test_out_of_bounds_candidate_is_projected_before_real_evaluation(self):
         frame = training_frame(40)
-        with self.assertRaises(PipelineError):
+        with patch('core.services.pipeline._model', side_effect=ValueError('连续有效训练样本不足')) as model, self.assertRaises(PipelineError):
             run_optimization_stage(
                 frame, pd.DataFrame(), DICTIONARY, {}, self.output, 60,
                 primary_output="output", bounds={"top_k": {"min": 9, "max": 10}, "max_lag": {"min": 10, "max": 20}},
@@ -189,6 +190,10 @@ class OptimizationExecutorTests(SimpleTestCase):
             )
         report = (self.output / "05_optimization" / "optimization_report.json").read_text(encoding="utf-8")
         self.assertIn('"status": "infeasible"', report)
+        self.assertEqual(model.call_args.args[3], 20)
+        candidate = json.loads(report)['iterations'][0]
+        self.assertEqual(candidate['proposed_parameters'], {'top_k': 5, 'max_lag': 60})
+        self.assertEqual((candidate['top_k'], candidate['max_lag']), (9, 20))
 
     def test_runtime_artifacts_do_not_invent_policy_contract(self):
         state = {

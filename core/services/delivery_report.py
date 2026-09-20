@@ -120,7 +120,7 @@ def _render_report(snapshot):
     for name, draw in [('cleaning_comparison', comparison), ('selected_dynamic_rows', selected), ('variable_correlation', correlation), ('candidate_scores', candidates)]:
         chart(name, draw)
     sections = []
-    for name, value in [('数据来源', {'run_id': frozen['run_id'], 'file': frozen.get('original_name'), 'status': frozen.get('status')}),
+    for name, value in [('数据来源', {'run_id': frozen['run_id'], 'file': frozen.get('original_name'), 'source_type': frozen.get('source_type', 'upload'), 'status': frozen.get('status')}),
                         ('初始基线策略（胜者覆盖参数见下节）', frozen.get('policy_receipt')), ('胜者生效策略', results.get('best_selection_receipt', {}).get('effective_policy')), ('胜者选择回执', results.get('best_selection_receipt')),
                         ('清洗与分段', results.get('cleaning')), ('实际模型与分区指标', results.get('modeling')),
                         ('候选比较', results.get('optimization')), ('工程限制与下一步', results.get('review'))]:

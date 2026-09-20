@@ -272,16 +272,32 @@ def evaluation(df, state, guard, split, detailed=True):
         'metrics': regression_metrics(truths, forecasts, len(state['coef'])) if len(truths) else None,
         'persistence': regression_metrics(truths, holds, 1) if len(truths) else None}
     # Conditional free simulation: no measured output feedback after initialization.
-    simulated = y_values.copy()
+    simulated = np.full(len(df), np.nan)
+    initialized = False
+    initialization_positions = []
     for pos in range(len(df)):
-        if age_values[pos] < guard: continue
+        if age_values[pos] < guard:
+            initialized = False
+            continue
         row = x_values[pos].copy()
-        for j in range(order): row[j] = simulated[pos-j-1]
+        if not initialized:
+            # Cleaning can leave missing measured targets at the nominal guard
+            # boundary. Wait for an observed initial history; never initialize
+            # from NaN, nor feed later measured targets into a running simulation.
+            if not np.isfinite(row).all():
+                continue
+            initialized = True
+            initialization_positions.append(pos)
+            simulated[pos-order:pos] = y_values[pos-order:pos]
+        else:
+            for j in range(order): row[j] = simulated[pos-j-1]
         with np.errstate(over='ignore', invalid='ignore'):
             simulated[pos] = coef[0] + np.dot(row, coef[1:])
     evaluation_positions = indices.to_numpy(dtype=int, copy=False)
     simulation_finite = np.isfinite(simulated[evaluation_positions]).all() and np.max(np.abs(simulated[evaluation_positions])) < 1e12
     diagnostics['free_simulation'] = {'conditional_on_observed_inputs': True, 'diverged': not bool(simulation_finite),
+        'initialization_positions': initialization_positions,
+        'initialization': 'first finite observed history after each segment guard; no subsequent output feedback',
         'metrics': regression_metrics(actual, simulated[evaluation_positions], len(state['coef'])) if simulation_finite else None}
     acf = residual_acf(df, indices, residual, seconds)
     diagnostics['residual'] = {'acf_max_abs': float(acf.autocorrelation.abs().max()) if len(acf) else None,
@@ -404,7 +420,9 @@ def run_validated_modeling(input_csv, output_col, input_cols, output_dir, valida
         train, validation, output_col, input_cols, selected, delay_map, seconds, guard, policy,
     )
     save_json(modeldir/'order_search.json', candidates)
-    if not fitted: raise ValueError('所有结构候选均失败：' + '; '.join(sorted({c.get('error', '') for c in candidates})))
+    if not fitted:
+        reasons = {c.get('error') or ('自回归极点不稳定' if not c.get('stable_ar_poles') else '自由仿真无有限评价结果') for c in candidates}
+        raise ValueError('所有结构候选均失败：' + '; '.join(sorted(reasons)))
     # Prefer the validation BIC so a marginal one-step RMSE gain cannot promote a
     # very high-dimensional ARX model over a simpler, better-supported baseline.
     _, state, tm, vm, diagnostics, prediction, acf, names = min(fitted, key=lambda v: v[3]['bic'])

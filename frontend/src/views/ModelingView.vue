@@ -195,7 +195,7 @@ async function showFrequencyAnalysis() {
     <div class="content-grid content-grid-4-8">
       <section class="panel reduction-panel">
         <div class="section-heading compact"><div><span class="section-kicker">智能降维</span><h2>变量处理建议</h2></div><StatusPill tone="success">已应用</StatusPill></div>
-        <div class="dimension-summary"><div class="dimension-number"><strong>{{ liveModel?.input_cols?.length ?? 0 }}</strong><span>候选输入</span></div><div class="dimension-arrow"><AppIcon name="arrow" /></div><div class="dimension-number is-final"><strong>{{ liveModel?.selected_inputs?.length ?? 0 }}</strong><span>模型特征</span></div></div>
+        <div class="dimension-summary"><div class="dimension-number"><strong>{{ liveModel?.input_cols?.length ?? 0 }}</strong><span>候选输入</span></div><div class="dimension-arrow"><AppIcon name="arrow" /></div><div class="dimension-number is-final"><strong>{{ liveModel?.selected_inputs?.length ?? 0 }}</strong><span>共线性保留变量</span></div></div>
         <div class="variable-actions">
           <article v-for="item in variableActions" :key="item.variable"><div><code>{{ item.variable }}</code><span>↔ {{ item.pair }}</span></div><StatusPill :tone="item.action === '剔除' ? 'danger' : item.action === '合并' ? 'warning' : 'success'">{{ item.action }}</StatusPill><p>回归 R²={{ item.corr }} · VIF={{ item.vif }} · {{ item.reason }}</p></article>
         </div>

@@ -691,17 +691,18 @@ def _search_optimization(
     ])
     iterations = journal.rows
     best_model = baseline_model
+    candidate_seconds = (_read_json(run_dir / '03_cleaning' / 'split_manifest.json') or {}).get('seconds')
 
     def evaluate(candidate: dict[str, Any]) -> dict[str, Any]:
         row = journal.start(candidate)
         started = perf_counter()
         from .segmentation_service import select_modeling_windows
         from .algorithm_policy import resolve_algorithm_policy
-        receipt = resolve_algorithm_policy(requested={'selection': {**(selection_policy or {}), 'modeling_top_k': candidate['top_k']}, 'decoupling': {**(modeling_policy or {}), 'max_lag_samples': candidate['max_lag']}, 'optimization': optimization_policy or {}})
+        receipt = resolve_algorithm_policy(requested={**({'resample_seconds': candidate_seconds} if candidate_seconds is not None else {}), 'selection': {**(selection_policy or {}), 'modeling_top_k': candidate['top_k']}, 'decoupling': {**(modeling_policy or {}), 'max_lag_samples': candidate['max_lag']}, 'optimization': optimization_policy or {}})
         candidate = {**candidate, 'round_id': f"{run_dir.name}:round:{candidate['round']}",
                      'candidate_source': 'deterministic_exploration' if candidate['round'] <= 6 else 'deterministic_validation_feedback',
                      'feedback_basis': candidate.get('feedback_basis', 'predeclared search candidates'),
-                     'requested_parameters': {'top_k': candidate['top_k'], 'max_lag': candidate['max_lag']},
+                     'requested_parameters': candidate.get('proposed_parameters', {'top_k': candidate['top_k'], 'max_lag': candidate['max_lag']}),
                      'parameter_sources': {'top_k': 'optimizer_candidate', 'max_lag': 'optimizer_candidate'},
                      'effective_policy_hash': receipt.get('policy_hash') or receipt.get('effective_policy_hash'), 'effective_policy': receipt.get('effective_parameters', {})}
         try:
@@ -775,7 +776,7 @@ def _search_optimization(
             if isinstance(exc, SearchStopped):
                 raise
             input_reason = isinstance(exc, (ValueError, PipelineError)) and any(text in str(exc) for text in (
-                '训练样本不足', '评估样本不足', '验证指标不可定义', '无有效因果时滞证据', '无法预测共同评估样本', '预测非有限值'))
+                '训练样本不足', '评估样本不足', '验证指标不可定义', '无有效因果时滞证据', '无法预测共同评估样本', '预测非有限值', '所有结构候选均失败'))
             if not input_reason:
                 row.update(reason_code='candidate_exception', reason_message=str(exc))
                 raise
@@ -797,8 +798,14 @@ def _search_optimization(
         return journal.finish(row, iteration)
 
     journal.report.update(bounds=bounds or {}, constraints=constraints or {}, initial_policy=optimization_policy or {})
+    from .optimization_candidates import bounded_candidate
+    seen = set()
     for candidate in exploration_candidates[:16]:
-        evaluate(candidate)
+        bounded = bounded_candidate(candidate, bounds, seen)
+        if bounded is None:
+            break
+        seen.add((bounded['top_k'], bounded['max_lag']))
+        evaluate(bounded)
 
     min_rounds = 8
     max_rounds = 16
@@ -822,24 +829,17 @@ def _search_optimization(
             top_delta, lag_direction = directions[round_number - 7]
             candidate_top_k = min(top_k_max, max(top_k_min, anchor["top_k"] + top_delta))
             candidate_max_lag = min(600, max(10, anchor["max_lag"] + lag_direction * refinement_step))
-            probes = 0
-            while (candidate_top_k, candidate_max_lag) in seen:
-                journal.check()
-                probes += 1
-                if probes > 601 * (top_k_max-top_k_min+1):
-                    break
-                candidate_top_k = top_k_min + (candidate_top_k - top_k_min + 1) % (top_k_max - top_k_min + 1)
-                candidate_max_lag = min(600, candidate_max_lag + 5)
-            if (candidate_top_k, candidate_max_lag) in seen:
+            proposed = {'top_k': candidate_top_k, 'max_lag': candidate_max_lag}
+            bounded = bounded_candidate(proposed, bounds, seen)
+            if bounded is None:
                 stop_reason = '候选空间已耗尽，已停止重复生成。'
                 break
-            seen.add((candidate_top_k, candidate_max_lag))
+            seen.add((bounded['top_k'], bounded['max_lag']))
             suffix = "A" if round_number == 7 else "B" if round_number == 8 else f"R{round_number}"
             previous_best_score = float(best_so_far["score"])
             iteration = evaluate({
                 "round": round_number,
-                "top_k": candidate_top_k,
-                "max_lag": candidate_max_lag,
+                **bounded,
                 "label": f"围绕第{anchor['round']}轮反馈精搜{suffix}",
                 "feedback_basis": {'anchor_round': anchor['round'], 'validation_score': anchor['score'], 'test_used': False},
             })
@@ -1226,9 +1226,17 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
         input_dir.mkdir(parents=True, exist_ok=True)
         stored_path = input_dir / "source.csv"
         source_path.replace(stored_path)
+        # Provenance affects labels only; no generator reference enters modeling.
+        source_type = 'SYNTHETIC' if Path(original_name).name.startswith('SYNTHETIC_') else 'upload'
+        if asset_id:
+            from core.models import FileAsset
+            asset = FileAsset.objects.filter(asset_id=asset_id, owner_id=owner_id).first()
+            if asset and asset.source_type in ('simulation', 'SYNTHETIC'):
+                source_type = 'SYNTHETIC'
         now = datetime.now().astimezone().isoformat(timespec="seconds")
         snapshot = {
             'asset_id': asset_id, 'owner_id': owner_id, 'project': 'A14',
+            'source_type': source_type,
             'source_run_id': source_run_id, 'source_sha256': hashlib.sha256(stored_path.read_bytes()).hexdigest(),
             "run_id": run_id,
             "status": "running",
@@ -1281,6 +1289,10 @@ def run_pipeline(source_path: Path, original_name: str, scenario_id: str = "auto
         try:
             _set_stage(snapshot, run_dir, current_stage, "running", "正在识别场景、字段和单位")
             _, standardization = _standardize(stored_path, run_dir, scenario_id, instruction, overrides)
+            if source_type == 'SYNTHETIC':
+                standardization['scenario']['source'] = {'name': 'SYNTHETIC 合成观测数据', 'description': '已知过程机制的功能演示或挑战测试；不是工厂实测数据，不代表生产验证。'}
+                standardization['scenario']['notes'] = 'SYNTHETIC 合成观测；采样和缺失按上传 CSV 实际内容处理，仍执行同一场景的字段、物理范围和因果时间门禁。'
+                _write_json(run_dir / '02_standardization' / 'standardization_report.json', standardization)
             from .algorithm_policy import snapshot_policy
             request_parameters = dict(parameters or {})
             if resample_rule is not None:
@@ -1596,7 +1608,10 @@ def resolve_artifact(run_id: str, artifact_key: str) -> tuple[Path, str]:
     path = (run_dir / relative).resolve()
     if run_dir not in path.parents or not path.is_file():
         raise PipelineError("产物路径无效。")
-    return path, path.name
+    name = path.name
+    if snapshot.get('source_type') == 'SYNTHETIC':
+        name = snapshot.get('original_name', name) if artifact_key == 'source_csv' else 'SYNTHETIC_' + name
+    return path, name
 
 
 def rerun_pipeline(run_id: str, resample_rule: str | None = None, max_lag: int | None = None, stop_after: str = "report", scenario_id: str | None = None, overrides: dict[str, str] | None = None, new_run_id: str | None = None, cancel_check: Callable[[], bool] | None = None, parameters: dict | None = None) -> dict[str, Any]:

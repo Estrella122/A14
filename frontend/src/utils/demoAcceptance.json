@@ -1,0 +1,27 @@
+{
+  "protocol_version": "a14-demo-acceptance-v1",
+  "scope": "Known stable synthetic process functional demonstration; not an industrial standard or production validation",
+  "scenario_id": "blast_furnace",
+  "development_revision_budget": 3,
+  "development_seed": 104729,
+  "default_seed": 20260921,
+  "verification_seeds": [20260922, 20260923],
+  "algorithm_profile_version": "1.0.0",
+  "algorithm_parameters": {"resample_rule": "1h", "max_lag": 24},
+  "search_constraints": {"min_r2": 0, "min_coverage": 0.08},
+  "targets": {
+    "finite_nonconstant_predictions": true,
+    "minimum_fitted_rows": 30,
+    "minimum_evaluation_samples": 80,
+    "minimum_prediction_coverage": 0.70,
+    "minimum_test_r2": 0.70,
+    "maximum_test_rmse": 0.025,
+    "maximum_test_mae": 0.020,
+    "error_unit": "Si mass-percent percentage points",
+    "maximum_rmse_ratio_to_persistence": 1.05,
+    "minimum_distinct_evaluated_candidates": 2,
+    "minimum_attempted_candidates": 3,
+    "selected_candidate_must_meet_search_constraints": true,
+    "test_used_for_selection": false
+  }
+}

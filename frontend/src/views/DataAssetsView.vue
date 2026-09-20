@@ -9,7 +9,7 @@ import { announcePipelineUpdate, artifactUrl, rerunPipeline, uploadPipelineFile 
 import { useLatestPipelineRun } from '../composables/useLatestPipelineRun'
 import { buildSceneState } from '../composables/useSceneBinding'
 import { apiRequest, parseApiResponse, secureFetch } from '../api/client'
-import { buildSimulationCsv } from '../utils/simulationCsv'
+import { buildPresetDataset, DEMO_DEFAULTS, DEMO_VERSION, DEMO_VERIFIED, LEGACY_DEFAULTS, CHALLENGES, isVerifiedConfiguration } from '../utils/simulationPresets'
 
 const props = defineProps({ project: { type: Object, required: true } })
 const emit = defineEmits(['notify', 'navigate', 'scene-detected'])
@@ -21,7 +21,30 @@ const dragActive = ref(false)
 const generatedDataset = ref(null)
 const { latestRun } = useLatestPipelineRun()
 const sceneState = computed(() => buildSceneState(props.project, latestRun.value))
-const simulation = ref({ steady: 45, step: 18, noise: 3, anomalies: 12 })
+const simulationMode = ref('custom')
+const challenge = ref('high_noise')
+const simulation = ref({ ...DEMO_DEFAULTS })
+const supportsDemo = computed(() => props.project.scenarioId === 'blast_furnace')
+const legacyMode = ref(false)
+const verifiedDefault = computed(() => isVerifiedConfiguration(props.project.scenarioId, simulationMode.value, simulation.value))
+const modeDescription = computed(() => simulationMode.value === 'full_demo'
+  ? (verifiedDefault.value ? '适合首次体验，在所示版本和默认配置下已验证完整流程。' : '本版流程已跑通，但固定 seed 验收未全部达到预测覆盖率和基线要求，暂不作为已验证推荐。')
+  : simulationMode.value === 'challenge' ? '用于观察算法边界，可能出现质量警告或无可用模型。' : '修改生成参数后，结果需要重新评估。')
+function setSimulationMode(mode) {
+  simulationMode.value = mode
+  legacyMode.value = !supportsDemo.value || mode === 'challenge' && challenge.value === 'legacy_pressure_v1'
+  simulation.value = { ...(legacyMode.value ? LEGACY_DEFAULTS : mode === 'challenge' ? CHALLENGES[challenge.value] : DEMO_DEFAULTS) }
+  generatedDataset.value = null
+}
+function customize() { simulationMode.value = 'custom'; generatedDataset.value = null }
+watch(() => props.project.scenarioId, () => {
+  challenge.value = supportsDemo.value ? 'high_noise' : 'legacy_pressure_v1'
+  setSimulationMode(supportsDemo.value && DEMO_VERIFIED ? 'full_demo' : supportsDemo.value ? 'custom' : 'challenge')
+}, { immediate: true })
+function downloadGeneratedJson(key) {
+  const value = generatedDataset.value?.[key]
+  if (value) downloadSimulation(new File([JSON.stringify(value, null, 2)], `SYNTHETIC_${key === 'manifest' ? 'generation_manifest' : 'evaluation_reference'}.json`, { type: 'application/json' }))
+}
 const fileFilter = ref('all')
 const chartRange = ref('6h')
 const mappingDraft = ref({})
@@ -33,14 +56,18 @@ async function refreshAssets() {
   try {
     const payload = await apiRequest('/assets/')
     files.value = payload.data.map(asset => ({ ...asset, id: asset.asset_id, name: asset.display_name,
-      source: asset.source_type, variables: asset.columns, period: asset.created_at,
+      source: ['SYNTHETIC', 'simulation'].includes(asset.source_type) ? 'SYNTHETIC 合成数据' : '本地上传', variables: asset.columns, period: asset.created_at,
       size: `${(asset.size / 1024).toFixed(1)} KB`, quality: null }))
   } catch (error) { emit('notify', { tone: 'warning', title: '资产读取失败', message: error.message }) }
 }
-async function persistAsset(file, sourceType = 'upload') {
+async function persistAsset(file, sourceType = 'upload', generated = null) {
   const form = new FormData()
   form.append('file', file)
   form.append('source_type', sourceType)
+  if (generated) {
+    form.append('generation_manifest', JSON.stringify(generated.manifest))
+    form.append('evaluation_reference', JSON.stringify(generated.reference))
+  }
   const payload = await parseApiResponse(await secureFetch('/assets/', { method: 'POST', body: form }))
   await refreshAssets()
   return files.value.find(item => item.id === payload.data.asset_id)
@@ -204,17 +231,17 @@ async function generateSimulation(action = 'download') {
   isGenerating.value = true
   try {
     await new Promise((resolve) => window.setTimeout(resolve, 80))
-    const result = buildSimulationCsv(props.project, simulation.value)
+    const result = await buildPresetDataset(props.project, simulationMode.value, simulation.value, legacyMode.value ? 'legacy_pressure_v1' : challenge.value)
     const file = new File([result.csv], result.name, { type: 'text/csv;charset=utf-8' })
-    const pending = await persistAsset(file, 'simulation')
-    generatedDataset.value = { file, ...result }
+    const pending = await persistAsset(file, 'SYNTHETIC', result)
+    generatedDataset.value = { file, asset: pending, ...result }
 
     if (action === 'run') {
       await runPipelineFile(file, pending)
     } else {
-      downloadSimulation(file)
-      pending.status = '已下载'
-      emit('notify', { tone: 'success', title: '仿真 CSV 已生成并下载', message: `${result.rowCount.toLocaleString('zh-CN')} 行数据·${result.summary}。` })
+      if (action === 'download') downloadSimulation(file)
+      pending.status = '已生成'
+      emit('notify', { tone: 'success', title: '合成数据已生成并保存', message: `${result.rowCount.toLocaleString('zh-CN')} 行数据·${result.summary}。` })
     }
   } catch (error) {
     emit('notify', { tone: 'warning', title: '仿真数据生成失败', message: error.message })
@@ -314,26 +341,42 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
       </section>
 
       <section class="panel simulation-panel">
-        <div class="section-heading compact"><div><span class="section-kicker">赛题演示工具</span><h2>仿真测试集生成器</h2></div><StatusPill tone="brand">内置</StatusPill></div>
-        <p class="panel-description">生成包含长周期稳态、明确阶跃响应和异常干扰的合成工业数据。</p>
-        <div class="control-stack">
-          <label><span>稳态占比 <strong>{{ simulation.steady }}%</strong></span><input v-model="simulation.steady" type="range" min="20" max="75" /></label>
-          <label><span>阶跃幅度 <strong>{{ simulation.step }}%</strong></span><input v-model="simulation.step" type="range" min="5" max="35" /></label>
-          <label><span>噪声强度 <strong>{{ simulation.noise }}σ</strong></span><input v-model="simulation.noise" type="range" min="1" max="6" /></label>
-          <label><span>异常干扰 <strong>{{ simulation.anomalies }} 点</strong></span><input v-model="simulation.anomalies" type="range" min="0" max="30" /></label>
-        </div>
-        <div class="simulation-preview" aria-label="仿真数据构成预览">
-          <span class="sim-steady" :style="{ width: `${simulation.steady}%` }">稳态</span>
-          <span class="sim-step">阶跃</span><span class="sim-noise">噪声 / 异常</span>
+        <div class="section-heading compact"><div><span class="section-kicker">SYNTHETIC 合成数据</span><h2>仿真测试集生成器</h2></div><StatusPill :tone="verifiedDefault ? 'success' : 'neutral'">{{ verifiedDefault ? '已验证默认配置' : '未认证配置' }}</StatusPill></div>
+        <label class="preset-select">生成模式<select :value="simulationMode" :disabled="isGenerating || uploading" @change="setSimulationMode($event.target.value)"><option value="full_demo" :disabled="!supportsDemo">完整流程演示{{ DEMO_VERIFIED && supportsDemo ? '〔推荐〕' : supportsDemo ? '〔质量未通过〕' : '〔未验证〕' }}</option><option value="challenge">挑战测试</option><option value="custom">自定义</option></select></label>
+        <p class="panel-description">{{ modeDescription }}</p>
+        <label v-if="simulationMode === 'challenge'" class="preset-select">挑战类型<select v-model="challenge" @change="setSimulationMode('challenge')"><template v-if="supportsDemo"><option value="high_noise">高噪声与目标测量尖峰</option><option value="sparse_target">稀疏目标观测（每 48 点）</option><option value="low_excitation">动态不足</option><option value="process_shock">过程冲击</option></template><option value="legacy_pressure_v1">旧版压力测试 legacy_pressure_v1</option></select></label>
+        <p class="panel-description">{{ project.name }} · {{ legacyMode ? 'legacy_pressure_v1 · 原版采样和行数' : `${DEMO_VERSION} · 1 h 采样 · ${simulation.rows} 行` }}</p>
+        <p v-if="!legacyMode" class="panel-description">独立输入激励；测量噪声 {{ simulation.noise }}，过程扰动 {{ simulation.processNoise }}；输入尖峰 {{ simulation.anomalies }} 点，目标尖峰 {{ simulation.targetSpikes }} 点。目标误差单位：Si 质量百分数的百分点。仅验证已知合成机制。</p>
+        <div class="control-stack" @input="customize">
+          <template v-if="!legacyMode">
+            <label><span>固定 seed</span><input v-model.number="simulation.seed" aria-label="生成 seed" type="number" min="0" max="4294967295" /></label>
+            <label><span>行数</span><input v-model.number="simulation.rows" aria-label="生成行数" type="number" min="150" max="10000" /></label>
+            <label><span>测量噪声尺度</span><input v-model.number="simulation.noise" aria-label="测量噪声" type="number" min="0" max="0.2" step="0.0005" /></label>
+            <label><span>过程扰动尺度</span><input v-model.number="simulation.processNoise" aria-label="过程扰动" type="number" min="0" max="0.1" step="0.0001" /></label>
+            <label><span>目标测量尖峰（不改变状态）</span><input v-model.number="simulation.targetSpikes" type="number" min="0" max="30" /></label>
+            <label><span>过程冲击（改变状态）</span><input v-model.number="simulation.processShocks" type="number" min="0" max="30" /></label>
+            <label><span>目标观测间隔（采样点）</span><input v-model.number="simulation.targetEvery" type="number" min="1" max="100" /></label>
+          </template>
+          <template v-else>
+            <label><span>稳态占比 {{ simulation.steady }}%</span><input v-model="simulation.steady" type="range" min="20" max="75" /></label>
+            <label><span>旧版噪声尺度 {{ simulation.noise }}</span><input v-model="simulation.noise" type="range" min="1" max="6" /></label>
+          </template>
+          <label><span>阶跃幅度 {{ simulation.step }}%</span><input v-model="simulation.step" type="range" :min="legacyMode ? 5 : 0" max="35" /></label>
+          <label><span>{{ legacyMode ? '旧版混合异常' : '输入传感器尖峰' }} {{ simulation.anomalies }} 点</span><input v-model="simulation.anomalies" type="range" min="0" max="30" /></label>
         </div>
         <div class="simulation-actions">
-          <button class="btn btn-secondary" type="button" :disabled="isGenerating || uploading" @click="generateSimulation('download')"><AppIcon name="download" />生成并下载 CSV</button>
-          <button class="btn btn-primary" type="button" :disabled="isGenerating || uploading" @click="generateSimulation('run')"><AppIcon :name="isGenerating || uploading ? 'loop' : 'play'" :class="{ spinning: isGenerating || uploading }" />{{ uploading ? '流水线运行中…' : '生成并运行流水线' }}</button>
+          <button class="btn btn-secondary" type="button" :disabled="isGenerating || uploading" @click="generateSimulation('generate')">生成数据</button>
+          <button class="btn btn-primary" type="button" :disabled="isGenerating || uploading || !generatedDataset" @click="runPipelineFile(generatedDataset.file, generatedDataset.asset)">{{ uploading ? '流水线运行中…' : '开始完整分析' }}</button>
+          <small>开始分析将执行真实清洗、筛选、建模与多轮寻优。切换模式不会启动计算。</small>
         </div>
-        <div v-if="generatedDataset" class="simulation-result">
-          <span><AppIcon name="check" /></span>
-          <div><strong>{{ generatedDataset.name }}</strong><small>{{ generatedDataset.rowCount.toLocaleString('zh-CN') }} 行 · {{ generatedDataset.variableCount }} 变量 · {{ generatedDataset.summary }}</small></div>
-          <button type="button" @click="downloadSimulation(generatedDataset.file)">再次下载</button>
+        <div v-if="generatedDataset" class="generated-details">
+          <strong>{{ generatedDataset.name }}</strong>
+          <small>资产 {{ generatedDataset.asset.asset_id }} · SYNTHETIC</small>
+          <small>SHA-256 {{ generatedDataset.manifest.file_hash }}</small>
+          <button class="btn btn-secondary" type="button" @click="downloadSimulation(generatedDataset.file)">下载原始 CSV</button>
+          <button class="btn btn-secondary" type="button" @click="downloadGeneratedJson('manifest')">下载生成清单</button>
+          <button class="btn btn-secondary" type="button" @click="downloadGeneratedJson('reference')">下载独立验收参考</button>
+          <small>参考文件独立保存，仅供验收，不参与分析或模型上下文。</small>
         </div>
       </section>
     </div>
@@ -371,6 +414,9 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 </template>
 
 <style scoped>
+.preset-select, .generated-details { display: grid; gap: 9px; margin: 14px 0; overflow-wrap: anywhere; }
+.preset-select select, .control-stack input[type="number"] { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; max-width: 100%; }
+.generated-details small { color: #64748b; }
 .pipeline-stage-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .pipeline-stage-grid article { min-height: 92px; padding: 13px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
 .pipeline-stage-grid span, .pipeline-stage-grid small { display: block; }

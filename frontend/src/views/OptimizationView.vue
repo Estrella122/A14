@@ -1,4 +1,5 @@
 <script setup>
+import { pipelineConstraintChecks } from '../utils/pipelineOptimizationPresentation'
 import { selectedRunId, selectRun } from '../utils/runBinding'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AppIcon from '../components/AppIcon.vue'
@@ -77,6 +78,8 @@ function pipelineRunToStudy(snapshot) {
   const modeling = snapshot.results?.modeling ?? {}
   const review = snapshot.results?.review ?? {}
   const optimizationStopping = optimization.stopping ?? {}
+  const pipelineConstraints = optimization.constraints ?? {}
+  const sourceLabel = snapshot.source_type === 'SYNTHETIC' ? 'SYNTHETIC 合成数据' : '上传 CSV'
   const trainMetrics = modeling.metrics?.train ?? {}
   const selectedInputs = modeling.selected_inputs ?? modeling.input_cols ?? []
   const modelLagRows = modeling.lags ?? []
@@ -91,12 +94,7 @@ function pipelineRunToStudy(snapshot) {
     const coverage = Number(item.coverage ?? 0)
     const score = Number(item.score ?? 0)
     const isBest = item.round === optimization.best_round
-    const checks = {
-      fit: { actual: r2, target: configuredConstraints.target_fit, passed: r2 >= configuredConstraints.target_fit },
-      coverage: { actual: coverage, target: configuredConstraints.min_coverage, passed: coverage >= configuredConstraints.min_coverage },
-      rmse: { actual: rmse, target: configuredConstraints.max_rmse, passed: rmse <= configuredConstraints.max_rmse },
-      segments: { actual: Number(cleaning.selected_segment_count ?? 0), target: configuredConstraints.min_valid_segments, passed: Number(cleaning.selected_segment_count ?? 0) >= configuredConstraints.min_valid_segments },
-    }
+    const checks = pipelineConstraintChecks(item, pipelineConstraints)
     const failures = Object.entries(checks).filter(([, check]) => !check.passed).map(([key]) => ({ fit: '拟合度未达阈值', coverage: '覆盖率未达阈值', rmse: 'RMSE超过阈值', segments: '有效片段不足' }[key]))
     const row = {
       id: `${snapshot.run_id}-${item.round}`,
@@ -108,7 +106,7 @@ function pipelineRunToStudy(snapshot) {
         collinearity_threshold: 0.95,
         lag_max_seconds: Number(item.effective_max_lag ?? item.max_lag ?? optimization.best_parameters?.max_lag ?? 60),
         min_segment_minutes: Number(
-          snapshot.results?.standardization?.scenario?.selection_window_samples
+          snapshot.policy_receipt?.effective_parameters?.selection?.window_samples
           ?? cleaning.config?.min_segment_minutes
           ?? 4,
         ),
@@ -118,20 +116,20 @@ function pipelineRunToStudy(snapshot) {
         optimal_lag_seconds: isBest && observedLag != null
           ? observedLag
           : Number(item.effective_max_lag ?? item.max_lag ?? 0),
-        validation_samples: Math.max(0, Math.round(Number(item.row_count ?? 0) * 0.2)),
+        validation_samples: item.validation_samples ?? item.validation_metrics?.n_samples ?? null,
         generalization_gap: Number(trainMetrics.r2 ?? r2) - r2,
         lag_boundary_hit: isBest ? observedLagBoundaryHit : false,
         clipped_points: Number(cleaning.outlier_count ?? 0),
         injected_outliers: 0,
-        valid_segments: Number(cleaning.selected_segment_count ?? 0),
-        feature_count: selectedInputs.length,
+        valid_segments: item.selected_window_count ?? null,
+        feature_count: item.fitted_inputs?.length ?? selectedInputs.length,
         effective_signature: `RUN-${snapshot.run_id}-R${item.round}`,
       },
       constraint_checks: checks,
       constraint_failures: failures,
       decision: isBest ? (failures.length ? '最高分待复核' : 'Agent 推荐') : '候选保留',
       decision_code: isBest ? 'new_best' : 'not_improved',
-      decision_reason: isBest ? (failures.length ? `真实 CSV 候选中综合得分最高，但仍有 ${failures.length} 项硬约束未通过` : '真实 CSV 候选中综合得分最高且通过硬约束') : '真实计算完成，但综合得分未超过当前最优轮次',
+      decision_reason: isBest ? (failures.length ? `当前候选中验证综合分最高，但仍有 ${failures.length} 项搜索约束未通过` : '当前候选中验证综合分最高且满足搜索约束；演示质量及工程评审另行判断') : '真实计算完成，但综合得分未超过当前最优轮次',
       change_summary: item.label ?? `候选策略 ${item.round}`,
       search_reason: item.round === 1 ? '建立真实数据基线' : '依据上一轮辨识结果调整动态段数量与时滞上限',
       delta_vs_previous: previous ? { overall_score: score - previous.score, fit: r2 - previous.r2 } : {},
@@ -149,7 +147,7 @@ function pipelineRunToStudy(snapshot) {
     project_code: props.project.code,
     project_name: props.project.name,
     dataset_mode: 'uploaded_csv',
-    dataset_source: `总控上传 CSV · ${snapshot.original_name}`,
+    dataset_source: `${sourceLabel} · ${snapshot.original_name}`,
     status: review.passed ? 'completed' : 'completed',
     total_rounds: Number(optimizationStopping.max_rounds ?? iterations.length),
     current_round: iterations.length,
@@ -164,15 +162,15 @@ function pipelineRunToStudy(snapshot) {
     no_improvement_rounds: Number(optimizationStopping.no_improvement_rounds ?? 0),
     stop_reason: optimizationStopping.stop_reason ?? `总控已完成 ${iterations.length} 个真实数据候选评价，并选择第 ${optimization.best_round} 轮`,
     early_stopped: Boolean(optimizationStopping.early_stopped),
-    objective_weights: { fit: 0.68, coverage: 0.15, cost: 0.17 },
-    constraints: configuredConstraints,
+    objective_weights: snapshot.policy_receipt?.effective_parameters?.optimization?.objective_weights ?? {},
+    constraints: { target_fit: pipelineConstraints.min_r2, min_coverage: pipelineConstraints.min_coverage },
     random_seed: 0,
     algorithm_version: 'REAL-CSV-CLSO-1.0',
     strategy_version: `OPT-${snapshot.run_id}-R${String(optimization.best_round).padStart(2, '0')}`,
     evaluation_profile: {
       dataset_snapshot: snapshot.run_id,
-      validation_method: '真实 CSV · 分段时序留出 · ARX 候选复训',
-      trust_label: '真实数据离线验证级',
+      validation_method: `${sourceLabel} · 分段时序留出 · ${modeling.config?.family ?? '模型'} 候选拟合`,
+      trust_label: `${sourceLabel}离线评价`,
       production_ready: false,
       production_gate: '仍需使用独立工况和现场多批次数据复验，方可进入生产审批。',
     },
@@ -793,10 +791,16 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
       </template>
     </PageHeader>
 
-    <p v-if="pipelineWithoutWinner">本任务尚无合格赢家。候选记录及原因见上方；不会用其他任务的策略代替。</p>
+    <p v-if="pipelineWithoutWinner">本任务尚无可评价赢家。候选记录及原因见下方。</p>
+    <details v-if="pipelineOptimization" class="panel">
+      <summary>查看全部 {{ pipelineOptimization.candidate_counts?.attempted ?? pipelineOptimization.iterations?.length }} 组候选及原因</summary>
+      <p>{{ pipelineOptimization.stop_reason }}</p>
+      <p>合成演示认证与搜索约束分别判断；满足本次搜索约束不代表完整演示质量或生产准入。</p>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>轮次</th><th>Top K / 时滞</th><th>状态</th><th>原因</th></tr></thead><tbody><tr v-for="candidate in pipelineOptimization.iterations" :key="candidate.round"><td>{{ candidate.round }}</td><td>{{ candidate.top_k }} / {{ candidate.max_lag }}</td><td>{{ candidate.status === 'completed' ? (candidate.feasible ? '完成 · 满足搜索约束' : '完成 · 质量警告') : '不可评价' }}</td><td>{{ candidate.reason_message || candidate.rejection_reason || '已完成真实评价' }}</td></tr></tbody></table></div>
+    </details>
     <template v-if="!pipelineWithoutWinner">
     <section v-if="study?.pipeline_run_id" class="panel pipeline-optimization-summary">
-      <div class="section-heading compact"><div><span class="section-kicker">总控 Agent → 闭环寻优 Agent</span><h2>任务 {{ study.pipeline_run_id }} 已写入统一寻优工作区</h2></div><StatusPill tone="success">真实 CSV · 第 {{ pipelineOptimization?.best_round }} 轮最优</StatusPill></div>
+      <div class="section-heading compact"><div><span class="section-kicker">总控 Agent → 闭环寻优 Agent</span><h2>任务 {{ study.pipeline_run_id }} 已写入统一寻优工作区</h2></div><StatusPill tone="success">{{ latestRun?.source_type === 'SYNTHETIC' ? 'SYNTHETIC 合成数据' : '上传 CSV' }} · 第 {{ pipelineOptimization?.best_round }} 轮最优</StatusPill></div>
       <p>以下曲线、轮次对比、参数证据和最优策略全部来自本次总控运行，不再使用另一套独立展示数据。</p>
     </section>
 
@@ -817,7 +821,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
       <AppIcon name="arrow" class="loop-arrow" />
       <div class="loop-stage"><span><AppIcon name="clean" /></span><div><strong>数据预处理</strong><small>Hampel 异常处理、动态筛选与降维</small></div></div>
       <AppIcon name="arrow" class="loop-arrow" />
-      <div class="loop-stage"><span><AppIcon name="model" /></span><div><strong>ARX 训练验证</strong><small>{{ study?.pipeline_run_id ? '真实 CSV · 分段时序留出' : '分段留出 · 18 步自由运行' }}</small></div></div>
+      <div class="loop-stage"><span><AppIcon name="model" /></span><div><strong>{{ latestRun?.results?.modeling?.config?.family ?? '模型' }} 训练验证</strong><small>{{ study?.pipeline_run_id ? '上传观测 · 分段时序留出' : '分段留出 · 18 步自由运行' }}</small></div></div>
       <AppIcon name="arrow" class="loop-arrow" />
       <div class="loop-stage" :class="{ 'is-active': running || isCompleted }"><span><AppIcon name="loop" /></span><div><strong>指标反馈与早停</strong><small>Fit / 覆盖率 / 成本 / 硬约束</small></div></div>
       <div class="feedback-return"><span>Feedback</span><i></i></div>
@@ -863,7 +867,7 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
 
     <section class="metric-grid four-col">
       <article class="metric-card accent-blue"><span class="metric-label">当前最优拟合度</span><div class="metric-value">{{ formatMetric(bestIteration?.metrics.fit, 4) }}</div><p>首轮 {{ formatMetric(baselineFit, 4) }}</p><span class="metric-trend" :class="fitImprovement !== null && fitImprovement >= 0 ? 'positive' : 'neutral'">{{ fitImprovement === null ? '等待真实评价' : `Fit ${formatSigned(fitImprovement, 4)}` }}</span></article>
-      <article class="metric-card"><span class="metric-label">综合目标得分</span><div class="metric-value">{{ formatMetric(bestIteration?.metrics.overall_score, 2) }}</div><p>Fit {{ formatMetric(objectiveWeights.fit * 100, 0) }}% · 覆盖度 {{ formatMetric(objectiveWeights.coverage * 100, 0) }}% · 成本 −{{ formatMetric(objectiveWeights.cost * 100, 0) }}%</p><span class="metric-trend positive">{{ bestIteration ? `覆盖 ${(bestIteration.metrics.coverage * 100).toFixed(1)}%` : '尚未计算' }}</span></article>
+      <article class="metric-card"><span class="metric-label">综合目标得分</span><div class="metric-value">{{ formatMetric(bestIteration?.metrics.overall_score, 2) }}</div><p v-if="study?.pipeline_run_id">R² {{ formatMetric(objectiveWeights.r2 * 100, 0) }}% · 误差 {{ formatMetric(objectiveWeights.error * 100, 0) }}% · 覆盖率 {{ formatMetric(objectiveWeights.coverage * 100, 0) }}%</p><p v-else>Fit {{ formatMetric(objectiveWeights.fit * 100, 0) }}% · 覆盖度 {{ formatMetric(objectiveWeights.coverage * 100, 0) }}% · 成本 −{{ formatMetric(objectiveWeights.cost * 100, 0) }}%</p><span class="metric-trend positive">{{ bestIteration ? `覆盖 ${(bestIteration.metrics.coverage * 100).toFixed(1)}%` : '尚未计算' }}</span></article>
       <article class="metric-card"><span class="metric-label">真实搜索进度</span><div class="metric-value">{{ currentRound }} <small>/ 最多 {{ totalRounds }} 轮</small></div><p>{{ stopHeadline }}</p><span class="metric-trend neutral">无改善已累计 {{ study?.no_improvement_rounds || 0 }} 轮 · 阈值 {{ stopping.patience }} 轮</span></article>
       <article class="metric-card"><span class="metric-label">算法与策略版本</span><div class="metric-value metric-value-text">{{ algorithmVersion }}</div><p>{{ strategyVersion }}{{ bestIteration ? ` · R${String(bestIteration.round).padStart(2, '0')}` : '' }}</p><span class="metric-trend" :class="isAccepted ? 'positive' : 'neutral'">{{ isAccepted ? '演示策略已固化' : '可恢复 · 可追溯' }}</span></article>
     </section>
@@ -882,8 +886,9 @@ onBeforeUnmount(() => { requestController.abort(); window.removeEventListener('p
           <label><span>时滞搜索上限 <strong>{{ params.lag_max_seconds }} {{ lagDisplayUnit }}</strong></span><input v-model.number="params.lag_max_seconds" :disabled="settingsLocked" type="range" min="60" max="240" step="10" /><small><span>60 {{ lagDisplayUnit }}</span><span>240 {{ lagDisplayUnit }}</span></small></label>
           <label><span>最小数据段长度 <strong>{{ params.min_segment_minutes }} {{ segmentDisplayUnit }}</strong></span><input v-model.number="params.min_segment_minutes" :disabled="settingsLocked" type="range" min="4" max="20" step="1" /><small><span>4 {{ segmentDisplayUnit }}</span><span>20 {{ segmentDisplayUnit }}</span></small></label>
         </div>
-        <div class="objective-card"><div><span>目标函数</span><code>J = {{ formatMetric(objectiveWeights.fit, 2) }}·Fit + {{ formatMetric(objectiveWeights.coverage, 2) }}·Coverage − {{ formatMetric(objectiveWeights.cost, 2) }}·Cost</code></div><p>硬约束：Fit ≥ {{ formatMetric(constraintsConfig.target_fit, 2) }} · 覆盖率 ≥ {{ formatMetric(constraintsConfig.min_coverage * 100, 0) }}% · RMSE ≤ {{ formatMetric(constraintsConfig.max_rmse, 1) }} · 有效片段 ≥ {{ constraintsConfig.min_valid_segments }}</p></div>
-        <p class="candidate-draft-note">{{ study?.pipeline_run_id ? '前 6 轮覆盖 Top K 与时滞空间，后 2 轮依据最高分候选反馈精搜。' : '滑块值会直接作为下一次新任务的首轮候选。' }}</p>
+        <div v-if="study?.pipeline_run_id" class="objective-card"><div><span>验证综合分</span><code>100 × ({{ objectiveWeights.r2 }} × clamp((R²+0.2)/1.2) + {{ objectiveWeights.error }} / (1+RMSE) + {{ objectiveWeights.coverage }} × 训练覆盖率)</code></div><p>本次搜索约束：R² ≥ {{ constraintsConfig.target_fit ?? '未记录' }} · 训练覆盖率 ≥ {{ formatMetric(constraintsConfig.min_coverage * 100, 0) }}%</p></div>
+        <div v-else class="objective-card"><div><span>目标函数</span><code>J = {{ formatMetric(objectiveWeights.fit, 2) }}·Fit + {{ formatMetric(objectiveWeights.coverage, 2) }}·Coverage − {{ formatMetric(objectiveWeights.cost, 2) }}·Cost</code></div><p>硬约束：Fit ≥ {{ formatMetric(constraintsConfig.target_fit, 2) }} · 覆盖率 ≥ {{ formatMetric(constraintsConfig.min_coverage * 100, 0) }}% · RMSE ≤ {{ formatMetric(constraintsConfig.max_rmse, 1) }} · 有效片段 ≥ {{ constraintsConfig.min_valid_segments }}</p></div>
+        <p class="candidate-draft-note">{{ study?.pipeline_run_id ? '前 6 轮覆盖 Top K 与时滞空间，之后依据验证分反馈精搜，达到停止条件时结束。' : '滑块值会直接作为下一次新任务的首轮候选。' }}</p>
         <button v-if="!study?.pipeline_run_id" class="btn btn-secondary btn-block" type="button" :disabled="settingsLocked" @click="resetInitialCandidate">恢复默认首轮候选</button>
       </section>
 

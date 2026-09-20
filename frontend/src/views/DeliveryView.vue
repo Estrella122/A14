@@ -44,7 +44,7 @@ const segmentEntries = computed(() => (cleaning.value.segments_preview ?? []).sl
 const reviewItems = computed(() => [
   { label: '数据质量', result: Number(cleaning.value.overall_score ?? 0) >= 60 ? '通过' : '待复核', detail: `质量评分 ${cleaning.value.overall_score ?? '—'}，规整后 ${cleaning.value.cleaned_row_count ?? '—'} 行`, tone: Number(cleaning.value.overall_score ?? 0) >= 60 ? 'success' : 'warning' },
   { label: '动态段有效性', result: cleaning.value.selected_segment_count > 0 ? '通过' : '无可用片段', detail: `${cleaning.value.selected_segment_count ?? 0} 个接纳窗口（严格 ${cleaning.value.strict_selected_segment_count ?? cleaning.value.selected_segment_count ?? 0} 个），建模使用 ${cleaning.value.modeling_row_count ?? 0} 行`, tone: cleaning.value.selected_segment_count > 0 ? 'success' : 'warning' },
-  { label: '时滞与共线性', result: modeling.value.selected_inputs?.length ? '完成' : '待运行', detail: `${modeling.value.input_cols?.length ?? 0} 个输入筛选为 ${modeling.value.selected_inputs?.length ?? 0} 个模型特征`, tone: modeling.value.selected_inputs?.length ? 'success' : 'warning' },
+  { label: '时滞与共线性', result: modeling.value.selected_inputs?.length ? '完成' : '待运行', detail: `${modeling.value.input_cols?.length ?? 0} 个输入筛选为 ${modeling.value.selected_inputs?.length ?? 0} 个共线性保留变量`, tone: modeling.value.selected_inputs?.length ? 'success' : 'warning' },
   { label: '辨识效果', result: Number(testMetrics.value.r2 ?? -1) >= 0 ? '通过' : '未通过', detail: `测试 R² ${metric(testMetrics.value.r2, 3)}，RMSE ${metric(testMetrics.value.rmse, 3)}`, tone: Number(testMetrics.value.r2 ?? -1) >= 0 ? 'success' : 'warning' },
   { label: 'Agent评审', result: reviewPassed.value ? '通过' : '待复核', detail: `${review.value.blockers?.length ?? 0} 项阻断，${review.value.warnings?.length ?? 0} 项警告`, tone: reviewPassed.value ? 'success' : 'warning' },
 ])
@@ -52,7 +52,7 @@ const reviewItems = computed(() => [
 const conclusion = computed(() => review.value.conclusion ?? '等待真实任务评审')
 
 const artifacts = computed(() => [
-  { type: 'csv', key: 'modeling_csv', title: latestRun.value?.artifact_labels?.modeling_csv || (optimization.value.best_round == null && optimization.value.optimization_outcome ? '初始筛选数据（非胜者）' : '优选建模数据集'), file: 'modeling_dataset.csv', meta: `${cleaning.value.modeling_row_count ?? 0} 行 · ${modeling.value.selected_inputs?.length ?? 0} 个模型输入`, icon: 'database', action: '导出 CSV' },
+  { type: 'csv', key: 'modeling_csv', title: latestRun.value?.artifact_labels?.modeling_csv || (optimization.value.best_round == null && optimization.value.optimization_outcome ? '初始筛选数据（非胜者）' : '优选建模数据集'), file: 'modeling_dataset.csv', meta: `${cleaning.value.modeling_row_count ?? 0} 行 · ${modeling.value.fitted_inputs?.length ?? 0} 个实际模型输入`, icon: 'database', action: '导出 CSV' },
   { type: 'report', key: 'analysis_report_html', title: 'Agent分析报告', file: 'analysis_report.html', meta: `任务 ${latestRun.value?.run_id ?? '等待运行'} · 自包含 HTML`, icon: 'report', action: '导出报告' },
   { type: 'trace', key: 'optimization_json', title: '闭环寻优记录', file: 'optimization_report.json', meta: `${optimization.value.candidate_counts?.attempted ?? optimization.value.iterations?.length ?? '暂未取得记录'} 轮候选 · 最优第 ${optimization.value.best_round ?? '—'} 轮`, icon: 'loop', action: '导出 JSON' },
   { type: 'review', key: 'review_json', title: '独立评审记录', file: 'agent_review.json', meta: conclusion.value, icon: 'shield', action: '导出 JSON' },
@@ -70,7 +70,7 @@ async function exportArtifact(artifact) {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = artifact.file
+    anchor.download = (latestRun.value.source_type === 'SYNTHETIC' ? 'SYNTHETIC_' : '') + artifact.file
     anchor.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
     emit('notify', { tone: 'success', title: '下载已开始', message: `${artifact.file} 来自任务 ${sourceRun}。` })
@@ -146,7 +146,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
               <h3>执行摘要</h3>
               <p>本次运行面向 <strong>{{ standardization.scenario?.scenario_name ?? project.unit }}</strong> 的系统辨识任务。规整行数：{{ cleaning.cleaned_row_count ?? '尚未计算' }}；运行状态：{{ latestRun?.status ?? '尚未运行' }}。各阶段是否完成以实际产物为准。</p>
               <div class="report-highlight"><span><AppIcon name="spark" /></span><p><strong>Agent 核心结论</strong>第 {{ optimization.best_round ?? '—' }} 轮“{{ optimization.best_label ?? '等待寻优' }}”综合得分最高（{{ optimization.best_score ?? '—' }}）。最终评审：{{ conclusion }}。</p></div>
-              <div class="report-kpis"><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>核心变量</span><strong>{{ modeling.selected_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>独立测试 R²</span><strong>{{ metric(testMetrics.r2, 3) }}</strong><small>RMSE {{ metric(testMetrics.rmse, 3) }}</small></div></div>
+              <div class="report-kpis"><div><span>训练达标窗口</span><strong>{{ cleaning.selected_segment_count ?? 0 }}</strong><small>{{ cleaning.modeling_row_count ?? 0 }} 行建模数据</small></div><div><span>实际模型输入</span><strong>{{ modeling.fitted_inputs?.length ?? 0 }}</strong><small>由 {{ modeling.input_cols?.length ?? 0 }} 个输入筛选</small></div><div><span>独立测试 R²</span><strong>{{ metric(testMetrics.r2, 3) }}</strong><small>RMSE {{ metric(testMetrics.rmse, 3) }}</small></div></div>
             </template>
 
             <template v-else-if="activeReportSection === 'quality'">
@@ -165,7 +165,7 @@ onBeforeUnmount(() => window.removeEventListener('processpilot:command', handleG
 
             <template v-else-if="activeReportSection === 'lag'">
               <h3>时滞与共线性</h3>
-              <p>系统从 {{ modeling.input_cols?.length ?? 0 }} 个输入中保留 {{ modeling.selected_inputs?.length ?? 0 }} 个辨识特征，并使用互相关搜索时滞、相关矩阵和 VIF 复核冗余变量。</p>
+              <p>系统从 {{ modeling.input_cols?.length ?? 0 }} 个输入中保留 {{ modeling.selected_inputs?.length ?? 0 }} 个共线性候选变量，并使用互相关搜索时滞、相关矩阵和 VIF 复核冗余变量。</p>
               <div class="report-split"><div><h4>主要时滞</h4><ul class="report-evidence-list"><li v-for="item in lagEntries" :key="item.input"><strong>{{ item.input }}</strong><span>{{ item.delay_samples ?? '—' }} 点</span></li><li v-if="!lagEntries.length">暂无时滞记录。</li></ul></div><div><h4>VIF 证据</h4><ul class="report-evidence-list"><li v-for="(item, index) in vifEntries" :key="item.variable ?? index"><strong>{{ item.variable ?? item.feature ?? `变量${index + 1}` }}</strong><span>{{ Number(item.VIF ?? item.vif ?? 0).toFixed(2) }}</span></li><li v-if="!vifEntries.length">暂无 VIF 记录。</li></ul></div></div>
             </template>
 

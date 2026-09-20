@@ -1,6 +1,7 @@
 """Persistent A14 sources. Deletes archive records, never unlink run evidence."""
 import hashlib
 import io
+import json
 from pathlib import Path
 from uuid import uuid4
 import pandas as pd
@@ -28,6 +29,8 @@ def public(asset):
 def register_asset(path, name, request, source_type='upload'):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
+    if source_type == 'simulation' or Path(name).name.startswith('SYNTHETIC_'):
+        source_type = 'SYNTHETIC'
     asset_id = 'asset_' + uuid4().hex
     root = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / 'file_assets'
     root.mkdir(parents=True, exist_ok=True)
@@ -59,7 +62,33 @@ def assets(request):
         path = Path(directory) / 'source.csv'
         with path.open('wb') as out:
             for chunk in upload.chunks(): out.write(chunk)
-        asset = register_asset(path, upload.name, request, 'simulation' if request.POST.get('source_type') == 'simulation' else 'upload')
+        sidecars = {}
+        try:
+            for key in ('generation_manifest', 'evaluation_reference'):
+                raw = request.POST.get(key)
+                if raw is not None:
+                    if len(raw.encode('utf-8')) > 4 * 1024 * 1024:
+                        raise ValueError('生成附录超过 4 MB')
+                    value = json.loads(raw)
+                    if not isinstance(value, dict):
+                        raise ValueError('生成附录必须为 JSON 对象')
+                    sidecars[key] = value
+            if sidecars:
+                manifest = sidecars.get('generation_manifest', {})
+                if manifest.get('source_type') != 'SYNTHETIC' or manifest.get('file_hash') != hashlib.sha256(path.read_bytes()).hexdigest():
+                    raise ValueError('合成数据清单与 CSV 哈希不一致')
+                required = {'preset_id', 'preset_version', 'scenario_id', 'generator_version', 'explicit_seed', 'effective_generation_parameters', 'rows', 'sampling_interval', 'units', 'process_assumptions'}
+                if not required.issubset(manifest):
+                    raise ValueError('合成数据清单缺少必要字段')
+        except (ValueError, TypeError) as exc:
+            return JsonResponse({'ok': False, 'message': str(exc)}, status=400)
+        synthetic = sidecars or request.POST.get('source_type') in ('simulation', 'SYNTHETIC')
+        asset = register_asset(path, upload.name, request, 'SYNTHETIC' if synthetic else 'upload')
+        # These are independent audit downloads, never run artifacts, features,
+        # retrieval documents or LLM context. The manifest grants no exemption.
+        for key, value in sidecars.items():
+            target = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / 'file_assets' / f'{asset.asset_id}.{key}.json'
+            target.write_text(json.dumps(value, ensure_ascii=False, allow_nan=False), encoding='utf-8')
     return JsonResponse({'ok': True, 'data': public(asset)}, status=201)
 
 
@@ -72,6 +101,12 @@ def asset_detail(request, asset_id):
         asset.status = 'archived'
         asset.save(update_fields=['status'])
         return JsonResponse({'ok': True, 'data': public(asset), 'message': '已归档；运行复现副本保留。'})
+    if request.GET.get('artifact') in ('generation_manifest', 'evaluation_reference'):
+        key = request.GET['artifact']
+        path = Path(settings.PROCESSPILOT_RUNTIME_ROOT) / 'file_assets' / f'{asset.asset_id}.{key}.json'
+        if asset.status != 'active' or not path.is_file():
+            return JsonResponse({'ok': False, 'message': '生成附录不可用。'}, status=404)
+        return FileResponse(path.open('rb'), as_attachment=True, filename=f'SYNTHETIC_{asset.asset_id}_{key}.json')
     if request.GET.get('download') == '1' or request.GET.get('preview') == '1':
         if asset.status != 'active':
             return JsonResponse({'ok': False, 'message': '资产已归档。'}, status=410)

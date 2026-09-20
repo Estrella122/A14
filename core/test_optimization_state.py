@@ -179,6 +179,13 @@ class SearchEvidenceTests(TestCase):
         self.assertTrue(report['best_round'])
         self.assert_consistent()
 
+    def test_candidate_policy_receipt_preserves_frozen_sampling_period(self):
+        (self.run / '03_cleaning').mkdir()
+        (self.run / '03_cleaning/split_manifest.json').write_text(json.dumps({'seconds': 3600}))
+        report, _ = self.finalized_search()
+        for row in report['iterations']:
+            self.assertEqual(row['effective_policy']['resample_seconds'], 3600)
+
     def test_history_missing_is_unknown_read_only_not_zero(self):
         original={'run_id':'old1','status':'failed','error':{'stage':'optimization'},'results':{'modeling':{'status':'pending_candidate_search'}},'stages':[{'key':'modeling','status':'completed'}]}
         recovered=recover_snapshot(original,self.root)
