@@ -33,9 +33,10 @@ test('左侧导航在桌面固定且移动端保持顶部导航', async ({ page 
 
 test('三维场景明确展示模型或可解释降级状态', async ({ page }) => {
   await page.goto('/digital-twin/')
-  const canvas = page.locator('canvas').first()
-  const fallback = page.getByText(/模型|场景|资产|WebGL/).first()
-  await expect(canvas.or(fallback)).toBeVisible({ timeout: 20_000 })
+  // Page headings render before the lazy Three.js component; they are not
+  // evidence that the scene itself has mounted.
+  await expect(page.locator('.scene-shell')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('.scene-shell canvas')).toBeVisible()
 })
 
 test('键盘焦点可见且页面具有唯一主标题', async ({ page }) => {
@@ -63,5 +64,5 @@ test('缺少资产的跨场景任务不会覆盖当前项目模型与拓扑', as
 
   await page.goto('/digital-twin/')
   await expect(page.getByText('项目模型回退').first()).toBeVisible()
-  await expect(page.getByText('BF—01')).toBeVisible()
+  await expect(page.locator('.scene-toolbar').getByText('BF—01', { exact: true })).toBeVisible({ timeout: 20_000 })
 })

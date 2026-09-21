@@ -7,6 +7,8 @@ const launchOptions = !process.env.CI && existsSync(localChrome) ? { executableP
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // Hosted runners share CPU/software WebGL resources across browser projects.
+  workers: process.env.CI ? 1 : undefined,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['html', { open: 'never' }], ['list']] : 'list',
   use: {
